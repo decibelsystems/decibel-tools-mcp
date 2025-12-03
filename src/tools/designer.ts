@@ -23,10 +23,6 @@ function slugify(text: string): string {
     .substring(0, 50);
 }
 
-function formatTimestamp(date: Date): string {
-  return date.toISOString().replace(/[:.]/g, '-').replace('Z', 'Z');
-}
-
 function formatTimestampForFilename(date: Date): string {
   // Format: YYYY-MM-DDTHH-mm-ssZ
   const iso = date.toISOString();

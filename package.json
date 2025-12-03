@@ -8,7 +8,14 @@
     "build": "tsc",
     "dev": "tsx src/server.ts",
     "start": "node dist/server.js",
-    "test": "tsx src/test.ts"
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:int": "vitest run tests/integration",
+    "test:e2e": "vitest run tests/e2e",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:quick": "tsx src/test.ts",
+    "lint": "tsc --noEmit"
   },
   "keywords": [
     "mcp",
@@ -26,8 +33,10 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "@vitest/coverage-v8": "^2.1.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^2.1.0"
   },
   "engines": {
     "node": ">=18.0.0"
