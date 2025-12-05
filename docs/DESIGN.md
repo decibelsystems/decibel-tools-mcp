@@ -2,17 +2,79 @@
 
 > AI-ingestible reference for the decibel-tools-mcp server architecture.
 
-## Overview
+---
 
-**Purpose:** File-based decision tracking and issue management exposed via MCP (Model Context Protocol) over stdio.
+## Vision: Persistent Project Intelligence for AI
 
-**Transport:** JSON-RPC 2.0 over stdin/stdout (MCP stdio transport)
+**The Problem:** AI assistants are stateless. Every new Claude thread starts cold—no memory of past decisions, no understanding of project structure, no awareness of hard-won lessons. Teams rediscover the same context session after session.
 
-**Storage:** Markdown files with YAML frontmatter in `DECIBEL_MCP_ROOT`
+**The Solution:** Make the project itself the memory. Structure institutional knowledge in a way AI can consume instantly.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Claude / Cursor / ChatGPT                              │
+│  "Fix the auth bug" / "Add a new endpoint"              │
+└─────────────────────┬───────────────────────────────────┘
+                      │ MCP (stdio)
+                      ▼
+┌─────────────────────────────────────────────────────────┐
+│  decibel-tools-mcp                                      │
+│  ════════════════════════════════════════════════════   │
+│  Unified MCP Gateway to Decibel Ecosystem               │
+└───┬─────────┬─────────┬─────────┬───────────────────────┘
+    │         │         │         │
+    ▼         ▼         ▼         ▼
+┌───────┐ ┌─────────┐ ┌──────────┐ ┌────────┐
+│Decibel│ │Architect│ │ Sentinel │ │ Oracle │
+│ Tools │ │         │ │          │ │        │
+└───────┘ └─────────┘ └──────────┘ └────────┘
+    │         │            │           │
+    ▼         ▼            ▼           ▼
+ Start/    Domains      Health      Synthesize
+ Stop      Invariants   Scans       Insights
+ Monitor   Components   Issues      Next Actions
+           Protocols    Risk
+```
+
+**What Claude Gets:**
+
+| Layer | Intelligence | Source |
+|-------|--------------|--------|
+| **Understanding** | What exists, how it's organized, what's protected | `manifest.yaml`, domains |
+| **Memory** | Past decisions, why things are the way they are | ADRs, `decisions/` |
+| **Best Practices** | How to do things correctly | `protocols/*.md` |
+| **Hard Rules** | What must never be violated | `invariants.yaml` |
+| **Health** | What's broken, risky, needs attention | Sentinel scans |
+| **Synthesis** | Cross-project insights, prioritized next actions | Oracle analysis |
+
+**The Result:** Every Claude session starts smart. A thread fixing a bug knows:
+- "This touches a protected domain—check the protocol first"
+- "We tried approach X before, here's why we chose Y"
+- "These 3 invariants apply to the code you're changing"
+- "Component Z exists but isn't wired yet—maybe that's the bug"
+
+This is **institutional knowledge as a service**.
 
 ---
 
-## Environment Variables
+## The Decibel Ecosystem
+
+| Tool | CLI | Purpose | Repo |
+|------|-----|---------|------|
+| **Decibel Tools** | `decibel` | Orchestration: start/stop/monitor components | [decibel-tools](https://github.com/mediareason/decibel-tools) |
+| **Architect** | `arch` | Governance: domains, invariants, protocols, components | [decibel-architect](https://github.com/mediareason/decibel-architect) |
+| **Sentinel** | `sentinel` | Health: repo scanning, issue tracking, risk scores | [decibel-sentinel](https://github.com/mediareason/decibel-sentinel) |
+| **Oracle** | `oracle` | Strategy: cross-project synthesis, next actions | [decibel-oracle](https://github.com/mediareason/decibel-oracle) |
+
+This MCP server is the **unified gateway** that exposes all tools to AI clients.
+
+---
+
+## Current Implementation (v0)
+
+The current version is a file-based prototype. Tools write markdown files with YAML frontmatter.
+
+### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -20,9 +82,7 @@
 | `DECIBEL_ORG` | `mediareason` | Organization identifier |
 | `DECIBEL_MCP_ROOT` | `./data` | Root directory for all file storage |
 
----
-
-## Directory Structure
+### Directory Structure
 
 ```
 {DECIBEL_MCP_ROOT}/
@@ -39,213 +99,195 @@
 ```
 
 **Filename format:** `YYYY-MM-DDTHH-mm-ssZ-{slug}.md`
-- Timestamp: ISO 8601, colons replaced with hyphens
-- Slug: Lowercase, alphanumeric + hyphens, max 50 chars
 
 ---
 
-## Tools
+## Tools (v0)
 
 ### 1. designer.record_design_decision
 
-**Purpose:** Record design decisions for a project.
+Record design decisions for a project.
 
-**Input Schema:**
 ```typescript
+// Input
 {
-  project_id: string;  // Required - project identifier
+  project_id: string;  // Required
   area: string;        // Required - domain (UI, API, Database, etc.)
-  summary: string;     // Required - brief description
-  details?: string;    // Optional - extended explanation
+  summary: string;     // Required
+  details?: string;    // Optional
 }
-```
 
-**Output:**
-```typescript
+// Output
 {
   id: string;        // Filename
   timestamp: string; // ISO 8601
-  path: string;      // Absolute file path
+  path: string;      // Absolute path
 }
 ```
-
-**File Format:**
-```markdown
----
-project_id: {project_id}
-area: {area}
-summary: {summary}
-timestamp: {ISO timestamp}
----
-
-# {summary}
-
-{details or summary}
-```
-
----
 
 ### 2. architect.record_arch_decision
 
-**Purpose:** Create Architecture Decision Records (ADRs).
+Create Architecture Decision Records (ADRs).
 
-**Input Schema:**
 ```typescript
+// Input
 {
-  system_id: string;   // Required - system identifier
-  change: string;      // Required - what is changing
-  rationale: string;   // Required - why this change
-  impact?: string;     // Optional - expected effects
+  system_id: string;   // Required
+  change: string;      // Required
+  rationale: string;   // Required
+  impact?: string;     // Optional
 }
-```
 
-**Output:**
-```typescript
+// Output
 {
   id: string;
   timestamp: string;
   path: string;
 }
 ```
-
-**File Format:**
-```markdown
----
-system_id: {system_id}
-change: {change}
-timestamp: {ISO timestamp}
----
-
-# ADR: {change}
-
-## Change
-
-{change}
-
-## Rationale
-
-{rationale}
-
-## Impact
-
-{impact or "No specific impact documented."}
-```
-
----
 
 ### 3. sentinel.create_issue
 
-**Purpose:** Track issues with severity levels.
+Track issues with severity levels.
 
-**Input Schema:**
 ```typescript
+// Input
 {
-  repo: string;                              // Required
+  repo: string;                                  // Required
   severity: "low" | "med" | "high" | "critical"; // Required
-  title: string;                             // Required
-  details: string;                           // Required
+  title: string;                                 // Required
+  details: string;                               // Required
 }
-```
 
-**Output:**
-```typescript
+// Output
 {
   id: string;
   timestamp: string;
   path: string;
-  status: "open";  // Always "open" for new issues
+  status: "open";
 }
 ```
-
-**File Format:**
-```markdown
----
-repo: {repo}
-severity: {severity}
-status: open
-created_at: {ISO timestamp}
----
-
-# {title}
-
-**Severity:** {severity}
-**Status:** open
-
-## Details
-
-{details}
-```
-
----
 
 ### 4. oracle.next_actions
 
-**Purpose:** Infer prioritized next actions from recent project activity.
+Infer prioritized next actions from recent activity.
 
-**Input Schema:**
 ```typescript
+// Input
 {
-  project_id: string;  // Required - scans designer/{project_id}, architect/{project_id}, sentinel/{project_id}
-  focus?: string;      // Optional - filter by type ("designer", "architect", "sentinel") or keyword
+  project_id: string;  // Required
+  focus?: string;      // Optional - filter by type or keyword
 }
-```
 
-**Output:**
-```typescript
+// Output
 {
   actions: Array<{
-    description: string;           // What to do
-    source: string;                // File path
+    description: string;
+    source: string;
     priority: "low" | "med" | "high";
   }>;
 }
 ```
 
-**Behavior:**
-1. Scans last 10 files (by timestamp) from designer, architect, sentinel dirs
-2. Prioritizes: critical/high sentinel → architect → designer
-3. Returns 3-7 actions sorted by priority
-4. If no files found, returns guidance message
+---
 
-**Priority Assignment:**
-- Sentinel critical/high → `high`
-- Sentinel med → `med`
-- Sentinel low → `low`
-- Architect → `med`
-- Designer → `low`
+## Future Tools (Planned)
+
+When integrated with real CLIs:
+
+### Orchestration (decibel)
+- `decibel.up` - Start components
+- `decibel.down` - Stop components
+- `decibel.ps` - Show running status
+- `decibel.health` - Check health signals
+
+### Governance (architect)
+- `architect.get_status` - Project overview
+- `architect.get_components` - List all components with wiring status
+- `architect.get_invariants` - List hard rules
+- `architect.get_protocol` - Fetch protocol by name
+- `architect.check_wiring` - Validate component connections
+- `architect.update_component_status` - Change lifecycle state
+
+### Health (sentinel)
+- `sentinel.scan` - Full repo scan with recommendations
+- `sentinel.health` - Quick health check
+- `sentinel.get_issues` - List open issues
+
+### Strategy (oracle)
+- `oracle.synthesize` - Cross-project insights
+- `oracle.next_actions` - Prioritized recommendations
 
 ---
 
-## MCP Protocol Details
+## Key Data Structures (Full Ecosystem)
+
+### Manifest (`architect/manifest.yaml`)
+```yaml
+id: my-project
+name: My Project
+domains:
+  db:
+    name: Database
+    status: protected  # or 'normal'
+    paths: [backend/config.py]
+    protocols: [db_config_v1]
+```
+
+### Invariants (`architect/invariants.yaml`)
+```yaml
+invariants:
+  - id: db.single_source
+    level: critical
+    domain: db
+    statement: "Only DatabaseConfig defines connection strings"
+    detection: ["grep -r 'sqlite:///' --include='*.py'"]
+```
+
+### Components (`architect/components.yaml`)
+```yaml
+components:
+  - id: auth-service
+    type: service
+    domain: auth
+    status: live  # planned → wired → live → deprecated
+    entrypoints: [src/auth/main.py]
+    health_signals: [metric: auth.requests_per_sec]
+```
+
+### Protocols (`docs/protocols/*.md`)
+```markdown
+---
+id: db_config_v1
+version: 1
+domain: db
+---
+# Database Configuration Protocol
+## The Rule
+All database connections come from DatabaseConfig.
+```
+
+---
+
+## MCP Protocol
+
+**Transport:** JSON-RPC 2.0 over stdin/stdout (stdio)
 
 **Server Info:**
 ```json
-{
-  "name": "decibel-tools-mcp",
-  "version": "0.1.0"
-}
+{"name": "decibel-tools-mcp", "version": "0.1.0"}
 ```
 
 **Capabilities:**
 ```json
-{
-  "tools": {}
-}
-```
-
-**Error Response Format:**
-```json
-{
-  "content": [{"type": "text", "text": "{\"error\": \"message\"}"}],
-  "isError": true
-}
+{"tools": {}}
 ```
 
 ---
 
-## Integration Examples
+## Integration
 
-### Cursor (mcp.json)
+### Cursor (`mcp.json`)
 ```json
 {
   "mcpServers": {
@@ -253,9 +295,7 @@ created_at: {ISO timestamp}
       "command": "node",
       "type": "stdio",
       "args": ["/path/to/dist/server.js"],
-      "env": {
-        "DECIBEL_MCP_ROOT": "/path/to/data"
-      }
+      "env": {"DECIBEL_MCP_ROOT": "/path/to/data"}
     }
   }
 }
@@ -268,9 +308,7 @@ created_at: {ISO timestamp}
     "decibel-tools": {
       "command": "node",
       "args": ["/path/to/dist/server.js"],
-      "env": {
-        "DECIBEL_MCP_ROOT": "/path/to/data"
-      }
+      "env": {"DECIBEL_MCP_ROOT": "/path/to/data"}
     }
   }
 }
