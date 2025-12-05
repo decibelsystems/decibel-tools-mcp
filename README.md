@@ -1,13 +1,14 @@
 # decibel-tools-mcp
 
-MCP (Model Context Protocol) server exposing Decibel tools (Designer, Architect, Sentinel, Oracle) over stdio. Connect from Cursor, Claude, ChatGPT, and other MCP-compatible clients.
+MCP (Model Context Protocol) server exposing Decibel tools (Designer, Architect, Sentinel, Oracle, Learnings) over stdio. Connect from Cursor, Claude, ChatGPT, and other MCP-compatible clients.
 
 ## Features
 
 - **Designer** - Record design decisions with project tracking
 - **Architect** - Create Architecture Decision Records (ADRs)
-- **Sentinel** - Track issues with severity levels
+- **Sentinel** - Track issues and epics with severity levels
 - **Oracle** - Get AI-powered next action recommendations
+- **Learnings** - Maintain living technical learnings documents
 
 ## Quick Start
 
@@ -97,7 +98,7 @@ Add to your Claude configuration (`~/Library/Application Support/Claude/claude_d
 
 ## Tools Reference
 
-### designer.record_design_decision
+### designer_record_design_decision
 
 Record a design decision for a project.
 
@@ -116,7 +117,7 @@ Record a design decision for a project.
 
 ---
 
-### architect.record_arch_decision
+### architect_record_arch_decision
 
 Record an Architecture Decision Record (ADR).
 
@@ -135,7 +136,7 @@ Record an Architecture Decision Record (ADR).
 
 ---
 
-### sentinel.create_issue
+### sentinel_create_issue
 
 Create a tracked issue for a repository.
 
@@ -144,6 +145,7 @@ Create a tracked issue for a repository.
 - `severity` (required): One of `low`, `med`, `high`, `critical`
 - `title` (required): Issue title
 - `details` (required): Detailed description
+- `epic_id` (optional): Parent epic ID (e.g., "EPIC-0001")
 
 **Output:**
 - `id`: Filename of the created issue
@@ -155,7 +157,68 @@ Create a tracked issue for a repository.
 
 ---
 
-### oracle.next_actions
+### sentinel_log_epic
+
+Create a new epic (large feature) record.
+
+**Input:**
+- `title` (required): Epic title
+- `summary` (required): Brief summary
+- `motivation` (optional): Array of motivation statements
+- `outcomes` (optional): Array of desired outcomes
+- `acceptance_criteria` (optional): Array of acceptance criteria
+- `priority` (optional): One of `low`, `medium`, `high`, `critical`
+- `tags` (optional): Array of tags
+- `owner` (optional): Epic owner
+- `squad` (optional): Team responsible
+
+**Output:**
+- `epic_id`: Generated epic ID (e.g., "EPIC-0001")
+- `timestamp`: ISO timestamp
+- `path`: Full path to the file
+
+---
+
+### sentinel_list_epics
+
+List all epics with optional filters.
+
+**Input:**
+- `status` (optional): Filter by status (`planned`, `in_progress`, `shipped`, `on_hold`, `cancelled`)
+- `priority` (optional): Filter by priority
+- `tags` (optional): Filter by tags (matches any)
+
+---
+
+### sentinel_get_epic
+
+Get details of a specific epic.
+
+**Input:**
+- `epic_id` (required): Epic ID (e.g., "EPIC-0001")
+
+---
+
+### sentinel_get_epic_issues
+
+Get all issues linked to an epic.
+
+**Input:**
+- `epic_id` (required): Epic ID
+
+---
+
+### sentinel_resolve_epic
+
+Fuzzy search for epics by name or keyword.
+
+**Input:**
+- `query` (required): Search query
+- `limit` (optional): Maximum matches to return (default: 5)
+
+---
+
+### oracle_next_actions
 
 Get recommended next actions based on recent project activity.
 
@@ -171,6 +234,42 @@ Get recommended next actions based on recent project activity.
 
 ---
 
+### learnings_append
+
+Append a new entry to a project's technical learnings document. Creates a living document that accumulates lessons learned, gotchas, and insights over time.
+
+**Input:**
+- `project_id` (required): Project identifier
+- `category` (required): One of `debug`, `integration`, `architecture`, `tooling`, `process`, `other`
+- `title` (required): Brief title for the learning
+- `content` (required): The learning content - what happened, what was learned
+- `tags` (optional): Array of tags for searchability
+
+**Output:**
+- `timestamp`: ISO timestamp
+- `path`: Full path to the file
+- `entry_count`: Total number of entries in the document
+
+**File Location:** `{ROOT_DIR}/learnings/{project_id}.md`
+
+---
+
+### learnings_list
+
+List entries from a project's technical learnings document.
+
+**Input:**
+- `project_id` (required): Project identifier
+- `category` (optional): Filter by category
+- `limit` (optional): Maximum entries to return (most recent first)
+
+**Output:**
+- `path`: Path to the learnings file
+- `entries`: Array of learning entries
+- `total_count`: Total number of entries
+
+---
+
 ## Data Storage
 
 All data is stored as Markdown files with YAML frontmatter:
@@ -183,10 +282,14 @@ All data is stored as Markdown files with YAML frontmatter:
 ├── architect/
 │   └── {system_id}/
 │       └── YYYY-MM-DDTHH-mm-ssZ-{slug}.md
-└── sentinel/
-    └── {repo}/
-        └── issues/
-            └── YYYY-MM-DDTHH-mm-ssZ-{slug}.md
+├── sentinel/
+│   ├── epics/
+│   │   └── EPIC-{nnnn}-{slug}.md
+│   └── {repo}/
+│       └── issues/
+│           └── YYYY-MM-DDTHH-mm-ssZ-{slug}.md
+└── learnings/
+    └── {project_id}.md
 ```
 
 ## Development
@@ -201,8 +304,9 @@ src/
 └── tools/
     ├── designer.ts   # Design decision recording
     ├── architect.ts  # Architecture decision recording
-    ├── sentinel.ts   # Issue tracking
-    └── oracle.ts     # Next actions inference
+    ├── sentinel.ts   # Issue and epic tracking
+    ├── oracle.ts     # Next actions inference
+    └── learnings.ts  # Living learnings documents
 ```
 
 ### Building
