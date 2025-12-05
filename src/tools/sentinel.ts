@@ -9,6 +9,7 @@ import { getConfig, log } from '../config.js';
 export type Severity = 'low' | 'med' | 'high' | 'critical';
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
 export type EpicStatus = 'planned' | 'in_progress' | 'shipped' | 'on_hold' | 'cancelled';
+export type IssueStatus = 'open' | 'closed' | 'wontfix';
 
 // ============================================================================
 // Issue Types
@@ -28,6 +29,38 @@ export interface CreateIssueOutput {
   path: string;
   status: string;
   epic_id?: string;
+}
+
+export interface CloseIssueInput {
+  repo: string;
+  issue_id: string;
+  resolution?: string;
+  status?: 'closed' | 'wontfix';
+}
+
+export interface CloseIssueOutput {
+  id: string;
+  path: string;
+  status: IssueStatus;
+  closed_at: string;
+  resolution?: string;
+}
+
+export interface CloseIssueError {
+  error: 'ISSUE_NOT_FOUND';
+  repo: string;
+  issue_id: string;
+  message: string;
+  available_issues: Array<{ id: string; title: string }>;
+}
+
+export interface ListRepoIssuesInput {
+  repo: string;
+  status?: IssueStatus;
+}
+
+export interface ListRepoIssuesOutput {
+  issues: IssueSummary[];
 }
 
 // ============================================================================
@@ -154,7 +187,7 @@ function slugify(text: string): string {
 
 function formatTimestampForFilename(date: Date): string {
   const iso = date.toISOString();
-  return iso.replace(/:/g, '-').replace(/\.\d{3}Z$/, 'Z');
+  return iso.replace(/:/g, '-').replace(/\.\\d{3}Z$/, 'Z');
 }
 
 async function getNextEpicNumber(epicsDir: string): Promise<number> {
@@ -321,6 +354,58 @@ async function parseIssueFile(filePath: string): Promise<IssueSummary | null> {
   }
 }
 
+async function findIssueFile(repo: string, issueId: string): Promise<{ filePath: string; filename: string } | null> {
+  const config = getConfig();
+  const issuesDir = path.join(config.rootDir, 'sentinel', repo, 'issues');
+
+  try {
+    const files = await fs.readdir(issuesDir);
+    
+    // Try exact match first
+    if (files.includes(issueId)) {
+      return { filePath: path.join(issuesDir, issueId), filename: issueId };
+    }
+    
+    // Try with .md extension
+    const withMd = issueId.endsWith('.md') ? issueId : `${issueId}.md`;
+    if (files.includes(withMd)) {
+      return { filePath: path.join(issuesDir, withMd), filename: withMd };
+    }
+
+    // Fuzzy match - find file containing the query
+    const match = files.find(f => f.toLowerCase().includes(issueId.toLowerCase()));
+    if (match) {
+      return { filePath: path.join(issuesDir, match), filename: match };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function getRepoIssues(repo: string): Promise<Array<{ id: string; title: string }>> {
+  const config = getConfig();
+  const issuesDir = path.join(config.rootDir, 'sentinel', repo, 'issues');
+  const issues: Array<{ id: string; title: string }> = [];
+
+  try {
+    const files = await fs.readdir(issuesDir);
+    for (const file of files) {
+      if (!file.endsWith('.md')) continue;
+      const filePath = path.join(issuesDir, file);
+      const issue = await parseIssueFile(filePath);
+      if (issue) {
+        issues.push({ id: issue.id, title: issue.title });
+      }
+    }
+  } catch {
+    // Directory doesn't exist
+  }
+
+  return issues;
+}
+
 // ============================================================================
 // Issue Functions
 // ============================================================================
@@ -399,6 +484,108 @@ export async function createIssue(
     status: 'open',
     epic_id: input.epic_id,
   };
+}
+
+export async function closeIssue(
+  input: CloseIssueInput
+): Promise<CloseIssueOutput | CloseIssueError> {
+  const found = await findIssueFile(input.repo, input.issue_id);
+
+  if (!found) {
+    const available = await getRepoIssues(input.repo);
+    return {
+      error: 'ISSUE_NOT_FOUND',
+      repo: input.repo,
+      issue_id: input.issue_id,
+      message: `Could not find issue matching "${input.issue_id}" in repo "${input.repo}".`,
+      available_issues: available.slice(0, 5),
+    };
+  }
+
+  const { filePath, filename } = found;
+  const content = await fs.readFile(filePath, 'utf-8');
+  const now = new Date();
+  const closedAt = now.toISOString();
+  const newStatus: IssueStatus = input.status || 'closed';
+
+  // Update frontmatter
+  let updatedContent = content.replace(
+    /^(---\n[\s\S]*?)status: \w+/m,
+    `$1status: ${newStatus}`
+  );
+
+  // Add closed_at to frontmatter if not present
+  if (!updatedContent.includes('closed_at:')) {
+    updatedContent = updatedContent.replace(
+      /^(---\n[\s\S]*?)(---)$/m,
+      `$1closed_at: ${closedAt}\n$2`
+    );
+  } else {
+    updatedContent = updatedContent.replace(
+      /closed_at: .*/,
+      `closed_at: ${closedAt}`
+    );
+  }
+
+  // Update status in body
+  updatedContent = updatedContent.replace(
+    /\*\*Status:\*\* \w+/,
+    `**Status:** ${newStatus}`
+  );
+
+  // Add resolution section if provided
+  if (input.resolution) {
+    if (updatedContent.includes('## Resolution')) {
+      // Replace existing resolution
+      updatedContent = updatedContent.replace(
+        /## Resolution\n\n[\s\S]*?(?=\n## |$)/,
+        `## Resolution\n\n${input.resolution}\n`
+      );
+    } else {
+      // Add resolution section at the end
+      updatedContent = updatedContent.trimEnd() + `\n\n## Resolution\n\n${input.resolution}\n`;
+    }
+  }
+
+  await fs.writeFile(filePath, updatedContent, 'utf-8');
+  log(`Sentinel: Closed issue at ${filePath}`);
+
+  return {
+    id: filename,
+    path: filePath,
+    status: newStatus,
+    closed_at: closedAt,
+    resolution: input.resolution,
+  };
+}
+
+export async function listRepoIssues(
+  input: ListRepoIssuesInput
+): Promise<ListRepoIssuesOutput> {
+  const config = getConfig();
+  const issuesDir = path.join(config.rootDir, 'sentinel', input.repo, 'issues');
+  const issues: IssueSummary[] = [];
+
+  try {
+    const files = await fs.readdir(issuesDir);
+    for (const file of files) {
+      if (!file.endsWith('.md')) continue;
+      const filePath = path.join(issuesDir, file);
+      const issue = await parseIssueFile(filePath);
+      if (issue) {
+        // Apply status filter
+        if (input.status && issue.status !== input.status) continue;
+        issues.push(issue);
+      }
+    }
+  } catch {
+    // Directory doesn't exist
+  }
+
+  // Sort by filename (newest first based on timestamp)
+  issues.sort((a, b) => b.id.localeCompare(a.id));
+
+  return { issues };
 }
 
 // ============================================================================
