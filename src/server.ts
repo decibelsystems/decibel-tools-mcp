@@ -27,6 +27,13 @@ import {
   ResolveEpicInput,
 } from './tools/sentinel.js';
 import { nextActions, NextActionsInput } from './tools/oracle.js';
+import {
+  appendLearning,
+  AppendLearningInput,
+  LearningCategory,
+  listLearnings,
+  ListLearningsInput,
+} from './tools/learnings.js';
 
 const config = getConfig();
 
@@ -284,6 +291,63 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['project_id'],
         },
       },
+
+      // Learnings tools
+      {
+        name: 'learnings_append',
+        description: 'Append a new entry to a project\'s technical learnings document. Creates a living document that accumulates lessons learned, gotchas, and insights over time.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'The project identifier (creates learnings/{project_id}.md)',
+            },
+            category: {
+              type: 'string',
+              enum: ['debug', 'integration', 'architecture', 'tooling', 'process', 'other'],
+              description: 'Category of the learning',
+            },
+            title: {
+              type: 'string',
+              description: 'Brief title for this learning entry',
+            },
+            content: {
+              type: 'string',
+              description: 'The learning content - what happened, what was learned, how to avoid/replicate',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional tags for searchability (e.g., ["mcp", "auth", "tokens"])',
+            },
+          },
+          required: ['project_id', 'category', 'title', 'content'],
+        },
+      },
+      {
+        name: 'learnings_list',
+        description: 'List entries from a project\'s technical learnings document, optionally filtered by category.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'The project identifier',
+            },
+            category: {
+              type: 'string',
+              enum: ['debug', 'integration', 'architecture', 'tooling', 'process', 'other'],
+              description: 'Optional category filter',
+            },
+            limit: {
+              type: 'integer',
+              description: 'Maximum number of entries to return (most recent first)',
+            },
+          },
+          required: ['project_id'],
+        },
+      },
     ],
   };
 });
@@ -430,6 +494,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error('Missing required field: project_id');
         }
         const result = await nextActions(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // Learnings tools
+      case 'learnings_append': {
+        const input = args as unknown as AppendLearningInput;
+        if (!input.project_id || !input.category || !input.title || !input.content) {
+          throw new Error('Missing required fields: project_id, category, title, and content are required');
+        }
+        const validCategories: LearningCategory[] = ['debug', 'integration', 'architecture', 'tooling', 'process', 'other'];
+        if (!validCategories.includes(input.category)) {
+          throw new Error(`Invalid category. Must be one of: ${validCategories.join(', ')}`);
+        }
+        const result = await appendLearning(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'learnings_list': {
+        const input = args as unknown as ListLearningsInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
+        if (input.category) {
+          const validCategories: LearningCategory[] = ['debug', 'integration', 'architecture', 'tooling', 'process', 'other'];
+          if (!validCategories.includes(input.category)) {
+            throw new Error(`Invalid category. Must be one of: ${validCategories.join(', ')}`);
+          }
+        }
+        const result = await listLearnings(input);
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
