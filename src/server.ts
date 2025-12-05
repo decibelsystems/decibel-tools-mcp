@@ -13,6 +13,11 @@ import {
   createIssue,
   CreateIssueInput,
   Severity,
+  closeIssue,
+  CloseIssueInput,
+  IssueStatus,
+  listRepoIssues,
+  ListRepoIssuesInput,
   logEpic,
   LogEpicInput,
   Priority,
@@ -144,6 +149,52 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['repo', 'severity', 'title', 'details'],
+        },
+      },
+      {
+        name: 'sentinel_close_issue',
+        description: 'Close an existing issue. Updates the status to closed and adds a closed_at timestamp. Can optionally add a resolution note.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            repo: {
+              type: 'string',
+              description: 'The repository name',
+            },
+            issue_id: {
+              type: 'string',
+              description: 'The issue filename or partial match (e.g., "update-readme" or full filename)',
+            },
+            resolution: {
+              type: 'string',
+              description: 'Optional resolution note explaining how/why the issue was closed',
+            },
+            status: {
+              type: 'string',
+              enum: ['closed', 'wontfix'],
+              description: 'The closing status (default: closed)',
+            },
+          },
+          required: ['repo', 'issue_id'],
+        },
+      },
+      {
+        name: 'sentinel_list_repo_issues',
+        description: 'List all issues for a specific repository, optionally filtered by status.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            repo: {
+              type: 'string',
+              description: 'The repository name',
+            },
+            status: {
+              type: 'string',
+              enum: ['open', 'closed', 'wontfix'],
+              description: 'Optional status filter',
+            },
+          },
+          required: ['repo'],
         },
       },
 
@@ -410,6 +461,48 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case 'sentinel_close_issue': {
+        const input = args as unknown as CloseIssueInput;
+        if (!input.repo || !input.issue_id) {
+          throw new Error('Missing required fields: repo and issue_id are required');
+        }
+        if (input.status) {
+          const validStatuses: Array<'closed' | 'wontfix'> = ['closed', 'wontfix'];
+          if (!validStatuses.includes(input.status)) {
+            throw new Error(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+          }
+        }
+        const result = await closeIssue(input);
+
+        if ('error' in result && result.error === 'ISSUE_NOT_FOUND') {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'sentinel_list_repo_issues': {
+        const input = args as unknown as ListRepoIssuesInput;
+        if (!input.repo) {
+          throw new Error('Missing required field: repo');
+        }
+        if (input.status) {
+          const validStatuses: IssueStatus[] = ['open', 'closed', 'wontfix'];
+          if (!validStatuses.includes(input.status)) {
+            throw new Error(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+          }
+        }
+        const result = await listRepoIssues(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
       // Sentinel tools - Epics
       case 'sentinel_log_epic': {
         const input = args as unknown as LogEpicInput;
@@ -439,7 +532,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (input.priority) {
           const validPriorities: Priority[] = ['low', 'medium', 'high', 'critical'];
           if (!validPriorities.includes(input.priority)) {
-            throw new Error(`Invalid priority. Must be one of: ${validPriorities.join(', ')}`);
+            throw new Error(`Invalid priority. Must be one of: ${validPriorities.join(', ')}`);;
           }
         }
         const result = await listEpics(input);
