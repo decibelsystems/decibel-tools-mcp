@@ -106,14 +106,15 @@ The current version is a file-based prototype. Tools write markdown files with Y
 
 ## Tools (v0)
 
-**8 tools available:**
+**9 tools available:**
 - `designer.record_design_decision` - Record design decisions
 - `architect.record_arch_decision` - Create ADRs
-- `sentinel.create_issue` - Track issues with severity
+- `sentinel.create_issue` - Track issues with severity (validates epic_id)
 - `sentinel.log_epic` - Create epics for grouping issues
 - `sentinel.list_epics` - List epics for a repo
 - `sentinel.get_epic` - Get epic details
 - `sentinel.get_epic_issues` - Get issues linked to an epic
+- `sentinel.resolve_epic` - Fuzzy search for epics by name/keyword
 - `oracle.next_actions` - Get prioritized recommendations
 
 ---
@@ -275,7 +276,48 @@ Get all issues linked to an epic.
 }
 ```
 
-### 8. oracle.next_actions
+### 8. sentinel.resolve_epic
+
+Fuzzy search for epics by name or keyword.
+
+```typescript
+// Input
+{
+  query: string;  // Required - search term (ID, title, keywords)
+  limit?: number; // Optional, default: 5
+}
+
+// Output
+{
+  matches: Array<{
+    id: string;        // e.g., "EPIC-0001"
+    title: string;
+    status: string;
+    priority: string;
+    score: number;     // 0.0-1.0 relevance score
+  }>;
+}
+```
+
+**Epic validation in create_issue:**
+
+When `epic_id` is provided to `sentinel.create_issue`, the server validates it exists.
+If not found, returns a structured error:
+
+```typescript
+// Error response (isError: true)
+{
+  error: "EPIC_NOT_FOUND",
+  epic_id: "EPIC-9999",
+  message: "Unknown epic_id EPIC-9999.",
+  suggested_epics: [
+    { id: "EPIC-0007", title: "MCP Server Integration" },
+    { id: "EPIC-0005", title: "Signal Caller v2" }
+  ]
+}
+```
+
+### 9. oracle.next_actions
 
 Infer prioritized next actions from recent activity.
 
@@ -451,7 +493,7 @@ src/
 ## Testing
 
 ```bash
-npm test              # 90+ tests across unit/integration/e2e
+npm test              # 104 tests across unit/integration/e2e
 npm run test:coverage # 100% line coverage on tools
 ```
 

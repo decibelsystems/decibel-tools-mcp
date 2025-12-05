@@ -109,6 +109,38 @@ export interface GetEpicIssuesOutput {
 }
 
 // ============================================================================
+// Resolve Epic Types
+// ============================================================================
+
+export interface ResolveEpicInput {
+  query: string;
+  limit?: number;
+}
+
+export interface EpicMatch {
+  id: string;
+  title: string;
+  status: EpicStatus;
+  priority: Priority;
+  score: number;
+}
+
+export interface ResolveEpicOutput {
+  matches: EpicMatch[];
+}
+
+// ============================================================================
+// Error Types
+// ============================================================================
+
+export interface EpicNotFoundError {
+  error: 'EPIC_NOT_FOUND';
+  epic_id: string;
+  message: string;
+  suggested_epics: Array<{ id: string; title: string }>;
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -203,6 +235,61 @@ async function parseEpicFile(filePath: string): Promise<Epic | null> {
   }
 }
 
+async function getAllEpics(): Promise<Array<{ id: string; title: string; status: EpicStatus; priority: Priority }>> {
+  const config = getConfig();
+  const epicsDir = path.join(config.rootDir, 'sentinel', 'epics');
+  const epics: Array<{ id: string; title: string; status: EpicStatus; priority: Priority }> = [];
+
+  try {
+    const files = await fs.readdir(epicsDir);
+    for (const file of files) {
+      if (!file.endsWith('.md')) continue;
+      const filePath = path.join(epicsDir, file);
+      const epic = await parseEpicFile(filePath);
+      if (epic) {
+        epics.push({
+          id: epic.id,
+          title: epic.title,
+          status: epic.status,
+          priority: epic.priority,
+        });
+      }
+    }
+  } catch {
+    // Directory doesn't exist yet
+  }
+
+  return epics;
+}
+
+function calculateFuzzyScore(query: string, text: string): number {
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+
+  // Exact match
+  if (t === q) return 1.0;
+
+  // Contains exact query
+  if (t.includes(q)) return 0.9;
+
+  // Word-by-word matching
+  const queryWords = q.split(/\s+/);
+  const textWords = t.split(/\s+/);
+  let matchedWords = 0;
+
+  for (const qWord of queryWords) {
+    if (textWords.some((tWord) => tWord.includes(qWord) || qWord.includes(tWord))) {
+      matchedWords++;
+    }
+  }
+
+  if (queryWords.length > 0) {
+    return (matchedWords / queryWords.length) * 0.8;
+  }
+
+  return 0;
+}
+
 async function parseIssueFile(filePath: string): Promise<IssueSummary | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
@@ -240,8 +327,29 @@ async function parseIssueFile(filePath: string): Promise<IssueSummary | null> {
 
 export async function createIssue(
   input: CreateIssueInput
-): Promise<CreateIssueOutput> {
+): Promise<CreateIssueOutput | EpicNotFoundError> {
   const config = getConfig();
+
+  // Validate epic_id if provided
+  if (input.epic_id) {
+    const allEpics = await getAllEpics();
+    const epicExists = allEpics.some((e) => e.id === input.epic_id);
+
+    if (!epicExists) {
+      // Return structured error with suggestions
+      const suggested = allEpics
+        .slice(0, 5)
+        .map((e) => ({ id: e.id, title: e.title }));
+
+      return {
+        error: 'EPIC_NOT_FOUND',
+        epic_id: input.epic_id,
+        message: `Unknown epic_id ${input.epic_id}.`,
+        suggested_epics: suggested,
+      };
+    }
+  }
+
   const now = new Date();
   const timestamp = now.toISOString();
   const fileTimestamp = formatTimestampForFilename(now);
@@ -475,4 +583,33 @@ export async function getEpicIssues(
   }
 
   return { issues };
+}
+
+export async function resolveEpic(input: ResolveEpicInput): Promise<ResolveEpicOutput> {
+  const limit = input.limit || 5;
+  const allEpics = await getAllEpics();
+
+  // Score each epic against the query
+  const scored: EpicMatch[] = allEpics.map((epic) => {
+    // Score against both ID and title
+    const idScore = calculateFuzzyScore(input.query, epic.id);
+    const titleScore = calculateFuzzyScore(input.query, epic.title);
+    const score = Math.max(idScore, titleScore);
+
+    return {
+      id: epic.id,
+      title: epic.title,
+      status: epic.status,
+      priority: epic.priority,
+      score: Math.round(score * 100) / 100, // Round to 2 decimals
+    };
+  });
+
+  // Filter out zero scores and sort by score descending
+  const matches = scored
+    .filter((m) => m.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  return { matches };
 }

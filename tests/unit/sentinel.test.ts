@@ -5,6 +5,7 @@ import {
   listEpics,
   getEpic,
   getEpicIssues,
+  resolveEpic,
 } from '../../src/tools/sentinel.js';
 import {
   createTestContext,
@@ -174,6 +175,9 @@ describe('Sentinel Tool', () => {
     });
 
     it('should include epic_id when provided', async () => {
+      // Create epic first (validation requires epic to exist)
+      await logEpic({ title: 'Test Epic', summary: 'Summary' });
+
       const result = await createIssue({
         repo: 'repo',
         severity: 'high',
@@ -182,11 +186,15 @@ describe('Sentinel Tool', () => {
         epic_id: 'EPIC-0001',
       });
 
-      expect(result.epic_id).toBe('EPIC-0001');
+      // Should succeed now that epic exists
+      expect('error' in result).toBe(false);
+      if (!('error' in result)) {
+        expect(result.epic_id).toBe('EPIC-0001');
 
-      const { frontmatter, body } = await readFileWithFrontmatter(result.path);
-      expect(frontmatter.epic_id).toBe('EPIC-0001');
-      expect(body).toContain('**Epic:** EPIC-0001');
+        const { frontmatter, body } = await readFileWithFrontmatter(result.path);
+        expect(frontmatter.epic_id).toBe('EPIC-0001');
+        expect(body).toContain('**Epic:** EPIC-0001');
+      }
     });
 
     it('should not include epic_id when not provided', async () => {
@@ -484,6 +492,167 @@ describe('Sentinel Tool', () => {
       const result = await getEpicIssues({ epic_id: 'EPIC-0001' });
 
       expect(result.issues).toHaveLength(2);
+    });
+  });
+
+  // ==========================================================================
+  // Epic Validation Tests
+  // ==========================================================================
+
+  describe('createIssue with epic validation', () => {
+    it('should return EPIC_NOT_FOUND for invalid epic_id', async () => {
+      const result = await createIssue({
+        repo: 'repo',
+        severity: 'high',
+        title: 'Issue with bad epic',
+        details: 'Details',
+        epic_id: 'EPIC-9999',
+      });
+
+      expect('error' in result).toBe(true);
+      if ('error' in result) {
+        expect(result.error).toBe('EPIC_NOT_FOUND');
+        expect(result.epic_id).toBe('EPIC-9999');
+        expect(result.message).toContain('Unknown epic_id');
+        expect(result.suggested_epics).toBeDefined();
+      }
+    });
+
+    it('should include suggested epics in error', async () => {
+      // Create some epics first
+      await logEpic({ title: 'MCP Server Epic', summary: 'Summary' });
+      await logEpic({ title: 'Another Epic', summary: 'Summary' });
+
+      const result = await createIssue({
+        repo: 'repo',
+        severity: 'low',
+        title: 'Issue',
+        details: 'Details',
+        epic_id: 'EPIC-9999',
+      });
+
+      expect('error' in result).toBe(true);
+      if ('error' in result) {
+        expect(result.suggested_epics.length).toBeGreaterThan(0);
+        expect(result.suggested_epics[0]).toHaveProperty('id');
+        expect(result.suggested_epics[0]).toHaveProperty('title');
+      }
+    });
+
+    it('should succeed with valid epic_id', async () => {
+      await logEpic({ title: 'Valid Epic', summary: 'Summary' });
+
+      const result = await createIssue({
+        repo: 'repo',
+        severity: 'high',
+        title: 'Issue linked to valid epic',
+        details: 'Details',
+        epic_id: 'EPIC-0001',
+      });
+
+      expect('error' in result).toBe(false);
+      if (!('error' in result)) {
+        expect(result.epic_id).toBe('EPIC-0001');
+        expect(result.id).toBeDefined();
+      }
+    });
+
+    it('should allow issues without epic_id', async () => {
+      const result = await createIssue({
+        repo: 'repo',
+        severity: 'low',
+        title: 'Standalone issue',
+        details: 'Details',
+      });
+
+      expect('error' in result).toBe(false);
+      if (!('error' in result)) {
+        expect(result.id).toBeDefined();
+        expect(result.epic_id).toBeUndefined();
+      }
+    });
+  });
+
+  // ==========================================================================
+  // Resolve Epic Tests
+  // ==========================================================================
+
+  describe('resolveEpic', () => {
+    it('should return empty matches when no epics exist', async () => {
+      const result = await resolveEpic({ query: 'test' });
+
+      expect(result.matches).toEqual([]);
+    });
+
+    it('should find epic by exact ID', async () => {
+      await logEpic({ title: 'Test Epic', summary: 'Summary' });
+
+      const result = await resolveEpic({ query: 'EPIC-0001' });
+
+      expect(result.matches.length).toBeGreaterThan(0);
+      expect(result.matches[0].id).toBe('EPIC-0001');
+      expect(result.matches[0].score).toBeGreaterThan(0.8);
+    });
+
+    it('should find epic by title keyword', async () => {
+      await logEpic({ title: 'MCP Server Integration', summary: 'Summary' });
+      await logEpic({ title: 'Database Optimization', summary: 'Summary' });
+
+      const result = await resolveEpic({ query: 'MCP' });
+
+      expect(result.matches.length).toBeGreaterThan(0);
+      expect(result.matches[0].title).toContain('MCP');
+    });
+
+    it('should return matches sorted by score', async () => {
+      await logEpic({ title: 'MCP Server Integration', summary: 'Summary' });
+      await logEpic({ title: 'MCP Client', summary: 'Summary' });
+      await logEpic({ title: 'Database', summary: 'Summary' });
+
+      const result = await resolveEpic({ query: 'MCP Server' });
+
+      expect(result.matches.length).toBeGreaterThanOrEqual(2);
+      // First result should have higher score
+      expect(result.matches[0].score).toBeGreaterThanOrEqual(result.matches[1].score);
+    });
+
+    it('should respect limit parameter', async () => {
+      await logEpic({ title: 'Epic 1', summary: 'Summary' });
+      await logEpic({ title: 'Epic 2', summary: 'Summary' });
+      await logEpic({ title: 'Epic 3', summary: 'Summary' });
+
+      const result = await resolveEpic({ query: 'Epic', limit: 2 });
+
+      expect(result.matches.length).toBeLessThanOrEqual(2);
+    });
+
+    it('should include status and priority in results', async () => {
+      await logEpic({
+        title: 'High Priority Epic',
+        summary: 'Summary',
+        priority: 'high',
+      });
+
+      const result = await resolveEpic({ query: 'High Priority' });
+
+      expect(result.matches[0].status).toBe('planned');
+      expect(result.matches[0].priority).toBe('high');
+    });
+
+    it('should handle partial word matches', async () => {
+      await logEpic({ title: 'Authentication System', summary: 'Summary' });
+
+      const result = await resolveEpic({ query: 'auth' });
+
+      expect(result.matches.length).toBeGreaterThan(0);
+    });
+
+    it('should be case insensitive', async () => {
+      await logEpic({ title: 'MCP Server', summary: 'Summary' });
+
+      const result = await resolveEpic({ query: 'mcp server' });
+
+      expect(result.matches.length).toBeGreaterThan(0);
     });
   });
 });

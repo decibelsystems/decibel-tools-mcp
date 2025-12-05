@@ -12,6 +12,7 @@ import type {
   ListEpicsInput,
   GetEpicInput,
   GetEpicIssuesInput,
+  ResolveEpicInput,
   EpicStatus,
   Priority,
 } from '../../src/tools/sentinel.js';
@@ -304,6 +305,39 @@ export const getEpicIssuesPayloads = {
     repo: 'test-repo',
     epic_id: 'EPIC-0002',
   } satisfies GetEpicIssuesInput,
+};
+
+export const resolveEpicPayloads = {
+  /** Search by epic ID */
+  byId: {
+    query: 'EPIC-0001',
+  } satisfies ResolveEpicInput,
+
+  /** Search by title keyword */
+  byKeyword: {
+    query: 'MCP Server',
+  } satisfies ResolveEpicInput,
+
+  /** Search with limit */
+  withLimit: {
+    query: 'Epic',
+    limit: 3,
+  } satisfies ResolveEpicInput,
+
+  /** Search with no matches expected */
+  noMatches: {
+    query: 'xyz-nonexistent-12345',
+  } satisfies ResolveEpicInput,
+
+  /** Case insensitive search */
+  caseInsensitive: {
+    query: 'mcp SERVER',
+  } satisfies ResolveEpicInput,
+
+  /** Partial word match */
+  partialMatch: {
+    query: 'auth',
+  } satisfies ResolveEpicInput,
 };
 
 // ============================================================================

@@ -166,12 +166,15 @@ describe('MCP Server E2E (stdio)', () => {
 
     expect(response.error).toBeUndefined();
     const result = response.result as { tools: Array<{ name: string }> };
-    expect(result.tools).toHaveLength(8);
+    expect(result.tools).toHaveLength(9);
     expect(result.tools.map((t) => t.name)).toContain(
       'designer.record_design_decision'
     );
     expect(result.tools.map((t) => t.name)).toContain(
       'sentinel.log_epic'
+    );
+    expect(result.tools.map((t) => t.name)).toContain(
+      'sentinel.resolve_epic'
     );
   });
 

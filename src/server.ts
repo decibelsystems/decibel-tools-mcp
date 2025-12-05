@@ -23,6 +23,8 @@ import {
   GetEpicInput,
   getEpicIssues,
   GetEpicIssuesInput,
+  resolveEpic,
+  ResolveEpicInput,
 } from './tools/sentinel.js';
 import { nextActions, NextActionsInput } from './tools/oracle.js';
 
@@ -243,6 +245,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['epic_id'],
         },
       },
+      {
+        name: 'sentinel.resolve_epic',
+        description: 'Resolve a fuzzy epic name/keyword into one or more matching epics. Use this to find the correct epic_id before creating issues.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Search query (epic ID, title, or keywords)',
+            },
+            limit: {
+              type: 'integer',
+              default: 5,
+              description: 'Maximum number of matches to return',
+            },
+          },
+          required: ['query'],
+        },
+      },
 
       // Oracle tools
       {
@@ -311,6 +332,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error(`Invalid severity. Must be one of: ${validSeverities.join(', ')}`);
         }
         const result = await createIssue(input);
+
+        // Check for EPIC_NOT_FOUND error
+        if ('error' in result && result.error === 'EPIC_NOT_FOUND') {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
@@ -377,6 +407,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error('Missing required field: epic_id');
         }
         const result = await getEpicIssues(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'sentinel.resolve_epic': {
+        const input = args as unknown as ResolveEpicInput;
+        if (!input.query) {
+          throw new Error('Missing required field: query');
+        }
+        const result = await resolveEpic(input);
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };

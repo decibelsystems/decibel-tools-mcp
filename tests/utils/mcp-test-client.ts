@@ -19,6 +19,8 @@ import {
   GetEpicInput,
   getEpicIssues,
   GetEpicIssuesInput,
+  resolveEpic,
+  ResolveEpicInput,
   EpicStatus,
   Priority,
 } from '../../src/tools/sentinel.js';
@@ -154,6 +156,18 @@ export async function createTestMcpClient(): Promise<TestMcpClient> {
           required: ['repo', 'epic_id'],
         },
       },
+      {
+        name: 'sentinel.resolve_epic',
+        description: 'Resolve a fuzzy epic name/keyword into matching epics.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' },
+            limit: { type: 'integer', default: 5 },
+          },
+          required: ['query'],
+        },
+      },
     ],
   }));
 
@@ -240,6 +254,14 @@ export async function createTestMcpClient(): Promise<TestMcpClient> {
             throw new Error('Missing required fields');
           }
           const result = await getEpicIssues(input);
+          return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        }
+        case 'sentinel.resolve_epic': {
+          const input = args as unknown as ResolveEpicInput;
+          if (!input.query) {
+            throw new Error('Missing required field: query');
+          }
+          const result = await resolveEpic(input);
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         }
         default:
