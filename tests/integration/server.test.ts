@@ -22,15 +22,19 @@ describe('MCP Server Integration', () => {
   });
 
   describe('ListTools', () => {
-    it('should list all four tools', async () => {
+    it('should list all eight tools', async () => {
       const tools = await client.listTools();
 
-      expect(tools).toHaveLength(4);
+      expect(tools).toHaveLength(8);
       expect(tools.map((t) => t.name)).toEqual(
         expect.arrayContaining([
           'designer.record_design_decision',
           'architect.record_arch_decision',
           'sentinel.create_issue',
+          'sentinel.log_epic',
+          'sentinel.list_epics',
+          'sentinel.get_epic',
+          'sentinel.get_epic_issues',
           'oracle.next_actions',
         ])
       );

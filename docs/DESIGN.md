@@ -94,8 +94,10 @@ The current version is a file-based prototype. Tools write markdown files with Y
 │       └── {timestamp}-{slug}.md
 └── sentinel/
     └── {repo}/
-        └── issues/
-            └── {timestamp}-{slug}.md
+        ├── issues/
+        │   └── {timestamp}-{slug}.md
+        └── epics/
+            └── EPIC-XXXX-{slug}.md
 ```
 
 **Filename format:** `YYYY-MM-DDTHH-mm-ssZ-{slug}.md`
@@ -103,6 +105,18 @@ The current version is a file-based prototype. Tools write markdown files with Y
 ---
 
 ## Tools (v0)
+
+**8 tools available:**
+- `designer.record_design_decision` - Record design decisions
+- `architect.record_arch_decision` - Create ADRs
+- `sentinel.create_issue` - Track issues with severity
+- `sentinel.log_epic` - Create epics for grouping issues
+- `sentinel.list_epics` - List epics for a repo
+- `sentinel.get_epic` - Get epic details
+- `sentinel.get_epic_issues` - Get issues linked to an epic
+- `oracle.next_actions` - Get prioritized recommendations
+
+---
 
 ### 1. designer.record_design_decision
 
@@ -157,6 +171,7 @@ Track issues with severity levels.
   severity: "low" | "med" | "high" | "critical"; // Required
   title: string;                                 // Required
   details: string;                               // Required
+  epic_id?: string;                              // Optional - link to epic
 }
 
 // Output
@@ -165,10 +180,102 @@ Track issues with severity levels.
   timestamp: string;
   path: string;
   status: "open";
+  epic_id?: string;  // If linked
 }
 ```
 
-### 4. oracle.next_actions
+### 4. sentinel.log_epic
+
+Create an epic for grouping related issues.
+
+```typescript
+// Input
+{
+  repo: string;                                              // Required
+  title: string;                                             // Required
+  summary: string;                                           // Required
+  priority?: "low" | "med" | "high" | "critical";            // Optional, default: "med"
+  status?: "planned" | "in_progress" | "shipped" | "on_hold" | "cancelled"; // Optional, default: "planned"
+}
+
+// Output
+{
+  epic_id: string;   // e.g., "EPIC-0001"
+  timestamp: string;
+  path: string;
+}
+```
+
+### 5. sentinel.list_epics
+
+List all epics for a repository.
+
+```typescript
+// Input
+{
+  repo: string;                                              // Required
+  status?: "planned" | "in_progress" | "shipped" | "on_hold" | "cancelled"; // Optional filter
+}
+
+// Output
+{
+  epics: Array<{
+    epic_id: string;
+    title: string;
+    status: string;
+    priority: string;
+    issue_count: number;
+  }>;
+}
+```
+
+### 6. sentinel.get_epic
+
+Get full details of a specific epic.
+
+```typescript
+// Input
+{
+  repo: string;    // Required
+  epic_id: string; // Required
+}
+
+// Output
+{
+  epic_id: string;
+  title: string;
+  summary: string;
+  status: string;
+  priority: string;
+  created_at: string;
+  path: string;
+}
+```
+
+### 7. sentinel.get_epic_issues
+
+Get all issues linked to an epic.
+
+```typescript
+// Input
+{
+  repo: string;    // Required
+  epic_id: string; // Required
+}
+
+// Output
+{
+  epic_id: string;
+  issues: Array<{
+    id: string;
+    title: string;
+    severity: string;
+    status: string;
+  }>;
+}
+```
+
+### 8. oracle.next_actions
 
 Infer prioritized next actions from recent activity.
 
@@ -344,12 +451,12 @@ src/
 ## Testing
 
 ```bash
-npm test              # 70 tests across unit/integration/e2e
+npm test              # 90+ tests across unit/integration/e2e
 npm run test:coverage # 100% line coverage on tools
 ```
 
 **Test structure:**
-- `tests/unit/` – Tool implementations
+- `tests/unit/` – Tool implementations (designer, architect, sentinel w/ epics, oracle)
 - `tests/integration/` – MCP protocol via in-memory transport
 - `tests/e2e/` – Full stdio spawn
 - `tests/fixtures/` – Sample payloads and helpers

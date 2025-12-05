@@ -7,7 +7,21 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { recordDesignDecision, RecordDesignDecisionInput } from '../../src/tools/designer.js';
 import { recordArchDecision, RecordArchDecisionInput } from '../../src/tools/architect.js';
-import { createIssue, CreateIssueInput, Severity } from '../../src/tools/sentinel.js';
+import {
+  createIssue,
+  CreateIssueInput,
+  Severity,
+  logEpic,
+  LogEpicInput,
+  listEpics,
+  ListEpicsInput,
+  getEpic,
+  GetEpicInput,
+  getEpicIssues,
+  GetEpicIssuesInput,
+  EpicStatus,
+  Priority,
+} from '../../src/tools/sentinel.js';
 import { nextActions, NextActionsInput } from '../../src/tools/oracle.js';
 
 export interface TestMcpClient {
@@ -89,6 +103,57 @@ export async function createTestMcpClient(): Promise<TestMcpClient> {
           required: ['project_id'],
         },
       },
+      {
+        name: 'sentinel.log_epic',
+        description: 'Create a new epic for tracking related issues.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            repo: { type: 'string' },
+            title: { type: 'string' },
+            summary: { type: 'string' },
+            priority: { type: 'string', enum: ['low', 'med', 'high', 'critical'] },
+            status: { type: 'string', enum: ['planned', 'in_progress', 'shipped', 'on_hold', 'cancelled'] },
+          },
+          required: ['repo', 'title', 'summary'],
+        },
+      },
+      {
+        name: 'sentinel.list_epics',
+        description: 'List all epics for a repo.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            repo: { type: 'string' },
+            status: { type: 'string', enum: ['planned', 'in_progress', 'shipped', 'on_hold', 'cancelled'] },
+          },
+          required: ['repo'],
+        },
+      },
+      {
+        name: 'sentinel.get_epic',
+        description: 'Get details of a specific epic.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            repo: { type: 'string' },
+            epic_id: { type: 'string' },
+          },
+          required: ['repo', 'epic_id'],
+        },
+      },
+      {
+        name: 'sentinel.get_epic_issues',
+        description: 'Get all issues linked to an epic.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            repo: { type: 'string' },
+            epic_id: { type: 'string' },
+          },
+          required: ['repo', 'epic_id'],
+        },
+      },
     ],
   }));
 
@@ -131,6 +196,50 @@ export async function createTestMcpClient(): Promise<TestMcpClient> {
             throw new Error('Missing required field: project_id');
           }
           const result = await nextActions(input);
+          return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        }
+        case 'sentinel.log_epic': {
+          const input = args as unknown as LogEpicInput;
+          if (!input.repo || !input.title || !input.summary) {
+            throw new Error('Missing required fields');
+          }
+          if (input.priority) {
+            const validPriorities: Priority[] = ['low', 'med', 'high', 'critical'];
+            if (!validPriorities.includes(input.priority)) {
+              throw new Error('Invalid priority');
+            }
+          }
+          if (input.status) {
+            const validStatuses: EpicStatus[] = ['planned', 'in_progress', 'shipped', 'on_hold', 'cancelled'];
+            if (!validStatuses.includes(input.status)) {
+              throw new Error('Invalid status');
+            }
+          }
+          const result = await logEpic(input);
+          return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        }
+        case 'sentinel.list_epics': {
+          const input = args as unknown as ListEpicsInput;
+          if (!input.repo) {
+            throw new Error('Missing required field: repo');
+          }
+          const result = await listEpics(input);
+          return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        }
+        case 'sentinel.get_epic': {
+          const input = args as unknown as GetEpicInput;
+          if (!input.repo || !input.epic_id) {
+            throw new Error('Missing required fields');
+          }
+          const result = await getEpic(input);
+          return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        }
+        case 'sentinel.get_epic_issues': {
+          const input = args as unknown as GetEpicIssuesInput;
+          if (!input.repo || !input.epic_id) {
+            throw new Error('Missing required fields');
+          }
+          const result = await getEpicIssues(input);
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         }
         default:

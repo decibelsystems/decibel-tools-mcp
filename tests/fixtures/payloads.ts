@@ -5,7 +5,16 @@
 
 import type { RecordDesignDecisionInput } from '../../src/tools/designer.js';
 import type { RecordArchDecisionInput } from '../../src/tools/architect.js';
-import type { CreateIssueInput, Severity } from '../../src/tools/sentinel.js';
+import type {
+  CreateIssueInput,
+  Severity,
+  LogEpicInput,
+  ListEpicsInput,
+  GetEpicInput,
+  GetEpicIssuesInput,
+  EpicStatus,
+  Priority,
+} from '../../src/tools/sentinel.js';
 import type { NextActionsInput } from '../../src/tools/oracle.js';
 
 // ============================================================================
@@ -173,6 +182,128 @@ Immediate action required - consider taking endpoint offline.`,
     title: 'Search latency increased 3x after deployment',
     details: 'P99 latency went from 200ms to 600ms after v2.3.0 deployment. Rollback pending.',
   } satisfies CreateIssueInput,
+
+  /** Issue linked to epic */
+  withEpic: {
+    repo: 'ecommerce-platform',
+    severity: 'med' as Severity,
+    title: 'Payment timeout handling',
+    details: 'Need to handle Stripe webhook timeouts gracefully.',
+    epic_id: 'EPIC-0001',
+  } satisfies CreateIssueInput,
+};
+
+// ============================================================================
+// Epic Payloads
+// ============================================================================
+
+export const epicPayloads = {
+  /** Minimal valid payload */
+  minimal: {
+    repo: 'test-repo',
+    title: 'Test Epic',
+    summary: 'A test epic for validation',
+  } satisfies LogEpicInput,
+
+  /** Full payload with all fields */
+  full: {
+    repo: 'ecommerce-platform',
+    title: 'Checkout Flow Redesign',
+    summary: 'Complete overhaul of the checkout experience to reduce abandonment.',
+    priority: 'high' as Priority,
+    status: 'in_progress' as EpicStatus,
+  } satisfies LogEpicInput,
+
+  /** Feature epic */
+  feature: {
+    repo: 'mobile-app',
+    title: 'Dark Mode Implementation',
+    summary: 'Add dark mode theme support across all screens.',
+    priority: 'med' as Priority,
+    status: 'planned' as EpicStatus,
+  } satisfies LogEpicInput,
+
+  /** Security epic */
+  security: {
+    repo: 'auth-service',
+    title: 'OAuth 2.0 Migration',
+    summary: 'Migrate from custom auth to OAuth 2.0 with PKCE.',
+    priority: 'critical' as Priority,
+    status: 'in_progress' as EpicStatus,
+  } satisfies LogEpicInput,
+
+  /** Performance epic */
+  performance: {
+    repo: 'api-service',
+    title: 'Database Query Optimization',
+    summary: 'Optimize slow queries identified in APM dashboard.',
+    priority: 'high' as Priority,
+    status: 'planned' as EpicStatus,
+  } satisfies LogEpicInput,
+
+  /** Completed epic */
+  shipped: {
+    repo: 'frontend-app',
+    title: 'Accessibility Improvements',
+    summary: 'WCAG 2.1 AA compliance for all public pages.',
+    priority: 'med' as Priority,
+    status: 'shipped' as EpicStatus,
+  } satisfies LogEpicInput,
+
+  /** On-hold epic */
+  onHold: {
+    repo: 'data-platform',
+    title: 'Real-time Analytics Pipeline',
+    summary: 'Stream processing for live dashboards.',
+    priority: 'low' as Priority,
+    status: 'on_hold' as EpicStatus,
+  } satisfies LogEpicInput,
+};
+
+export const listEpicsPayloads = {
+  /** List all epics for a repo */
+  all: {
+    repo: 'test-repo',
+  } satisfies ListEpicsInput,
+
+  /** List epics filtered by status */
+  byStatus: {
+    repo: 'test-repo',
+    status: 'in_progress' as EpicStatus,
+  } satisfies ListEpicsInput,
+
+  /** List epics for empty repo */
+  emptyRepo: {
+    repo: 'non-existent-repo-12345',
+  } satisfies ListEpicsInput,
+};
+
+export const getEpicPayloads = {
+  /** Get a specific epic */
+  valid: {
+    repo: 'test-repo',
+    epic_id: 'EPIC-0001',
+  } satisfies GetEpicInput,
+
+  /** Get non-existent epic */
+  nonExistent: {
+    repo: 'test-repo',
+    epic_id: 'EPIC-9999',
+  } satisfies GetEpicInput,
+};
+
+export const getEpicIssuesPayloads = {
+  /** Get issues for an epic */
+  valid: {
+    repo: 'test-repo',
+    epic_id: 'EPIC-0001',
+  } satisfies GetEpicIssuesInput,
+
+  /** Get issues for epic with no issues */
+  empty: {
+    repo: 'test-repo',
+    epic_id: 'EPIC-0002',
+  } satisfies GetEpicIssuesInput,
 };
 
 // ============================================================================
@@ -290,6 +421,14 @@ export const invalidPayloads = {
     missingTitle: { repo: 'test', severity: 'low', details: 'Test' },
     missingDetails: { repo: 'test', severity: 'low', title: 'Test' },
     invalidSeverity: { repo: 'test', severity: 'invalid', title: 'Test', details: 'Test' },
+  },
+
+  epic: {
+    missingRepo: { title: 'Test', summary: 'Test' },
+    missingTitle: { repo: 'test', summary: 'Test' },
+    missingSummary: { repo: 'test', title: 'Test' },
+    invalidPriority: { repo: 'test', title: 'Test', summary: 'Test', priority: 'invalid' },
+    invalidStatus: { repo: 'test', title: 'Test', summary: 'Test', status: 'invalid' },
   },
 
   oracle: {

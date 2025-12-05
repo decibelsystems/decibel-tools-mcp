@@ -2,13 +2,24 @@ import fs from 'fs/promises';
 import path from 'path';
 import { getConfig, log } from '../config.js';
 
+// ============================================================================
+// Types
+// ============================================================================
+
 export type Severity = 'low' | 'med' | 'high' | 'critical';
+export type Priority = 'low' | 'medium' | 'high' | 'critical';
+export type EpicStatus = 'planned' | 'in_progress' | 'shipped' | 'on_hold' | 'cancelled';
+
+// ============================================================================
+// Issue Types
+// ============================================================================
 
 export interface CreateIssueInput {
   repo: string;
   severity: Severity;
   title: string;
   details: string;
+  epic_id?: string;
 }
 
 export interface CreateIssueOutput {
@@ -16,7 +27,90 @@ export interface CreateIssueOutput {
   timestamp: string;
   path: string;
   status: string;
+  epic_id?: string;
 }
+
+// ============================================================================
+// Epic Types
+// ============================================================================
+
+export interface LogEpicInput {
+  title: string;
+  summary: string;
+  motivation?: string[];
+  outcomes?: string[];
+  acceptance_criteria?: string[];
+  priority?: Priority;
+  tags?: string[];
+  owner?: string;
+  squad?: string;
+}
+
+export interface LogEpicOutput {
+  epic_id: string;
+  timestamp: string;
+  path: string;
+}
+
+export interface ListEpicsInput {
+  status?: EpicStatus;
+  priority?: Priority;
+  tags?: string[];
+}
+
+export interface EpicSummary {
+  id: string;
+  title: string;
+  status: EpicStatus;
+  priority: Priority;
+}
+
+export interface ListEpicsOutput {
+  epics: EpicSummary[];
+}
+
+export interface GetEpicInput {
+  epic_id: string;
+}
+
+export interface Epic {
+  id: string;
+  title: string;
+  summary: string;
+  status: EpicStatus;
+  priority: Priority;
+  motivation: string[];
+  outcomes: string[];
+  acceptance_criteria: string[];
+  tags: string[];
+  owner: string;
+  squad: string;
+  created_at: string;
+}
+
+export interface GetEpicOutput {
+  epic: Epic | null;
+  error?: string;
+}
+
+export interface GetEpicIssuesInput {
+  epic_id: string;
+}
+
+export interface IssueSummary {
+  id: string;
+  title: string;
+  severity: Severity;
+  status: string;
+}
+
+export interface GetEpicIssuesOutput {
+  issues: IssueSummary[];
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
 
 function slugify(text: string): string {
   return text
@@ -27,12 +121,122 @@ function slugify(text: string): string {
 }
 
 function formatTimestampForFilename(date: Date): string {
-  // Format: YYYY-MM-DDTHH-mm-ssZ
   const iso = date.toISOString();
-  return iso
-    .replace(/:/g, '-')
-    .replace(/\.\d{3}Z$/, 'Z');
+  return iso.replace(/:/g, '-').replace(/\.\d{3}Z$/, 'Z');
 }
+
+async function getNextEpicNumber(epicsDir: string): Promise<number> {
+  try {
+    const files = await fs.readdir(epicsDir);
+    const epicNumbers = files
+      .filter((f) => f.startsWith('EPIC-') && f.endsWith('.md'))
+      .map((f) => {
+        const match = f.match(/^EPIC-(\d+)/);
+        return match ? parseInt(match[1], 10) : 0;
+      });
+    return epicNumbers.length > 0 ? Math.max(...epicNumbers) + 1 : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function formatEpicId(num: number): string {
+  return `EPIC-${num.toString().padStart(4, '0')}`;
+}
+
+async function parseEpicFile(filePath: string): Promise<Epic | null> {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    if (!frontmatterMatch) return null;
+
+    const frontmatter: Record<string, string | string[]> = {};
+    for (const line of frontmatterMatch[1].split('\n')) {
+      const colonIndex = line.indexOf(':');
+      if (colonIndex > 0) {
+        const key = line.slice(0, colonIndex).trim();
+        let value = line.slice(colonIndex + 1).trim();
+
+        // Handle arrays (simple format: [item1, item2])
+        if (value.startsWith('[') && value.endsWith(']')) {
+          frontmatter[key] = value
+            .slice(1, -1)
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+        } else {
+          frontmatter[key] = value;
+        }
+      }
+    }
+
+    // Extract sections from body
+    const bodyMatch = content.match(/---\n\n([\s\S]*)/);
+    const body = bodyMatch ? bodyMatch[1] : '';
+
+    const extractList = (section: string): string[] => {
+      const regex = new RegExp(`## ${section}\\n([\\s\\S]*?)(?=\\n## |$)`);
+      const match = body.match(regex);
+      if (!match) return [];
+      return match[1]
+        .split('\n')
+        .filter((line) => line.startsWith('- '))
+        .map((line) => line.slice(2).trim());
+    };
+
+    return {
+      id: frontmatter.id as string || '',
+      title: frontmatter.title as string || '',
+      summary: frontmatter.summary as string || '',
+      status: (frontmatter.status as EpicStatus) || 'planned',
+      priority: (frontmatter.priority as Priority) || 'medium',
+      motivation: extractList('Motivation'),
+      outcomes: extractList('Outcomes'),
+      acceptance_criteria: extractList('Acceptance Criteria'),
+      tags: (frontmatter.tags as string[]) || [],
+      owner: frontmatter.owner as string || '',
+      squad: frontmatter.squad as string || '',
+      created_at: frontmatter.created_at as string || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function parseIssueFile(filePath: string): Promise<IssueSummary | null> {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    if (!frontmatterMatch) return null;
+
+    const frontmatter: Record<string, string> = {};
+    for (const line of frontmatterMatch[1].split('\n')) {
+      const colonIndex = line.indexOf(':');
+      if (colonIndex > 0) {
+        const key = line.slice(0, colonIndex).trim();
+        const value = line.slice(colonIndex + 1).trim();
+        frontmatter[key] = value;
+      }
+    }
+
+    // Extract title from first heading
+    const titleMatch = content.match(/^# (.+)$/m);
+    const title = titleMatch ? titleMatch[1] : path.basename(filePath, '.md');
+
+    return {
+      id: path.basename(filePath),
+      title,
+      severity: (frontmatter.severity as Severity) || 'low',
+      status: frontmatter.status || 'open',
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================================
+// Issue Functions
+// ============================================================================
 
 export async function createIssue(
   input: CreateIssueInput
@@ -47,29 +251,33 @@ export async function createIssue(
   const dirPath = path.join(config.rootDir, 'sentinel', input.repo, 'issues');
   const filePath = path.join(dirPath, filename);
 
-  // Create directory if it doesn't exist
   await fs.mkdir(dirPath, { recursive: true });
 
-  // Build markdown content with frontmatter
-  const frontmatter = [
+  // Build frontmatter with optional epic_id
+  const frontmatterLines = [
     '---',
     `repo: ${input.repo}`,
     `severity: ${input.severity}`,
     `status: open`,
     `created_at: ${timestamp}`,
-    '---',
-  ].join('\n');
+  ];
+  if (input.epic_id) {
+    frontmatterLines.push(`epic_id: ${input.epic_id}`);
+  }
+  frontmatterLines.push('---');
+  const frontmatter = frontmatterLines.join('\n');
 
-  const body = [
+  const bodyLines = [
     `# ${input.title}`,
     '',
     `**Severity:** ${input.severity}`,
     `**Status:** open`,
-    '',
-    '## Details',
-    '',
-    input.details,
-  ].join('\n');
+  ];
+  if (input.epic_id) {
+    bodyLines.push(`**Epic:** ${input.epic_id}`);
+  }
+  bodyLines.push('', '## Details', '', input.details);
+  const body = bodyLines.join('\n');
 
   const content = `${frontmatter}\n\n${body}\n`;
 
@@ -81,5 +289,190 @@ export async function createIssue(
     timestamp,
     path: filePath,
     status: 'open',
+    epic_id: input.epic_id,
   };
+}
+
+// ============================================================================
+// Epic Functions
+// ============================================================================
+
+export async function logEpic(input: LogEpicInput): Promise<LogEpicOutput> {
+  const config = getConfig();
+  const now = new Date();
+  const timestamp = now.toISOString();
+
+  const epicsDir = path.join(config.rootDir, 'sentinel', 'epics');
+  await fs.mkdir(epicsDir, { recursive: true });
+
+  const epicNum = await getNextEpicNumber(epicsDir);
+  const epicId = formatEpicId(epicNum);
+  const slug = slugify(input.title);
+  const filename = `${epicId}-${slug}.md`;
+  const filePath = path.join(epicsDir, filename);
+
+  const priority = input.priority || 'medium';
+  const tags = input.tags || [];
+  const owner = input.owner || '';
+  const squad = input.squad || '';
+
+  // Build frontmatter
+  const frontmatter = [
+    '---',
+    `id: ${epicId}`,
+    `title: ${input.title}`,
+    `summary: ${input.summary}`,
+    `status: planned`,
+    `priority: ${priority}`,
+    `tags: [${tags.join(', ')}]`,
+    `owner: ${owner}`,
+    `squad: ${squad}`,
+    `created_at: ${timestamp}`,
+    '---',
+  ].join('\n');
+
+  // Build body sections
+  const sections: string[] = [];
+
+  sections.push(`# ${input.title}`, '', '## Summary', '', input.summary);
+
+  if (input.motivation && input.motivation.length > 0) {
+    sections.push('', '## Motivation', '');
+    for (const item of input.motivation) {
+      sections.push(`- ${item}`);
+    }
+  }
+
+  if (input.outcomes && input.outcomes.length > 0) {
+    sections.push('', '## Outcomes', '');
+    for (const item of input.outcomes) {
+      sections.push(`- ${item}`);
+    }
+  }
+
+  if (input.acceptance_criteria && input.acceptance_criteria.length > 0) {
+    sections.push('', '## Acceptance Criteria', '');
+    for (const item of input.acceptance_criteria) {
+      sections.push(`- [ ] ${item}`);
+    }
+  }
+
+  const content = `${frontmatter}\n\n${sections.join('\n')}\n`;
+
+  await fs.writeFile(filePath, content, 'utf-8');
+  log(`Sentinel: Created epic at ${filePath}`);
+
+  return {
+    epic_id: epicId,
+    timestamp,
+    path: filePath,
+  };
+}
+
+export async function listEpics(input: ListEpicsInput): Promise<ListEpicsOutput> {
+  const config = getConfig();
+  const epicsDir = path.join(config.rootDir, 'sentinel', 'epics');
+
+  const epics: EpicSummary[] = [];
+
+  try {
+    const files = await fs.readdir(epicsDir);
+    for (const file of files) {
+      if (!file.endsWith('.md')) continue;
+
+      const filePath = path.join(epicsDir, file);
+      const epic = await parseEpicFile(filePath);
+      if (!epic) continue;
+
+      // Apply filters
+      if (input.status && epic.status !== input.status) continue;
+      if (input.priority && epic.priority !== input.priority) continue;
+      if (input.tags && input.tags.length > 0) {
+        const hasTag = input.tags.some((t) => epic.tags.includes(t));
+        if (!hasTag) continue;
+      }
+
+      epics.push({
+        id: epic.id,
+        title: epic.title,
+        status: epic.status,
+        priority: epic.priority,
+      });
+    }
+  } catch {
+    // Directory doesn't exist yet
+  }
+
+  // Sort by ID (newest first based on number)
+  epics.sort((a, b) => b.id.localeCompare(a.id));
+
+  return { epics };
+}
+
+export async function getEpic(input: GetEpicInput): Promise<GetEpicOutput> {
+  const config = getConfig();
+  const epicsDir = path.join(config.rootDir, 'sentinel', 'epics');
+
+  try {
+    const files = await fs.readdir(epicsDir);
+    const epicFile = files.find((f) => f.startsWith(input.epic_id));
+
+    if (!epicFile) {
+      return { epic: null, error: `Epic not found: ${input.epic_id}` };
+    }
+
+    const filePath = path.join(epicsDir, epicFile);
+    const epic = await parseEpicFile(filePath);
+
+    if (!epic) {
+      return { epic: null, error: `Failed to parse epic: ${input.epic_id}` };
+    }
+
+    return { epic };
+  } catch {
+    return { epic: null, error: `Epic not found: ${input.epic_id}` };
+  }
+}
+
+export async function getEpicIssues(
+  input: GetEpicIssuesInput
+): Promise<GetEpicIssuesOutput> {
+  const config = getConfig();
+  const sentinelDir = path.join(config.rootDir, 'sentinel');
+  const issues: IssueSummary[] = [];
+
+  try {
+    // Scan all repo directories for issues with matching epic_id
+    const entries = await fs.readdir(sentinelDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === 'epics') continue;
+
+      const issuesDir = path.join(sentinelDir, entry.name, 'issues');
+      try {
+        const issueFiles = await fs.readdir(issuesDir);
+
+        for (const file of issueFiles) {
+          if (!file.endsWith('.md')) continue;
+
+          const filePath = path.join(issuesDir, file);
+          const content = await fs.readFile(filePath, 'utf-8');
+
+          // Check if this issue belongs to the epic
+          if (content.includes(`epic_id: ${input.epic_id}`)) {
+            const issue = await parseIssueFile(filePath);
+            if (issue) {
+              issues.push(issue);
+            }
+          }
+        }
+      } catch {
+        // Issues dir doesn't exist for this repo
+      }
+    }
+  } catch {
+    // Sentinel dir doesn't exist
+  }
+
+  return { issues };
 }

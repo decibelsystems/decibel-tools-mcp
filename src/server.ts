@@ -9,7 +9,21 @@ import {
 import { getConfig, log } from './config.js';
 import { recordDesignDecision, RecordDesignDecisionInput } from './tools/designer.js';
 import { recordArchDecision, RecordArchDecisionInput } from './tools/architect.js';
-import { createIssue, CreateIssueInput, Severity } from './tools/sentinel.js';
+import {
+  createIssue,
+  CreateIssueInput,
+  Severity,
+  logEpic,
+  LogEpicInput,
+  Priority,
+  EpicStatus,
+  listEpics,
+  ListEpicsInput,
+  getEpic,
+  GetEpicInput,
+  getEpicIssues,
+  GetEpicIssuesInput,
+} from './tools/sentinel.js';
 import { nextActions, NextActionsInput } from './tools/oracle.js';
 
 const config = getConfig();
@@ -35,6 +49,7 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
+      // Designer tools
       {
         name: 'designer.record_design_decision',
         description: 'Record a design decision for a project. Creates a markdown file with frontmatter containing the decision details.',
@@ -61,6 +76,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['project_id', 'area', 'summary'],
         },
       },
+
+      // Architect tools
       {
         name: 'architect.record_arch_decision',
         description: 'Record an architectural decision (ADR) for a system. Creates a markdown file with Change, Rationale, and Impact sections.',
@@ -87,9 +104,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['system_id', 'change', 'rationale'],
         },
       },
+
+      // Sentinel tools - Issues
       {
         name: 'sentinel.create_issue',
-        description: 'Create a new issue for a repository. Creates a markdown file with severity and status tracking.',
+        description: 'Create a new issue for a repository. Creates a markdown file with severity and status tracking. Can optionally link to an epic.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -110,10 +129,122 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               description: 'Detailed description of the issue',
             },
+            epic_id: {
+              type: 'string',
+              description: 'Optional parent epic ID (e.g., "EPIC-0001")',
+            },
           },
           required: ['repo', 'severity', 'title', 'details'],
         },
       },
+
+      // Sentinel tools - Epics
+      {
+        name: 'sentinel.log_epic',
+        description: 'Create a new Sentinel epic (large feature) record. Returns the epic_id and file path.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            title: {
+              type: 'string',
+              description: 'Epic title (e.g., "MCP Server: Sentinel Epic Support")',
+            },
+            summary: {
+              type: 'string',
+              description: 'Brief summary of what this epic is about',
+            },
+            motivation: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'List of motivation statements (why this epic exists)',
+            },
+            outcomes: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'List of desired outcomes',
+            },
+            acceptance_criteria: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'List of acceptance criteria for "done"',
+            },
+            priority: {
+              type: 'string',
+              enum: ['low', 'medium', 'high', 'critical'],
+              default: 'medium',
+              description: 'Priority level',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Tags for categorization',
+            },
+            owner: {
+              type: 'string',
+              description: 'Owner of the epic',
+            },
+            squad: {
+              type: 'string',
+              description: 'Squad/team responsible',
+            },
+          },
+          required: ['title', 'summary'],
+        },
+      },
+      {
+        name: 'sentinel.list_epics',
+        description: 'List all epics, optionally filtered by status, priority, or tags.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            status: {
+              type: 'string',
+              enum: ['planned', 'in_progress', 'shipped', 'on_hold', 'cancelled'],
+              description: 'Filter by status',
+            },
+            priority: {
+              type: 'string',
+              enum: ['low', 'medium', 'high', 'critical'],
+              description: 'Filter by priority',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Filter by tags (matches any)',
+            },
+          },
+        },
+      },
+      {
+        name: 'sentinel.get_epic',
+        description: 'Get details of a specific epic by ID.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            epic_id: {
+              type: 'string',
+              description: 'Epic ID (e.g., "EPIC-0001")',
+            },
+          },
+          required: ['epic_id'],
+        },
+      },
+      {
+        name: 'sentinel.get_epic_issues',
+        description: 'Get all issues linked to a specific epic.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            epic_id: {
+              type: 'string',
+              description: 'Epic ID (e.g., "EPIC-0001")',
+            },
+          },
+          required: ['epic_id'],
+        },
+      },
+
+      // Oracle tools
       {
         name: 'oracle.next_actions',
         description: 'Get recommended next actions for a project based on recent design decisions, architecture changes, and issues.',
@@ -145,6 +276,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
+      // Designer tools
       case 'designer.record_design_decision': {
         const input = args as unknown as RecordDesignDecisionInput;
         if (!input.project_id || !input.area || !input.summary) {
@@ -152,15 +284,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const result = await recordDesignDecision(input);
         return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
       }
 
+      // Architect tools
       case 'architect.record_arch_decision': {
         const input = args as unknown as RecordArchDecisionInput;
         if (!input.system_id || !input.change || !input.rationale) {
@@ -168,15 +296,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const result = await recordArchDecision(input);
         return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
       }
 
+      // Sentinel tools - Issues
       case 'sentinel.create_issue': {
         const input = args as unknown as CreateIssueInput;
         if (!input.repo || !input.severity || !input.title || !input.details) {
@@ -188,15 +312,77 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const result = await createIssue(input);
         return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
       }
 
+      // Sentinel tools - Epics
+      case 'sentinel.log_epic': {
+        const input = args as unknown as LogEpicInput;
+        if (!input.title || !input.summary) {
+          throw new Error('Missing required fields: title and summary are required');
+        }
+        if (input.priority) {
+          const validPriorities: Priority[] = ['low', 'medium', 'high', 'critical'];
+          if (!validPriorities.includes(input.priority)) {
+            throw new Error(`Invalid priority. Must be one of: ${validPriorities.join(', ')}`);
+          }
+        }
+        const result = await logEpic(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'sentinel.list_epics': {
+        const input = args as unknown as ListEpicsInput;
+        if (input.status) {
+          const validStatuses: EpicStatus[] = ['planned', 'in_progress', 'shipped', 'on_hold', 'cancelled'];
+          if (!validStatuses.includes(input.status)) {
+            throw new Error(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+          }
+        }
+        if (input.priority) {
+          const validPriorities: Priority[] = ['low', 'medium', 'high', 'critical'];
+          if (!validPriorities.includes(input.priority)) {
+            throw new Error(`Invalid priority. Must be one of: ${validPriorities.join(', ')}`);
+          }
+        }
+        const result = await listEpics(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'sentinel.get_epic': {
+        const input = args as unknown as GetEpicInput;
+        if (!input.epic_id) {
+          throw new Error('Missing required field: epic_id');
+        }
+        const result = await getEpic(input);
+        if (result.error) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: result.error }) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result.epic, null, 2) }],
+        };
+      }
+
+      case 'sentinel.get_epic_issues': {
+        const input = args as unknown as GetEpicIssuesInput;
+        if (!input.epic_id) {
+          throw new Error('Missing required field: epic_id');
+        }
+        const result = await getEpicIssues(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // Oracle tools
       case 'oracle.next_actions': {
         const input = args as unknown as NextActionsInput;
         if (!input.project_id) {
@@ -204,12 +390,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const result = await nextActions(input);
         return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
       }
 
@@ -220,12 +401,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     log(`Error in tool ${name}:`, errorMessage);
     return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({ error: errorMessage }),
-        },
-      ],
+      content: [{ type: 'text', text: JSON.stringify({ error: errorMessage }) }],
       isError: true,
     };
   }
