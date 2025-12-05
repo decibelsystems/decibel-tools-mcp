@@ -39,6 +39,19 @@ import {
   listLearnings,
   ListLearningsInput,
 } from './tools/learnings.js';
+import {
+  logFriction,
+  LogFrictionInput,
+  FrictionFrequency,
+  FrictionImpact,
+  FrictionStatus,
+  listFriction,
+  ListFrictionInput,
+  resolveFriction,
+  ResolveFrictionInput,
+  bumpFriction,
+  BumpFrictionInput,
+} from './tools/friction.js';
 
 const config = getConfig();
 
@@ -399,6 +412,127 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['project_id'],
         },
       },
+
+      // Friction tools
+      {
+        name: 'friction_log',
+        description: 'Log a persistent friction point or pain point. Both humans and agents can call this to track recurring issues that erode productivity. Signal strength increases when similar friction is logged multiple times.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            context: {
+              type: 'string',
+              description: 'Where the friction occurs (project name, repo, system, or workflow)',
+            },
+            description: {
+              type: 'string',
+              description: 'What the friction is - the pain point or recurring issue',
+            },
+            frequency: {
+              type: 'string',
+              enum: ['once', 'occasional', 'frequent', 'constant'],
+              description: 'How often this friction is encountered (default: occasional)',
+            },
+            impact: {
+              type: 'string',
+              enum: ['low', 'medium', 'high', 'blocking'],
+              description: 'How much this friction affects productivity (default: medium)',
+            },
+            source: {
+              type: 'string',
+              enum: ['human', 'agent'],
+              description: 'Who is logging this friction (default: human)',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Tags for categorization and searchability',
+            },
+            workaround: {
+              type: 'string',
+              description: 'Any current workaround being used',
+            },
+          },
+          required: ['context', 'description'],
+        },
+      },
+      {
+        name: 'friction_list',
+        description: 'List friction points, sorted by impact and signal count. High-signal friction should be prioritized for resolution.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            context: {
+              type: 'string',
+              description: 'Filter by context (project, repo, system)',
+            },
+            status: {
+              type: 'string',
+              enum: ['open', 'acknowledged', 'solving', 'resolved', 'wontfix'],
+              description: 'Filter by status',
+            },
+            min_impact: {
+              type: 'string',
+              enum: ['low', 'medium', 'high', 'blocking'],
+              description: 'Minimum impact level to include',
+            },
+            limit: {
+              type: 'integer',
+              description: 'Maximum number of results (default: 20)',
+            },
+          },
+        },
+      },
+      {
+        name: 'friction_resolve',
+        description: 'Mark a friction point as resolved. Can include a resolution note and reference to the solution (issue, ADR, commit).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            friction_id: {
+              type: 'string',
+              description: 'The friction ID (filename or partial match)',
+            },
+            resolution: {
+              type: 'string',
+              description: 'How the friction was resolved',
+            },
+            solution_ref: {
+              type: 'string',
+              description: 'Optional reference to the solution (issue ID, ADR, commit SHA, PR)',
+            },
+            status: {
+              type: 'string',
+              enum: ['resolved', 'wontfix'],
+              description: 'Resolution status (default: resolved)',
+            },
+          },
+          required: ['friction_id', 'resolution'],
+        },
+      },
+      {
+        name: 'friction_bump',
+        description: 'Bump the signal count on an existing friction point. Use when encountering the same friction again. Higher signal = higher priority.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            friction_id: {
+              type: 'string',
+              description: 'The friction ID (filename or partial match)',
+            },
+            source: {
+              type: 'string',
+              enum: ['human', 'agent'],
+              description: 'Who is bumping this friction (default: human)',
+            },
+            note: {
+              type: 'string',
+              description: 'Optional note about this occurrence',
+            },
+          },
+          required: ['friction_id'],
+        },
+      },
     ],
   };
 });
@@ -448,7 +582,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const result = await createIssue(input);
 
-        // Check for EPIC_NOT_FOUND error
         if ('error' in result && result.error === 'EPIC_NOT_FOUND') {
           return {
             content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
@@ -532,7 +665,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (input.priority) {
           const validPriorities: Priority[] = ['low', 'medium', 'high', 'critical'];
           if (!validPriorities.includes(input.priority)) {
-            throw new Error(`Invalid priority. Must be one of: ${validPriorities.join(', ')}`);;
+            throw new Error(`Invalid priority. Must be one of: ${validPriorities.join(', ')}`);
           }
         }
         const result = await listEpics(input);
@@ -620,6 +753,84 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }
         }
         const result = await listLearnings(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // Friction tools
+      case 'friction_log': {
+        const input = args as unknown as LogFrictionInput;
+        if (!input.context || !input.description) {
+          throw new Error('Missing required fields: context and description are required');
+        }
+        if (input.frequency) {
+          const valid: FrictionFrequency[] = ['once', 'occasional', 'frequent', 'constant'];
+          if (!valid.includes(input.frequency)) {
+            throw new Error(`Invalid frequency. Must be one of: ${valid.join(', ')}`);
+          }
+        }
+        if (input.impact) {
+          const valid: FrictionImpact[] = ['low', 'medium', 'high', 'blocking'];
+          if (!valid.includes(input.impact)) {
+            throw new Error(`Invalid impact. Must be one of: ${valid.join(', ')}`);
+          }
+        }
+        const result = await logFriction(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'friction_list': {
+        const input = args as unknown as ListFrictionInput;
+        if (input.status) {
+          const valid: FrictionStatus[] = ['open', 'acknowledged', 'solving', 'resolved', 'wontfix'];
+          if (!valid.includes(input.status)) {
+            throw new Error(`Invalid status. Must be one of: ${valid.join(', ')}`);
+          }
+        }
+        if (input.min_impact) {
+          const valid: FrictionImpact[] = ['low', 'medium', 'high', 'blocking'];
+          if (!valid.includes(input.min_impact)) {
+            throw new Error(`Invalid min_impact. Must be one of: ${valid.join(', ')}`);
+          }
+        }
+        const result = await listFriction(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'friction_resolve': {
+        const input = args as unknown as ResolveFrictionInput;
+        if (!input.friction_id || !input.resolution) {
+          throw new Error('Missing required fields: friction_id and resolution are required');
+        }
+        const result = await resolveFriction(input);
+        if ('error' in result) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'friction_bump': {
+        const input = args as unknown as BumpFrictionInput;
+        if (!input.friction_id) {
+          throw new Error('Missing required field: friction_id');
+        }
+        const result = await bumpFriction(input);
+        if ('error' in result) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
