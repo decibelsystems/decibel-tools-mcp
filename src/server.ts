@@ -53,7 +53,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       // Designer tools
       {
-        name: 'designer.record_design_decision',
+        name: 'designer_record_design_decision',
         description: 'Record a design decision for a project. Creates a markdown file with frontmatter containing the decision details.',
         inputSchema: {
           type: 'object',
@@ -81,7 +81,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
       // Architect tools
       {
-        name: 'architect.record_arch_decision',
+        name: 'architect_record_arch_decision',
         description: 'Record an architectural decision (ADR) for a system. Creates a markdown file with Change, Rationale, and Impact sections.',
         inputSchema: {
           type: 'object',
@@ -109,7 +109,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
       // Sentinel tools - Issues
       {
-        name: 'sentinel.create_issue',
+        name: 'sentinel_create_issue',
         description: 'Create a new issue for a repository. Creates a markdown file with severity and status tracking. Can optionally link to an epic.',
         inputSchema: {
           type: 'object',
@@ -142,7 +142,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
       // Sentinel tools - Epics
       {
-        name: 'sentinel.log_epic',
+        name: 'sentinel_log_epic',
         description: 'Create a new Sentinel epic (large feature) record. Returns the epic_id and file path.',
         inputSchema: {
           type: 'object',
@@ -194,7 +194,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: 'sentinel.list_epics',
+        name: 'sentinel_list_epics',
         description: 'List all epics, optionally filtered by status, priority, or tags.',
         inputSchema: {
           type: 'object',
@@ -218,7 +218,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: 'sentinel.get_epic',
+        name: 'sentinel_get_epic',
         description: 'Get details of a specific epic by ID.',
         inputSchema: {
           type: 'object',
@@ -232,7 +232,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: 'sentinel.get_epic_issues',
+        name: 'sentinel_get_epic_issues',
         description: 'Get all issues linked to a specific epic.',
         inputSchema: {
           type: 'object',
@@ -246,7 +246,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: 'sentinel.resolve_epic',
+        name: 'sentinel_resolve_epic',
         description: 'Resolve a fuzzy epic name/keyword into one or more matching epics. Use this to find the correct epic_id before creating issues.',
         inputSchema: {
           type: 'object',
@@ -267,7 +267,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
       // Oracle tools
       {
-        name: 'oracle.next_actions',
+        name: 'oracle_next_actions',
         description: 'Get recommended next actions for a project based on recent design decisions, architecture changes, and issues.',
         inputSchema: {
           type: 'object',
@@ -298,7 +298,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       // Designer tools
-      case 'designer.record_design_decision': {
+      case 'designer_record_design_decision': {
         const input = args as unknown as RecordDesignDecisionInput;
         if (!input.project_id || !input.area || !input.summary) {
           throw new Error('Missing required fields: project_id, area, and summary are required');
@@ -310,7 +310,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // Architect tools
-      case 'architect.record_arch_decision': {
+      case 'architect_record_arch_decision': {
         const input = args as unknown as RecordArchDecisionInput;
         if (!input.system_id || !input.change || !input.rationale) {
           throw new Error('Missing required fields: system_id, change, and rationale are required');
@@ -322,7 +322,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // Sentinel tools - Issues
-      case 'sentinel.create_issue': {
+      case 'sentinel_create_issue': {
         const input = args as unknown as CreateIssueInput;
         if (!input.repo || !input.severity || !input.title || !input.details) {
           throw new Error('Missing required fields: repo, severity, title, and details are required');
@@ -347,7 +347,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // Sentinel tools - Epics
-      case 'sentinel.log_epic': {
+      case 'sentinel_log_epic': {
         const input = args as unknown as LogEpicInput;
         if (!input.title || !input.summary) {
           throw new Error('Missing required fields: title and summary are required');
@@ -364,7 +364,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'sentinel.list_epics': {
+      case 'sentinel_list_epics': {
         const input = args as unknown as ListEpicsInput;
         if (input.status) {
           const validStatuses: EpicStatus[] = ['planned', 'in_progress', 'shipped', 'on_hold', 'cancelled'];
@@ -384,7 +384,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'sentinel.get_epic': {
+      case 'sentinel_get_epic': {
         const input = args as unknown as GetEpicInput;
         if (!input.epic_id) {
           throw new Error('Missing required field: epic_id');
@@ -401,7 +401,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'sentinel.get_epic_issues': {
+      case 'sentinel_get_epic_issues': {
         const input = args as unknown as GetEpicIssuesInput;
         if (!input.epic_id) {
           throw new Error('Missing required field: epic_id');
@@ -412,7 +412,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'sentinel.resolve_epic': {
+      case 'sentinel_resolve_epic': {
         const input = args as unknown as ResolveEpicInput;
         if (!input.query) {
           throw new Error('Missing required field: query');
@@ -424,7 +424,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // Oracle tools
-      case 'oracle.next_actions': {
+      case 'oracle_next_actions': {
         const input = args as unknown as NextActionsInput;
         if (!input.project_id) {
           throw new Error('Missing required field: project_id');
