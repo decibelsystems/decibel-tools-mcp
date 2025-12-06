@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { getConfig, log } from '../config.js';
-import { resolvePath, ensureDir } from '../dataRoot.js';
+import { resolvePath, ensureDir, hasProjectLocal } from '../dataRoot.js';
 
 // ============================================================================
 // Types
@@ -439,13 +439,13 @@ export async function createIssue(
   const slug = slugify(input.title);
   const filename = `${fileTimestamp}-${slug}.md`;
 
-  // Use project-local path if .decibel/ exists, else global
+  // Use project-local path if decibel/ exists, else global
   const issuesDir = resolvePath('sentinel-issues');
   ensureDir(issuesDir);
   const filePath = path.join(issuesDir, filename);
 
-  // Determine location for output
-  const location = issuesDir.includes('.decibel') ? 'project' : 'global';
+  // Determine location for output using hasProjectLocal()
+  const location = hasProjectLocal() ? 'project' : 'global';
 
   // Build frontmatter with optional epic_id
   const frontmatterLines = [
@@ -606,8 +606,8 @@ export async function logEpic(input: LogEpicInput): Promise<LogEpicOutput> {
   const filename = `${epicId}-${slug}.md`;
   const filePath = path.join(epicsDir, filename);
 
-  // Determine location for output
-  const location = epicsDir.includes('.decibel') ? 'project' : 'global';
+  // Determine location for output using hasProjectLocal()
+  const location = hasProjectLocal() ? 'project' : 'global';
 
   const priority = input.priority || 'medium';
   const tags = input.tags || [];
