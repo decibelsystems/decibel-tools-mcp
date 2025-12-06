@@ -59,6 +59,12 @@ import {
   bumpFriction,
   BumpFrictionInput,
 } from './tools/friction.js';
+import {
+  scanData as scanDataPython,
+  ScanDataInput as ScanDataPythonInput,
+  ScanDataFlag,
+  isScanDataError,
+} from './tools/sentinel-scan-data.js';
 
 const config = getConfig();
 
@@ -375,6 +381,41 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Threshold in days for stale detection (default: 21)',
             },
           },
+        },
+      },
+
+      // Sentinel tools - Data Inspector (Python backend)
+      {
+        name: 'sentinel.scanData',
+        description: 'Scan project data using the Python Sentinel Data Inspector. Resolves project by ID and shells out to Python for inspection logic.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+            validate: {
+              type: 'boolean',
+              default: false,
+              description: 'Run schema and referential integrity validation',
+            },
+            flags: {
+              type: 'array',
+              items: {
+                type: 'string',
+                enum: ['orphans', 'stale', 'invalid'],
+              },
+              default: [],
+              description: 'Categories to flag: orphans (broken references), stale (old items), invalid (schema errors)',
+            },
+            days: {
+              type: 'integer',
+              default: 21,
+              description: 'Threshold in days for stale detection (default: 21)',
+            },
+          },
+          required: ['projectId'],
         },
       },
 
@@ -790,6 +831,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             { type: 'text', text: '\n\n--- JSON ---\n' + JSON.stringify(result, null, 2) },
           ],
           isError: !!result.error,
+        };
+      }
+
+      // Sentinel tools - Data Inspector (Python backend)
+      case 'sentinel.scanData': {
+        const input = args as unknown as ScanDataPythonInput;
+
+        if (!input.projectId) {
+          throw new Error('Missing required field: projectId');
+        }
+
+        // Validate flag categories if provided
+        if (input.flags && input.flags.length > 0) {
+          const validFlags: ScanDataFlag[] = ['orphans', 'stale', 'invalid'];
+          const invalidFlags = input.flags.filter((f) => !validFlags.includes(f));
+          if (invalidFlags.length > 0) {
+            throw new Error(`Invalid flags: ${invalidFlags.join(', ')}. Must be one of: ${validFlags.join(', ')}`);
+          }
+        }
+
+        const result = await scanDataPython({
+          projectId: input.projectId,
+          validate: input.validate ?? false,
+          flags: input.flags ?? [],
+          days: input.days ?? 21,
+        });
+
+        if (isScanDataError(result)) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                error: result.error,
+                exitCode: result.exitCode,
+                stderr: result.stderr,
+              }, null, 2),
+            }],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
       }
 
