@@ -1,0 +1,35 @@
+id: EPIC-0001
+title: Sentinel Data Inspector Mode
+project: decibel-tools-mcp
+status: in_progress
+owner: ben
+tags: [sentinel, data-inspector, validation, scanning]
+created_at: 2025-12-06T01:07:00Z
+updated_at: 2025-12-06T01:10:00Z
+
+summary: |
+  Extend Sentinel with a data inspection capability for scanning .decibel project data
+  (issues, epics, ADRs) with validation, orphan detection, and stale item reporting.
+
+motivation:
+  - Enable automated validation of project data integrity
+  - Surface broken references between issues, epics, and ADRs
+  - Identify stale/neglected items that need attention
+  - Provide visibility into project health metrics
+
+outcomes:
+  - sentinel scan data - indexes and summarizes .decibel project data
+  - sentinel scan data --validate - runs schema and referential integrity checks
+  - sentinel scan data --flag orphans,stale --days 30 - flags problem categories
+  - Human-readable and JSON output formats
+
+acceptance_criteria:
+  - Load issues from .decibel/sentinel/issues/*.yml
+  - Load epics from .decibel/sentinel/epics/*.yml
+  - Load ADRs from .decibel/architect/adrs/*.yml
+  - Validate required fields (id, title, status)
+  - Validate enum values (status, priority, scope)
+  - Find orphans: epics with no issues, issues with missing epics, ADRs with broken refs
+  - Find stale: open items not updated within N days
+  - Generate summary counts by status
+  - Return formatted text output and structured JSON
