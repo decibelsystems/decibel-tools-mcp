@@ -168,7 +168,7 @@ async function collectRecentFiles(
   const allFiles: FileInfo[] = [];
   const hasProject = hasProjectLocal();
 
-  // Project-local sources (if .decibel/ exists)
+  // Project-local sources (if decibel/ exists)
   if (hasProject) {
     // Sentinel issues from project
     const projectIssuesDir = resolvePath('sentinel-issues');
