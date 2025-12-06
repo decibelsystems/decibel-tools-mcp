@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { getConfig, log } from '../config.js';
+import { log } from '../config.js';
+import { resolvePath, ensureDir, hasProjectLocal } from '../dataRoot.js';
 
 export interface RecordArchDecisionInput {
   system_id: string;
@@ -13,6 +14,7 @@ export interface RecordArchDecisionOutput {
   id: string;
   timestamp: string;
   path: string;
+  location: 'project' | 'global';
 }
 
 function slugify(text: string): string {
@@ -28,24 +30,51 @@ function formatTimestampForFilename(date: Date): string {
   const iso = date.toISOString();
   return iso
     .replace(/:/g, '-')
-    .replace(/\.\d{3}Z$/, 'Z');
+    .replace(/\.\\d{3}Z$/, 'Z');
 }
+
+// Known global system IDs (ADRs about the tooling itself)
+const GLOBAL_SYSTEMS = [
+  'decibel-tools-mcp',
+  'decibel-tools',
+  'decibel-ecosystem',
+  'mcp',
+];
 
 export async function recordArchDecision(
   input: RecordArchDecisionInput
 ): Promise<RecordArchDecisionOutput> {
-  const config = getConfig();
   const now = new Date();
   const timestamp = now.toISOString();
   const fileTimestamp = formatTimestampForFilename(now);
   const slug = slugify(input.change);
   const filename = `${fileTimestamp}-${slug}.md`;
 
-  const dirPath = path.join(config.rootDir, 'architect', input.system_id);
-  const filePath = path.join(dirPath, filename);
+  // Determine if this is a global ADR (about tooling) or project ADR
+  const isGlobalSystem = GLOBAL_SYSTEMS.includes(input.system_id.toLowerCase());
+  
+  let dirPath: string;
+  let location: 'project' | 'global';
 
-  // Create directory if it doesn't exist
-  await fs.mkdir(dirPath, { recursive: true });
+  if (isGlobalSystem) {
+    // Always use global for tooling ADRs
+    const baseDir = resolvePath('architect-global');
+    dirPath = path.join(baseDir, input.system_id);
+    location = 'global';
+  } else if (hasProjectLocal()) {
+    // Use project-local for project-specific ADRs
+    const baseDir = resolvePath('architect-project');
+    dirPath = path.join(baseDir, input.system_id);
+    location = 'project';
+  } else {
+    // Fallback to global with system_id namespace
+    const baseDir = resolvePath('architect-global');
+    dirPath = path.join(baseDir, input.system_id);
+    location = 'global';
+  }
+
+  const filePath = path.join(dirPath, filename);
+  ensureDir(dirPath);
 
   // Build ADR-style markdown content
   const frontmatter = [
@@ -53,6 +82,7 @@ export async function recordArchDecision(
     `system_id: ${input.system_id}`,
     `change: ${input.change}`,
     `timestamp: ${timestamp}`,
+    `location: ${location}`,
     '---',
   ].join('\n');
 
@@ -75,11 +105,12 @@ export async function recordArchDecision(
   const content = `${frontmatter}\n\n${sections}\n`;
 
   await fs.writeFile(filePath, content, 'utf-8');
-  log(`Architect: Recorded architecture decision to ${filePath}`);
+  log(`Architect: Recorded architecture decision to ${filePath} (${location})`);
 
   return {
     id: filename,
     timestamp,
     path: filePath,
+    location,
   };
 }
