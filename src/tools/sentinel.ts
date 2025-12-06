@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { getConfig, log } from '../config.js';
+import { resolvePath, ensureDir } from '../dataRoot.js';
 
 // ============================================================================
 // Types
@@ -29,6 +30,7 @@ export interface CreateIssueOutput {
   path: string;
   status: string;
   epic_id?: string;
+  location: 'project' | 'global';
 }
 
 export interface CloseIssueInput {
@@ -83,6 +85,7 @@ export interface LogEpicOutput {
   epic_id: string;
   timestamp: string;
   path: string;
+  location: 'project' | 'global';
 }
 
 export interface ListEpicsInput {
@@ -269,8 +272,7 @@ async function parseEpicFile(filePath: string): Promise<Epic | null> {
 }
 
 async function getAllEpics(): Promise<Array<{ id: string; title: string; status: EpicStatus; priority: Priority }>> {
-  const config = getConfig();
-  const epicsDir = path.join(config.rootDir, 'sentinel', 'epics');
+  const epicsDir = resolvePath('sentinel-epics');
   const epics: Array<{ id: string; title: string; status: EpicStatus; priority: Priority }> = [];
 
   try {
@@ -355,8 +357,7 @@ async function parseIssueFile(filePath: string): Promise<IssueSummary | null> {
 }
 
 async function findIssueFile(repo: string, issueId: string): Promise<{ filePath: string; filename: string } | null> {
-  const config = getConfig();
-  const issuesDir = path.join(config.rootDir, 'sentinel', repo, 'issues');
+  const issuesDir = resolvePath('sentinel-issues');
 
   try {
     const files = await fs.readdir(issuesDir);
@@ -385,8 +386,7 @@ async function findIssueFile(repo: string, issueId: string): Promise<{ filePath:
 }
 
 async function getRepoIssues(repo: string): Promise<Array<{ id: string; title: string }>> {
-  const config = getConfig();
-  const issuesDir = path.join(config.rootDir, 'sentinel', repo, 'issues');
+  const issuesDir = resolvePath('sentinel-issues');
   const issues: Array<{ id: string; title: string }> = [];
 
   try {
@@ -413,8 +413,6 @@ async function getRepoIssues(repo: string): Promise<Array<{ id: string; title: s
 export async function createIssue(
   input: CreateIssueInput
 ): Promise<CreateIssueOutput | EpicNotFoundError> {
-  const config = getConfig();
-
   // Validate epic_id if provided
   if (input.epic_id) {
     const allEpics = await getAllEpics();
@@ -441,10 +439,13 @@ export async function createIssue(
   const slug = slugify(input.title);
   const filename = `${fileTimestamp}-${slug}.md`;
 
-  const dirPath = path.join(config.rootDir, 'sentinel', input.repo, 'issues');
-  const filePath = path.join(dirPath, filename);
+  // Use project-local path if .decibel/ exists, else global
+  const issuesDir = resolvePath('sentinel-issues');
+  ensureDir(issuesDir);
+  const filePath = path.join(issuesDir, filename);
 
-  await fs.mkdir(dirPath, { recursive: true });
+  // Determine location for output
+  const location = issuesDir.includes('.decibel') ? 'project' : 'global';
 
   // Build frontmatter with optional epic_id
   const frontmatterLines = [
@@ -475,7 +476,7 @@ export async function createIssue(
   const content = `${frontmatter}\n\n${body}\n`;
 
   await fs.writeFile(filePath, content, 'utf-8');
-  log(`Sentinel: Created issue at ${filePath}`);
+  log(`Sentinel: Created issue at ${filePath} (${location})`);
 
   return {
     id: filename,
@@ -483,6 +484,7 @@ export async function createIssue(
     path: filePath,
     status: 'open',
     epic_id: input.epic_id,
+    location,
   };
 }
 
@@ -562,8 +564,7 @@ export async function closeIssue(
 export async function listRepoIssues(
   input: ListRepoIssuesInput
 ): Promise<ListRepoIssuesOutput> {
-  const config = getConfig();
-  const issuesDir = path.join(config.rootDir, 'sentinel', input.repo, 'issues');
+  const issuesDir = resolvePath('sentinel-issues');
   const issues: IssueSummary[] = [];
 
   try {
@@ -593,18 +594,20 @@ export async function listRepoIssues(
 // ============================================================================
 
 export async function logEpic(input: LogEpicInput): Promise<LogEpicOutput> {
-  const config = getConfig();
   const now = new Date();
   const timestamp = now.toISOString();
 
-  const epicsDir = path.join(config.rootDir, 'sentinel', 'epics');
-  await fs.mkdir(epicsDir, { recursive: true });
+  const epicsDir = resolvePath('sentinel-epics');
+  ensureDir(epicsDir);
 
   const epicNum = await getNextEpicNumber(epicsDir);
   const epicId = formatEpicId(epicNum);
   const slug = slugify(input.title);
   const filename = `${epicId}-${slug}.md`;
   const filePath = path.join(epicsDir, filename);
+
+  // Determine location for output
+  const location = epicsDir.includes('.decibel') ? 'project' : 'global';
 
   const priority = input.priority || 'medium';
   const tags = input.tags || [];
@@ -655,18 +658,18 @@ export async function logEpic(input: LogEpicInput): Promise<LogEpicOutput> {
   const content = `${frontmatter}\n\n${sections.join('\n')}\n`;
 
   await fs.writeFile(filePath, content, 'utf-8');
-  log(`Sentinel: Created epic at ${filePath}`);
+  log(`Sentinel: Created epic at ${filePath} (${location})`);
 
   return {
     epic_id: epicId,
     timestamp,
     path: filePath,
+    location,
   };
 }
 
 export async function listEpics(input: ListEpicsInput): Promise<ListEpicsOutput> {
-  const config = getConfig();
-  const epicsDir = path.join(config.rootDir, 'sentinel', 'epics');
+  const epicsDir = resolvePath('sentinel-epics');
 
   const epics: EpicSummary[] = [];
 
@@ -705,8 +708,7 @@ export async function listEpics(input: ListEpicsInput): Promise<ListEpicsOutput>
 }
 
 export async function getEpic(input: GetEpicInput): Promise<GetEpicOutput> {
-  const config = getConfig();
-  const epicsDir = path.join(config.rootDir, 'sentinel', 'epics');
+  const epicsDir = resolvePath('sentinel-epics');
 
   try {
     const files = await fs.readdir(epicsDir);
@@ -732,41 +734,28 @@ export async function getEpic(input: GetEpicInput): Promise<GetEpicOutput> {
 export async function getEpicIssues(
   input: GetEpicIssuesInput
 ): Promise<GetEpicIssuesOutput> {
-  const config = getConfig();
-  const sentinelDir = path.join(config.rootDir, 'sentinel');
+  const issuesDir = resolvePath('sentinel-issues');
   const issues: IssueSummary[] = [];
 
   try {
-    // Scan all repo directories for issues with matching epic_id
-    const entries = await fs.readdir(sentinelDir, { withFileTypes: true });
+    const issueFiles = await fs.readdir(issuesDir);
 
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name === 'epics') continue;
+    for (const file of issueFiles) {
+      if (!file.endsWith('.md')) continue;
 
-      const issuesDir = path.join(sentinelDir, entry.name, 'issues');
-      try {
-        const issueFiles = await fs.readdir(issuesDir);
+      const filePath = path.join(issuesDir, file);
+      const content = await fs.readFile(filePath, 'utf-8');
 
-        for (const file of issueFiles) {
-          if (!file.endsWith('.md')) continue;
-
-          const filePath = path.join(issuesDir, file);
-          const content = await fs.readFile(filePath, 'utf-8');
-
-          // Check if this issue belongs to the epic
-          if (content.includes(`epic_id: ${input.epic_id}`)) {
-            const issue = await parseIssueFile(filePath);
-            if (issue) {
-              issues.push(issue);
-            }
-          }
+      // Check if this issue belongs to the epic
+      if (content.includes(`epic_id: ${input.epic_id}`)) {
+        const issue = await parseIssueFile(filePath);
+        if (issue) {
+          issues.push(issue);
         }
-      } catch {
-        // Issues dir doesn't exist for this repo
       }
     }
   } catch {
-    // Sentinel dir doesn't exist
+    // Issues dir doesn't exist
   }
 
   return { issues };
