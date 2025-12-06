@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { getConfig, log } from '../config.js';
+import { log } from '../config.js';
+import { resolvePath, ensureDir, hasProjectLocal } from '../dataRoot.js';
 
 export type LearningCategory = 'debug' | 'integration' | 'architecture' | 'tooling' | 'process' | 'other';
 
@@ -16,6 +17,7 @@ export interface AppendLearningOutput {
   timestamp: string;
   path: string;
   entry_count: number;
+  location: 'project' | 'global';
 }
 
 export interface ListLearningsInput {
@@ -36,6 +38,7 @@ export interface ListLearningsOutput {
   path: string;
   entries: LearningEntry[];
   total_count: number;
+  location: 'project' | 'global';
 }
 
 function formatDate(date: Date): string {
@@ -67,18 +70,42 @@ function parseEntry(block: string): LearningEntry | null {
   return { timestamp, category, title, content, tags };
 }
 
+// Known global project IDs (learnings about the tooling itself)
+const GLOBAL_PROJECTS = [
+  'decibel-tools-mcp',
+  'decibel-tools',
+  'decibel-ecosystem',
+  'mcp',
+];
+
 export async function appendLearning(
   input: AppendLearningInput
 ): Promise<AppendLearningOutput> {
-  const config = getConfig();
   const now = new Date();
   const timestamp = now.toISOString();
 
-  const dirPath = path.join(config.rootDir, 'learnings');
-  const filePath = path.join(dirPath, `${input.project_id}.md`);
+  // Determine if this is global (tooling) or project-specific
+  const isGlobalProject = GLOBAL_PROJECTS.includes(input.project_id.toLowerCase());
 
-  // Create directory if it doesn't exist
-  await fs.mkdir(dirPath, { recursive: true });
+  let dirPath: string;
+  let location: 'project' | 'global';
+
+  if (isGlobalProject) {
+    // Always use global for tooling learnings
+    dirPath = resolvePath('learnings-global');
+    location = 'global';
+  } else if (hasProjectLocal()) {
+    // Use project-local for project-specific learnings
+    dirPath = resolvePath('learnings-project');
+    location = 'project';
+  } else {
+    // Fallback to global
+    dirPath = resolvePath('learnings-global');
+    location = 'global';
+  }
+
+  const filePath = path.join(dirPath, `${input.project_id}.md`);
+  ensureDir(dirPath);
 
   // Check if file exists, create with header if not
   let existingContent = '';
@@ -115,20 +142,37 @@ export async function appendLearning(
   await fs.writeFile(filePath, newContent, 'utf-8');
   
   entryCount++;
-  log(`Learnings: Appended entry to ${filePath}`);
+  log(`Learnings: Appended entry to ${filePath} (${location})`);
 
   return {
     timestamp,
     path: filePath,
     entry_count: entryCount,
+    location,
   };
 }
 
 export async function listLearnings(
   input: ListLearningsInput
 ): Promise<ListLearningsOutput> {
-  const config = getConfig();
-  const filePath = path.join(config.rootDir, 'learnings', `${input.project_id}.md`);
+  // Determine location based on project_id
+  const isGlobalProject = GLOBAL_PROJECTS.includes(input.project_id.toLowerCase());
+
+  let dirPath: string;
+  let location: 'project' | 'global';
+
+  if (isGlobalProject) {
+    dirPath = resolvePath('learnings-global');
+    location = 'global';
+  } else if (hasProjectLocal()) {
+    dirPath = resolvePath('learnings-project');
+    location = 'project';
+  } else {
+    dirPath = resolvePath('learnings-global');
+    location = 'global';
+  }
+
+  const filePath = path.join(dirPath, `${input.project_id}.md`);
 
   try {
     const content = await fs.readFile(filePath, 'utf-8');
@@ -162,6 +206,7 @@ export async function listLearnings(
       path: filePath,
       entries,
       total_count: totalCount,
+      location,
     };
   } catch {
     // File doesn't exist
@@ -169,6 +214,7 @@ export async function listLearnings(
       path: filePath,
       entries: [],
       total_count: 0,
+      location,
     };
   }
 }
