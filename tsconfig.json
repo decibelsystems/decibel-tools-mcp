@@ -15,5 +15,5 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": [".decibel", "node_modules", "dist"]
 }
