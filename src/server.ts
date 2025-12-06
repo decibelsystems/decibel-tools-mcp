@@ -31,6 +31,13 @@ import {
   resolveEpic,
   ResolveEpicInput,
 } from './tools/sentinel.js';
+import {
+  scanData,
+  ScanDataInput,
+  ScanScope,
+  FlagCategory,
+  formatScanOutput,
+} from './tools/data-inspector.js';
 import { nextActions, NextActionsInput } from './tools/oracle.js';
 import {
   appendLearning,
@@ -333,6 +340,41 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['query'],
+        },
+      },
+
+      // Sentinel tools - Data Inspector
+      {
+        name: 'sentinel_scan',
+        description: 'Scan project data (issues, epics, ADRs) for validation, orphans, and stale items. Use scope "data" for data inspection, "runtime" for runtime health (not yet implemented), or "all" for both.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            scope: {
+              type: 'string',
+              enum: ['runtime', 'data', 'all'],
+              default: 'data',
+              description: 'Scan scope: "runtime" for runtime/log/health, "data" for .decibel project data, "all" for both',
+            },
+            validate: {
+              type: 'boolean',
+              default: false,
+              description: 'Run schema and referential integrity validation',
+            },
+            flag: {
+              type: 'array',
+              items: {
+                type: 'string',
+                enum: ['orphans', 'stale', 'invalid'],
+              },
+              description: 'Categories to flag in output: orphans (broken references), stale (old items), invalid (schema errors)',
+            },
+            days: {
+              type: 'integer',
+              default: 21,
+              description: 'Threshold in days for stale detection (default: 21)',
+            },
+          },
         },
       },
 
@@ -710,6 +752,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await resolveEpic(input);
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // Sentinel tools - Data Inspector
+      case 'sentinel_scan': {
+        const input = args as unknown as ScanDataInput;
+
+        // Default scope to 'data' if not provided
+        const scope: ScanScope = input.scope || 'data';
+        const validScopes: ScanScope[] = ['runtime', 'data', 'all'];
+        if (!validScopes.includes(scope)) {
+          throw new Error(`Invalid scope. Must be one of: ${validScopes.join(', ')}`);
+        }
+
+        // Validate flag categories
+        if (input.flag && input.flag.length > 0) {
+          const validFlags: FlagCategory[] = ['orphans', 'stale', 'invalid'];
+          const unknownFlags = input.flag.filter((f: string) => !validFlags.includes(f as FlagCategory));
+          if (unknownFlags.length > 0) {
+            log(`Warning: Unknown flag categories ignored: ${unknownFlags.join(', ')}`);
+          }
+        }
+
+        const result = await scanData({
+          scope,
+          validate: input.validate,
+          flag: input.flag,
+          days: input.days,
+        });
+
+        // Return both formatted text and structured JSON
+        const formatted = formatScanOutput(result);
+        return {
+          content: [
+            { type: 'text', text: formatted },
+            { type: 'text', text: '\n\n--- JSON ---\n' + JSON.stringify(result, null, 2) },
+          ],
+          isError: !!result.error,
         };
       }
 
