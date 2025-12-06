@@ -399,7 +399,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
       // Sentinel tools - Data Inspector (Python backend)
       {
-        name: 'sentinel.scanData',
+        name: 'sentinel_scanData',
         description: 'Scan project data using the Python Sentinel Data Inspector. Resolves project by ID and shells out to Python for inspection logic.',
         inputSchema: {
           type: 'object',
@@ -434,7 +434,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
       // Sentinel tools - YAML Issues (projectId-based)
       {
-        name: 'sentinel.listIssues',
+        name: 'sentinel_listIssues',
         description: 'List issues for a project from .decibel/sentinel/issues/*.yml files. Returns issue metadata including id, title, status, priority, epicId, and tags.',
         inputSchema: {
           type: 'object',
@@ -457,7 +457,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: 'sentinel.createIssue',
+        name: 'sentinel_createIssue',
         description: 'Create a new issue for a project. Writes a YAML file to .decibel/sentinel/issues/ with auto-generated ID (ISS-NNNN).',
         inputSchema: {
           type: 'object',
@@ -496,7 +496,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
       // Architect tools - Project ADRs (projectId-based)
       {
-        name: 'architect.createAdr',
+        name: 'architect_createAdr',
         description: 'Create a new Architecture Decision Record (ADR) for a project. Writes a YAML file to .decibel/architect/adrs/ with auto-generated ID (ADR-NNNN).',
         inputSchema: {
           type: 'object',
@@ -952,7 +952,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // Sentinel tools - Data Inspector (Python backend)
-      case 'sentinel.scanData': {
+      case 'sentinel_scanData': {
         const input = args as unknown as ScanDataPythonInput;
 
         if (!input.projectId) {
@@ -995,7 +995,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // Sentinel tools - YAML Issues (projectId-based)
-      case 'sentinel.listIssues': {
+      case 'sentinel_listIssues': {
         const input = args as unknown as {
           projectId: string;
           status?: SentinelIssueStatus;
@@ -1041,7 +1041,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'sentinel.createIssue': {
+      case 'sentinel_createIssue': {
         const input = args as unknown as CreateSentinelIssueInput;
 
         if (!input.projectId || !input.title) {
@@ -1064,7 +1064,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // Architect tools - Project ADRs (projectId-based)
-      case 'architect.createAdr': {
+      case 'architect_createAdr': {
         const input = args as unknown as AdrInput;
 
         if (!input.projectId || !input.title || !input.context || !input.decision || !input.consequences) {
