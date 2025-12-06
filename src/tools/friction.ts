@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { getConfig, log } from '../config.js';
+import { log } from '../config.js';
+import { resolvePath, ensureDir } from '../dataRoot.js';
 
 // ============================================================================
 // Types
@@ -150,8 +151,8 @@ async function parseFrictionFile(filePath: string): Promise<FrictionSummary | nu
 }
 
 async function findFrictionFile(frictionId: string): Promise<string | null> {
-  const config = getConfig();
-  const frictionDir = path.join(config.rootDir, 'friction');
+  // Friction is always global
+  const frictionDir = resolvePath('friction-global');
 
   try {
     const files = await fs.readdir(frictionDir);
@@ -175,13 +176,13 @@ async function findFrictionFile(frictionId: string): Promise<string | null> {
 // ============================================================================
 
 export async function logFriction(input: LogFrictionInput): Promise<LogFrictionOutput> {
-  const config = getConfig();
   const now = new Date();
   const timestamp = now.toISOString();
   const fileTimestamp = formatTimestampForFilename(now);
 
-  const frictionDir = path.join(config.rootDir, 'friction');
-  await fs.mkdir(frictionDir, { recursive: true });
+  // Friction is always global (cross-project by nature)
+  const frictionDir = resolvePath('friction-global');
+  ensureDir(frictionDir);
 
   const slug = slugify(input.description);
   const filename = `${fileTimestamp}-${slug}.md`;
@@ -249,7 +250,7 @@ export async function logFriction(input: LogFrictionInput): Promise<LogFrictionO
   const content = `${frontmatter}\n\n${bodyLines.join('\n')}\n`;
 
   await fs.writeFile(filePath, content, 'utf-8');
-  log(`Friction: Logged friction at ${filePath}`);
+  log(`Friction: Logged friction at ${filePath} (global)`);
 
   return {
     id: filename.replace('.md', ''),
@@ -261,8 +262,7 @@ export async function logFriction(input: LogFrictionInput): Promise<LogFrictionO
 }
 
 export async function listFriction(input: ListFrictionInput): Promise<ListFrictionOutput> {
-  const config = getConfig();
-  const frictionDir = path.join(config.rootDir, 'friction');
+  const frictionDir = resolvePath('friction-global');
   const limit = input.limit || 20;
 
   let frictionList: FrictionSummary[] = [];
