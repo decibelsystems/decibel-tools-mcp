@@ -30,12 +30,16 @@ interface Roots {
 
 /**
  * Walk up directory tree looking for a target folder (like .git or decibel)
+ * IMPORTANT: Only matches 'decibel', NOT '.decibel' (deprecated)
  */
 function findUpDir(start: string, target: string): string | undefined {
   let current = path.resolve(start);
   while (true) {
     const candidate = path.join(current, target);
-    if (fs.existsSync(candidate)) return candidate;
+    // Only match if it exists AND is not the deprecated .decibel
+    if (fs.existsSync(candidate) && !candidate.includes('.decibel')) {
+      return candidate;
+    }
     const parent = path.dirname(current);
     if (parent === current) break;
     current = parent;
