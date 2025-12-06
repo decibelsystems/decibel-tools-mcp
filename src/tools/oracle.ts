@@ -13,10 +13,16 @@ export interface Action {
   description: string;
   source: string;
   priority: Priority;
+  domain?: 'designer' | 'architect' | 'sentinel' | 'friction';
 }
 
 export interface NextActionsOutput {
   actions: Action[];
+  friction_summary?: {
+    total_open: number;
+    high_signal: number;
+    blocking: number;
+  };
 }
 
 interface FileInfo {
@@ -26,6 +32,17 @@ interface FileInfo {
   type: 'designer' | 'architect' | 'sentinel';
   summary?: string;
   severity?: string;
+}
+
+interface FrictionInfo {
+  filename: string;
+  path: string;
+  context: string;
+  description: string;
+  impact: string;
+  status: string;
+  signal_count: number;
+  last_reported: Date;
 }
 
 async function getFilesFromDir(
@@ -43,7 +60,7 @@ async function getFilesFromDir(
         const content = await fs.readFile(filePath, 'utf-8');
 
         // Parse timestamp from filename (YYYY-MM-DDTHH-mm-ssZ-slug.md)
-        const timestampMatch = entry.name.match(/^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z)/);
+        const timestampMatch = entry.name.match(/^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/);
         let timestamp = new Date();
         if (timestampMatch) {
           const isoTimestamp = timestampMatch[1].replace(/-/g, (match, offset) => {
@@ -86,6 +103,52 @@ async function getFilesFromDir(
   }
 
   return files;
+}
+
+async function getFrictionFiles(rootDir: string): Promise<FrictionInfo[]> {
+  const frictionDir = path.join(rootDir, 'friction');
+  const frictionList: FrictionInfo[] = [];
+
+  try {
+    const entries = await fs.readdir(frictionDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith('.md')) {
+        const filePath = path.join(frictionDir, entry.name);
+        const content = await fs.readFile(filePath, 'utf-8');
+
+        // Parse frontmatter
+        const contextMatch = content.match(/^context:\s*(.+)$/m);
+        const impactMatch = content.match(/^impact:\s*(.+)$/m);
+        const statusMatch = content.match(/^status:\s*(.+)$/m);
+        const signalMatch = content.match(/^signal_count:\s*(\d+)$/m);
+        const lastReportedMatch = content.match(/^last_reported:\s*(.+)$/m);
+        const titleMatch = content.match(/^#\s+(.+)$/m);
+
+        const status = statusMatch?.[1] || 'open';
+        
+        // Only include open friction
+        if (status !== 'open' && status !== 'acknowledged' && status !== 'solving') {
+          continue;
+        }
+
+        frictionList.push({
+          filename: entry.name,
+          path: filePath,
+          context: contextMatch?.[1] || 'unknown',
+          description: titleMatch?.[1] || entry.name,
+          impact: impactMatch?.[1] || 'medium',
+          status,
+          signal_count: parseInt(signalMatch?.[1] || '1', 10),
+          last_reported: new Date(lastReportedMatch?.[1] || Date.now()),
+        });
+      }
+    }
+  } catch (error) {
+    log(`Oracle: Could not read friction directory:`, error);
+  }
+
+  return frictionList;
 }
 
 async function collectRecentFiles(
@@ -135,6 +198,25 @@ function inferPriority(file: FileInfo): Priority {
   return 'low';
 }
 
+function inferFrictionPriority(friction: FrictionInfo): Priority {
+  // Blocking = always high
+  if (friction.impact === 'blocking') return 'high';
+  
+  // High signal (3+) elevates priority
+  if (friction.signal_count >= 3) {
+    if (friction.impact === 'high') return 'high';
+    return 'med';
+  }
+  
+  // High impact with any signal
+  if (friction.impact === 'high') return 'med';
+  
+  // Medium signal (2) with medium impact
+  if (friction.signal_count >= 2 && friction.impact === 'medium') return 'med';
+  
+  return 'low';
+}
+
 function generateActionDescription(file: FileInfo): string {
   const prefix = {
     designer: 'Review design decision',
@@ -154,14 +236,39 @@ export async function nextActions(
   log(`Oracle: Getting next actions for project ${input.project_id}`);
 
   const recentFiles = await collectRecentFiles(input.project_id, config.rootDir);
+  const allFriction = await getFrictionFiles(config.rootDir);
+  
+  // Filter friction by project context (or include all if no specific match)
+  const projectFriction = allFriction.filter(
+    f => f.context === input.project_id || 
+         f.context.toLowerCase().includes(input.project_id.toLowerCase())
+  );
+  
+  // Also get high-signal friction from any context
+  const highSignalFriction = allFriction.filter(
+    f => f.signal_count >= 3 || f.impact === 'blocking'
+  );
+  
+  // Combine and dedupe
+  const relevantFriction = Array.from(
+    new Map([...projectFriction, ...highSignalFriction].map(f => [f.filename, f])).values()
+  );
 
-  if (recentFiles.length === 0) {
+  // Build friction summary
+  const frictionSummary = {
+    total_open: allFriction.length,
+    high_signal: allFriction.filter(f => f.signal_count >= 3).length,
+    blocking: allFriction.filter(f => f.impact === 'blocking').length,
+  };
+
+  if (recentFiles.length === 0 && relevantFriction.length === 0) {
     return {
       actions: [{
         description: `No recent activity found for project ${input.project_id}. Start by recording design decisions or architecture changes.`,
         source: 'oracle',
         priority: 'low',
       }],
+      friction_summary: frictionSummary,
     };
   }
 
@@ -184,6 +291,25 @@ export async function nextActions(
     }
   }
 
+  // Add friction actions FIRST (they're often the most actionable)
+  const sortedFriction = relevantFriction.sort((a, b) => {
+    // Sort by: blocking first, then signal count, then impact
+    if (a.impact === 'blocking' && b.impact !== 'blocking') return -1;
+    if (b.impact === 'blocking' && a.impact !== 'blocking') return 1;
+    if (b.signal_count !== a.signal_count) return b.signal_count - a.signal_count;
+    const impactOrder: Record<string, number> = { blocking: 4, high: 3, medium: 2, low: 1 };
+    return (impactOrder[b.impact] || 0) - (impactOrder[a.impact] || 0);
+  });
+
+  for (const friction of sortedFriction.slice(0, 2)) {
+    actions.push({
+      description: `Resolve friction (signal: ${friction.signal_count}): ${friction.description}`,
+      source: friction.path,
+      priority: inferFrictionPriority(friction),
+      domain: 'friction',
+    });
+  }
+
   // Prioritize sentinel issues first
   const sentinelFiles = filesToProcess.filter(f => f.type === 'sentinel');
   const architectFiles = filesToProcess.filter(f => f.type === 'architect');
@@ -195,6 +321,7 @@ export async function nextActions(
       description: generateActionDescription(file),
       source: file.path,
       priority: inferPriority(file),
+      domain: 'sentinel',
     });
   }
 
@@ -204,6 +331,7 @@ export async function nextActions(
       description: generateActionDescription(file),
       source: file.path,
       priority: inferPriority(file),
+      domain: 'architect',
     });
   }
 
@@ -213,6 +341,7 @@ export async function nextActions(
       description: generateActionDescription(file),
       source: file.path,
       priority: inferPriority(file),
+      domain: 'designer',
     });
   }
 
@@ -225,6 +354,7 @@ export async function nextActions(
           description: generateActionDescription(file),
           source: file.path,
           priority: inferPriority(file),
+          domain: file.type,
         });
       }
     }
@@ -234,5 +364,8 @@ export async function nextActions(
   const priorityOrder = { high: 0, med: 1, low: 2 };
   actions.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 
-  return { actions: actions.slice(0, 7) };
+  return { 
+    actions: actions.slice(0, 7),
+    friction_summary: frictionSummary,
+  };
 }
