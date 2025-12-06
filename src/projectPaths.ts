@@ -2,7 +2,7 @@
 // Project Path Resolution
 // ============================================================================
 // Helps MCP tools resolve project roots from project IDs.
-// TODO: Later read from .decibel/config.yml for dynamic project configuration.
+// TODO: Later read from decibel/config.yml for dynamic project configuration.
 // ============================================================================
 
 // ============================================================================
@@ -21,7 +21,7 @@ export interface ProjectConfig {
 
 /**
  * Hardcoded project map.
- * TODO: Replace with dynamic loading from .decibel/config.yml
+ * TODO: Replace with dynamic loading from decibel/config.yml
  */
 const PROJECTS: Record<string, ProjectConfig> = {
   senken: {
