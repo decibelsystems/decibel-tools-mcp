@@ -65,6 +65,15 @@ import {
   ScanDataFlag,
   isScanDataError,
 } from './tools/sentinel-scan-data.js';
+import {
+  listIssuesForProject,
+  createIssue as createSentinelIssue,
+  CreateIssueInput as CreateSentinelIssueInput,
+  IssueStatus as SentinelIssueStatus,
+  IssuePriority as SentinelIssuePriority,
+  filterByStatus,
+  filterByEpicId,
+} from './sentinelIssues.js';
 
 const config = getConfig();
 
@@ -416,6 +425,68 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['projectId'],
+        },
+      },
+
+      // Sentinel tools - YAML Issues (projectId-based)
+      {
+        name: 'sentinel.listIssues',
+        description: 'List issues for a project from .decibel/sentinel/issues/*.yml files. Returns issue metadata including id, title, status, priority, epicId, and tags.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+            status: {
+              type: 'string',
+              enum: ['open', 'in_progress', 'done', 'blocked'],
+              description: 'Optional filter by issue status',
+            },
+            epicId: {
+              type: 'string',
+              description: 'Optional filter by epic ID (e.g., "EPIC-0001")',
+            },
+          },
+          required: ['projectId'],
+        },
+      },
+      {
+        name: 'sentinel.createIssue',
+        description: 'Create a new issue for a project. Writes a YAML file to .decibel/sentinel/issues/ with auto-generated ID (ISS-NNNN).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+            title: {
+              type: 'string',
+              description: 'Issue title',
+            },
+            description: {
+              type: 'string',
+              description: 'Detailed description of the issue',
+            },
+            epicId: {
+              type: 'string',
+              description: 'Optional parent epic ID (e.g., "EPIC-0001")',
+            },
+            priority: {
+              type: 'string',
+              enum: ['low', 'medium', 'high'],
+              default: 'medium',
+              description: 'Issue priority level',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Tags for categorization',
+            },
+          },
+          required: ['projectId', 'title'],
         },
       },
 
@@ -871,6 +942,75 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             isError: true,
           };
         }
+
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // Sentinel tools - YAML Issues (projectId-based)
+      case 'sentinel.listIssues': {
+        const input = args as unknown as {
+          projectId: string;
+          status?: SentinelIssueStatus;
+          epicId?: string;
+        };
+
+        if (!input.projectId) {
+          throw new Error('Missing required field: projectId');
+        }
+
+        // Validate status if provided
+        if (input.status) {
+          const validStatuses: SentinelIssueStatus[] = ['open', 'in_progress', 'done', 'blocked'];
+          if (!validStatuses.includes(input.status)) {
+            throw new Error(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+          }
+        }
+
+        let issues = await listIssuesForProject(input.projectId);
+
+        // Apply filters
+        if (input.status) {
+          issues = filterByStatus(issues, input.status);
+        }
+        if (input.epicId) {
+          issues = filterByEpicId(issues, input.epicId);
+        }
+
+        // Return simplified issue list
+        const result = issues.map((issue) => ({
+          id: issue.id,
+          title: issue.title,
+          status: issue.status,
+          priority: issue.priority,
+          epicId: issue.epicId,
+          tags: issue.tags,
+          created_at: issue.created_at,
+          updated_at: issue.updated_at,
+        }));
+
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'sentinel.createIssue': {
+        const input = args as unknown as CreateSentinelIssueInput;
+
+        if (!input.projectId || !input.title) {
+          throw new Error('Missing required fields: projectId and title are required');
+        }
+
+        // Validate priority if provided
+        if (input.priority) {
+          const validPriorities: SentinelIssuePriority[] = ['low', 'medium', 'high'];
+          if (!validPriorities.includes(input.priority)) {
+            throw new Error(`Invalid priority. Must be one of: ${validPriorities.join(', ')}`);
+          }
+        }
+
+        const result = await createSentinelIssue(input);
 
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
