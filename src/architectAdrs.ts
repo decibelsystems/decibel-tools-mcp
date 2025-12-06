@@ -1,8 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { stringify as stringifyYaml } from 'yaml';
-import { resolveProjectRoot } from './projectPaths.js';
 import { log } from './config.js';
+import { getWritePath, getAllReadPaths } from './decibelPaths.js';
 
 // ============================================================================
 // Types
@@ -26,16 +26,14 @@ export interface AdrOutput {
 }
 
 // ============================================================================
-// Helpers
+// Constants
 // ============================================================================
 
-/**
- * Get the ADRs directory for a project
- */
-async function getAdrsDir(projectId: string): Promise<string> {
-  const project = await resolveProjectRoot(projectId);
-  return path.join(project.root, '.decibel', 'architect', 'adrs');
-}
+const ADRS_SUBPATH = 'architect/adrs';
+
+// ============================================================================
+// Helpers
+// ============================================================================
 
 /**
  * Slugify a title for use in filename
@@ -75,23 +73,28 @@ async function ensureDir(dirPath: string): Promise<void> {
 }
 
 /**
- * Get the next ADR number by scanning existing files
+ * Get the next ADR number by scanning existing files in both paths
  */
-async function getNextAdrNumber(adrsDir: string): Promise<number> {
+async function getNextAdrNumber(projectId: string): Promise<number> {
   let maxNum = 0;
 
-  try {
-    const files = await fs.readdir(adrsDir);
-    for (const file of files) {
-      if (!file.endsWith('.yml') && !file.endsWith('.yaml')) continue;
-      const match = file.match(/^ADR-(\d+)/i);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNum) maxNum = num;
+  // Check both .decibel/ and decibel/ paths
+  const readPaths = await getAllReadPaths(projectId, ADRS_SUBPATH);
+
+  for (const adrsDir of readPaths) {
+    try {
+      const files = await fs.readdir(adrsDir);
+      for (const file of files) {
+        if (!file.endsWith('.yml') && !file.endsWith('.yaml')) continue;
+        const match = file.match(/^ADR-(\d+)/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
       }
+    } catch {
+      // Directory doesn't exist, continue
     }
-  } catch {
-    // Directory doesn't exist, start from 0
   }
 
   return maxNum + 1;
@@ -115,11 +118,12 @@ export async function createProjectAdr(input: AdrInput): Promise<AdrOutput> {
     relatedEpics,
   } = input;
 
-  const adrsDir = await getAdrsDir(projectId);
+  // Always write to .decibel/ (primary path)
+  const adrsDir = await getWritePath(projectId, ADRS_SUBPATH);
   await ensureDir(adrsDir);
 
-  // Get next ADR number
-  const nextNum = await getNextAdrNumber(adrsDir);
+  // Get next ADR number (checks both paths to avoid ID conflicts)
+  const nextNum = await getNextAdrNumber(projectId);
   const id = formatAdrId(nextNum);
 
   // Build filename

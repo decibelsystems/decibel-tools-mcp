@@ -27,7 +27,12 @@ const PROJECTS: Record<string, ProjectConfig> = {
   senken: {
     projectId: "senken",
     projectName: "Senken Trading Agent",
-    root: "/Users/ben/decibel/senken-trading-agent",
+    root: "/Volumes/Ashitaka/Documents/GitHub/senken-trading-agent",
+  },
+  "decibel-tools": {
+    projectId: "decibel-tools",
+    projectName: "Decibel Tools MCP Server",
+    root: "/Volumes/Ashitaka/Documents/GitHub/decibel-tools-mcp",
   },
   // Add other projects here as needed
 };

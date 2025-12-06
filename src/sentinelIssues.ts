@@ -1,8 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { resolveProjectRoot } from './projectPaths.js';
 import { log } from './config.js';
+import { getWritePath, readFilesFromBothPaths } from './decibelPaths.js';
 
 // ============================================================================
 // Types
@@ -40,16 +40,14 @@ export interface CreateIssueOutput extends SentinelIssue {
 }
 
 // ============================================================================
-// Helpers
+// Constants
 // ============================================================================
 
-/**
- * Get the issues directory for a project
- */
-async function getIssuesDir(projectId: string): Promise<string> {
-  const project = await resolveProjectRoot(projectId);
-  return path.join(project.root, '.decibel', 'sentinel', 'issues');
-}
+const ISSUES_SUBPATH = 'sentinel/issues';
+
+// ============================================================================
+// Helpers
+// ============================================================================
 
 /**
  * Slugify a title for use in filename
@@ -94,26 +92,23 @@ async function ensureDir(dirPath: string): Promise<void> {
 
 /**
  * List all issues for a project
+ * Reads from both .decibel/ and decibel/ paths, deduping by filename
  */
 export async function listIssuesForProject(
   projectId: string
 ): Promise<SentinelIssue[]> {
-  const issuesDir = await getIssuesDir(projectId);
   const issues: SentinelIssue[] = [];
+  const seenIds = new Set<string>();
 
-  let files: string[];
-  try {
-    files = await fs.readdir(issuesDir);
-  } catch {
-    // Directory doesn't exist, return empty array
-    log(`sentinelIssues: Issues directory not found: ${issuesDir}`);
+  // Read from both .decibel/ and decibel/ paths
+  const files = await readFilesFromBothPaths(projectId, ISSUES_SUBPATH);
+
+  if (files.length === 0) {
+    log(`sentinelIssues: No issues found for project: ${projectId}`);
     return [];
   }
 
-  for (const file of files) {
-    if (!file.endsWith('.yml') && !file.endsWith('.yaml')) continue;
-
-    const filePath = path.join(issuesDir, file);
+  for (const { filePath, source } of files) {
     try {
       const content = await fs.readFile(filePath, 'utf-8');
       const parsed = parseYaml(content) as Record<string, unknown>;
@@ -123,9 +118,16 @@ export async function listIssuesForProject(
       const title = parsed.title as string;
 
       if (!id || !title) {
-        log(`sentinelIssues: Skipping ${file} - missing id or title`);
+        log(`sentinelIssues: Skipping ${filePath} - missing id or title`);
         continue;
       }
+
+      // Skip duplicates (primary takes precedence)
+      if (seenIds.has(id)) {
+        log(`sentinelIssues: Skipping duplicate ${id} from ${source} path`);
+        continue;
+      }
+      seenIds.add(id);
 
       const issue: SentinelIssue = {
         id,
@@ -150,7 +152,7 @@ export async function listIssuesForProject(
       issues.push(issue);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      log(`sentinelIssues: Failed to parse ${file}: ${message}`);
+      log(`sentinelIssues: Failed to parse ${filePath}: ${message}`);
     }
   }
 
@@ -168,7 +170,8 @@ export async function createIssue(
 ): Promise<CreateIssueOutput> {
   const { projectId, title, description, epicId, priority, tags } = input;
 
-  const issuesDir = await getIssuesDir(projectId);
+  // Always write to .decibel/ (primary path)
+  const issuesDir = await getWritePath(projectId, ISSUES_SUBPATH);
   await ensureDir(issuesDir);
 
   // Find next issue number
