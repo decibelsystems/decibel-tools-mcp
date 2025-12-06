@@ -74,6 +74,10 @@ import {
   filterByStatus,
   filterByEpicId,
 } from './sentinelIssues.js';
+import {
+  createProjectAdr,
+  AdrInput,
+} from './architectAdrs.js';
 
 const config = getConfig();
 
@@ -487,6 +491,48 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['projectId', 'title'],
+        },
+      },
+
+      // Architect tools - Project ADRs (projectId-based)
+      {
+        name: 'architect.createAdr',
+        description: 'Create a new Architecture Decision Record (ADR) for a project. Writes a YAML file to .decibel/architect/adrs/ with auto-generated ID (ADR-NNNN).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+            title: {
+              type: 'string',
+              description: 'ADR title (e.g., "Use PostgreSQL for persistence")',
+            },
+            context: {
+              type: 'string',
+              description: 'The context and background for this decision',
+            },
+            decision: {
+              type: 'string',
+              description: 'The decision that was made',
+            },
+            consequences: {
+              type: 'string',
+              description: 'The consequences of this decision (positive and negative)',
+            },
+            relatedIssues: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Related issue IDs (e.g., ["ISS-0001", "ISS-0003"])',
+            },
+            relatedEpics: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Related epic IDs (e.g., ["EPIC-0002"])',
+            },
+          },
+          required: ['projectId', 'title', 'context', 'decision', 'consequences'],
         },
       },
 
@@ -1011,6 +1057,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const result = await createSentinelIssue(input);
+
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // Architect tools - Project ADRs (projectId-based)
+      case 'architect.createAdr': {
+        const input = args as unknown as AdrInput;
+
+        if (!input.projectId || !input.title || !input.context || !input.decision || !input.consequences) {
+          throw new Error('Missing required fields: projectId, title, context, decision, and consequences are required');
+        }
+
+        const result = await createProjectAdr(input);
 
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
