@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { getConfig, log } from '../config.js';
+import { resolvePath, hasProjectLocal } from '../dataRoot.js';
 
 export type Priority = 'low' | 'med' | 'high';
 
@@ -14,6 +15,7 @@ export interface Action {
   source: string;
   priority: Priority;
   domain?: 'designer' | 'architect' | 'sentinel' | 'friction';
+  location?: 'project' | 'global';
 }
 
 export interface NextActionsOutput {
@@ -22,6 +24,10 @@ export interface NextActionsOutput {
     total_open: number;
     high_signal: number;
     blocking: number;
+  };
+  data_locations: {
+    project_local: boolean;
+    global: boolean;
   };
 }
 
@@ -32,6 +38,7 @@ interface FileInfo {
   type: 'designer' | 'architect' | 'sentinel';
   summary?: string;
   severity?: string;
+  location: 'project' | 'global';
 }
 
 interface FrictionInfo {
@@ -47,7 +54,8 @@ interface FrictionInfo {
 
 async function getFilesFromDir(
   dirPath: string,
-  type: FileInfo['type']
+  type: FileInfo['type'],
+  location: 'project' | 'global'
 ): Promise<FileInfo[]> {
   const files: FileInfo[] = [];
 
@@ -94,6 +102,7 @@ async function getFilesFromDir(
           type,
           summary,
           severity,
+          location,
         });
       }
     }
@@ -105,8 +114,9 @@ async function getFilesFromDir(
   return files;
 }
 
-async function getFrictionFiles(rootDir: string): Promise<FrictionInfo[]> {
-  const frictionDir = path.join(rootDir, 'friction');
+async function getFrictionFiles(): Promise<FrictionInfo[]> {
+  // Friction is always global
+  const frictionDir = resolvePath('friction-global');
   const frictionList: FrictionInfo[] = [];
 
   try {
@@ -152,25 +162,48 @@ async function getFrictionFiles(rootDir: string): Promise<FrictionInfo[]> {
 }
 
 async function collectRecentFiles(
-  projectId: string,
-  rootDir: string
+  projectId: string
 ): Promise<FileInfo[]> {
+  const config = getConfig();
   const allFiles: FileInfo[] = [];
+  const hasProject = hasProjectLocal();
 
-  // Designer files
-  const designerDir = path.join(rootDir, 'designer', projectId);
-  const designerFiles = await getFilesFromDir(designerDir, 'designer');
-  allFiles.push(...designerFiles);
+  // Project-local sources (if .decibel/ exists)
+  if (hasProject) {
+    // Sentinel issues from project
+    const projectIssuesDir = resolvePath('sentinel-issues');
+    const projectIssues = await getFilesFromDir(projectIssuesDir, 'sentinel', 'project');
+    allFiles.push(...projectIssues);
 
-  // Architect files (system_id might match project_id)
-  const architectDir = path.join(rootDir, 'architect', projectId);
-  const architectFiles = await getFilesFromDir(architectDir, 'architect');
-  allFiles.push(...architectFiles);
+    // Architect ADRs from project
+    const projectArchitectDir = resolvePath('architect-project');
+    const projectArchitect = await getFilesFromDir(projectArchitectDir, 'architect', 'project');
+    allFiles.push(...projectArchitect);
 
-  // Sentinel issues (repo might match project_id)
-  const sentinelDir = path.join(rootDir, 'sentinel', projectId, 'issues');
-  const sentinelFiles = await getFilesFromDir(sentinelDir, 'sentinel');
-  allFiles.push(...sentinelFiles);
+    // Designer from project
+    const projectDesignerDir = resolvePath('designer-project');
+    const projectDesigner = await getFilesFromDir(projectDesignerDir, 'designer', 'project');
+    allFiles.push(...projectDesigner);
+  }
+
+  // Global sources (fallback or additional)
+  // Global architect ADRs (tooling/MCP level)
+  const globalArchitectDir = resolvePath('architect-global');
+  const globalArchitect = await getFilesFromDir(globalArchitectDir, 'architect', 'global');
+  allFiles.push(...globalArchitect);
+
+  // If no project-local, check global for project-specific data
+  if (!hasProject) {
+    // Legacy: check global sentinel/{projectId}/issues
+    const legacyIssuesDir = path.join(config.rootDir, 'sentinel', projectId, 'issues');
+    const legacyIssues = await getFilesFromDir(legacyIssuesDir, 'sentinel', 'global');
+    allFiles.push(...legacyIssues);
+
+    // Legacy: check global architect/{projectId}
+    const legacyArchitectDir = path.join(config.rootDir, 'architect', projectId);
+    const legacyArchitect = await getFilesFromDir(legacyArchitectDir, 'architect', 'global');
+    allFiles.push(...legacyArchitect);
+  }
 
   // Sort by timestamp descending and take last 10
   allFiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
@@ -231,12 +264,11 @@ function generateActionDescription(file: FileInfo): string {
 export async function nextActions(
   input: NextActionsInput
 ): Promise<NextActionsOutput> {
-  const config = getConfig();
-
   log(`Oracle: Getting next actions for project ${input.project_id}`);
 
-  const recentFiles = await collectRecentFiles(input.project_id, config.rootDir);
-  const allFriction = await getFrictionFiles(config.rootDir);
+  const hasProject = hasProjectLocal();
+  const recentFiles = await collectRecentFiles(input.project_id);
+  const allFriction = await getFrictionFiles();
   
   // Filter friction by project context (or include all if no specific match)
   const projectFriction = allFriction.filter(
@@ -261,6 +293,11 @@ export async function nextActions(
     blocking: allFriction.filter(f => f.impact === 'blocking').length,
   };
 
+  const dataLocations = {
+    project_local: hasProject,
+    global: true,
+  };
+
   if (recentFiles.length === 0 && relevantFriction.length === 0) {
     return {
       actions: [{
@@ -269,6 +306,7 @@ export async function nextActions(
         priority: 'low',
       }],
       friction_summary: frictionSummary,
+      data_locations: dataLocations,
     };
   }
 
@@ -307,6 +345,7 @@ export async function nextActions(
       source: friction.path,
       priority: inferFrictionPriority(friction),
       domain: 'friction',
+      location: 'global',
     });
   }
 
@@ -322,6 +361,7 @@ export async function nextActions(
       source: file.path,
       priority: inferPriority(file),
       domain: 'sentinel',
+      location: file.location,
     });
   }
 
@@ -332,6 +372,7 @@ export async function nextActions(
       source: file.path,
       priority: inferPriority(file),
       domain: 'architect',
+      location: file.location,
     });
   }
 
@@ -342,6 +383,7 @@ export async function nextActions(
       source: file.path,
       priority: inferPriority(file),
       domain: 'designer',
+      location: file.location,
     });
   }
 
@@ -355,6 +397,7 @@ export async function nextActions(
           source: file.path,
           priority: inferPriority(file),
           domain: file.type,
+          location: file.location,
         });
       }
     }
@@ -367,5 +410,6 @@ export async function nextActions(
   return { 
     actions: actions.slice(0, 7),
     friction_summary: frictionSummary,
+    data_locations: dataLocations,
   };
 }
