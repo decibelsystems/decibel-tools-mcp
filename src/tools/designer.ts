@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { getConfig, log } from '../config.js';
+import { log } from '../config.js';
+import { resolvePath, ensureDir, hasProjectLocal } from '../dataRoot.js';
 
 export interface RecordDesignDecisionInput {
   project_id: string;
@@ -13,6 +14,7 @@ export interface RecordDesignDecisionOutput {
   id: string;
   timestamp: string;
   path: string;
+  location: 'project' | 'global';
 }
 
 function slugify(text: string): string {
@@ -28,24 +30,50 @@ function formatTimestampForFilename(date: Date): string {
   const iso = date.toISOString();
   return iso
     .replace(/:/g, '-')
-    .replace(/\.\d{3}Z$/, 'Z');
+    .replace(/\.\\d{3}Z$/, 'Z');
 }
+
+// Known global project IDs (design decisions about the tooling itself)
+const GLOBAL_PROJECTS = [
+  'decibel-tools-mcp',
+  'decibel-tools',
+  'decibel-ecosystem',
+];
 
 export async function recordDesignDecision(
   input: RecordDesignDecisionInput
 ): Promise<RecordDesignDecisionOutput> {
-  const config = getConfig();
   const now = new Date();
   const timestamp = now.toISOString();
   const fileTimestamp = formatTimestampForFilename(now);
   const slug = slugify(input.summary);
   const filename = `${fileTimestamp}-${slug}.md`;
 
-  const dirPath = path.join(config.rootDir, 'designer', input.project_id);
-  const filePath = path.join(dirPath, filename);
+  // Determine if this is a global design decision or project-specific
+  const isGlobalProject = GLOBAL_PROJECTS.includes(input.project_id.toLowerCase());
 
-  // Create directory if it doesn't exist
-  await fs.mkdir(dirPath, { recursive: true });
+  let dirPath: string;
+  let location: 'project' | 'global';
+
+  if (isGlobalProject) {
+    // Always use global for tooling design decisions
+    const baseDir = resolvePath('designer-global');
+    dirPath = path.join(baseDir, input.project_id);
+    location = 'global';
+  } else if (hasProjectLocal()) {
+    // Use project-local for project-specific design decisions
+    const baseDir = resolvePath('designer-project');
+    dirPath = path.join(baseDir, input.area);
+    location = 'project';
+  } else {
+    // Fallback to global with project_id namespace
+    const baseDir = resolvePath('designer-global');
+    dirPath = path.join(baseDir, input.project_id);
+    location = 'global';
+  }
+
+  const filePath = path.join(dirPath, filename);
+  ensureDir(dirPath);
 
   // Build markdown content
   const frontmatter = [
@@ -54,6 +82,7 @@ export async function recordDesignDecision(
     `area: ${input.area}`,
     `summary: ${input.summary}`,
     `timestamp: ${timestamp}`,
+    `location: ${location}`,
     '---',
   ].join('\n');
 
@@ -61,11 +90,12 @@ export async function recordDesignDecision(
   const content = `${frontmatter}\n\n# ${input.summary}\n\n${body}\n`;
 
   await fs.writeFile(filePath, content, 'utf-8');
-  log(`Designer: Recorded design decision to ${filePath}`);
+  log(`Designer: Recorded design decision to ${filePath} (${location})`);
 
   return {
     id: filename,
     timestamp,
     path: filePath,
+    location,
   };
 }
