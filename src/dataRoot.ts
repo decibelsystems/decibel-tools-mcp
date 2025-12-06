@@ -29,7 +29,7 @@ interface Roots {
 // ============================================================================
 
 /**
- * Walk up directory tree looking for a target folder (like .git or .decibel)
+ * Walk up directory tree looking for a target folder (like .git or decibel)
  */
 function findUpDir(start: string, target: string): string | undefined {
   let current = path.resolve(start);
@@ -44,10 +44,10 @@ function findUpDir(start: string, target: string): string | undefined {
 }
 
 /**
- * Infer project name from the directory containing .decibel
+ * Infer project name from the directory containing decibel/
  */
 function inferProjectName(decibelRoot: string): string {
-  // .decibel is inside project root, so go up one level
+  // decibel/ is inside project root, so go up one level
   const projectDir = path.dirname(decibelRoot);
   return path.basename(projectDir);
 }
@@ -61,7 +61,7 @@ function getRoots(projectHint?: string): Roots {
     process.env.DECIBEL_PROJECT_ROOT ||
     process.cwd();
 
-  const projectDecibelRoot = findUpDir(projectRoot, '.decibel');
+  const projectDecibelRoot = findUpDir(projectRoot, 'decibel');
   const globalRoot =
     process.env.DECIBEL_MCP_ROOT ||
     path.join(os.homedir(), 'decibel-mcp-data');
@@ -86,7 +86,7 @@ function getRoots(projectHint?: string): Roots {
 /**
  * Resolve the appropriate data path for a given domain.
  * 
- * Project-local domains (use .decibel/ if available):
+ * Project-local domains (use decibel/ if available):
  * - sentinel-issues, sentinel-epics
  * - architect-project, designer-project, learnings-project
  * 
@@ -149,7 +149,7 @@ export function resolvePath(domain: DataDomain, projectHint?: string): string {
 }
 
 /**
- * Check if project-local .decibel/ exists
+ * Check if project-local decibel/ exists
  */
 export function hasProjectLocal(projectHint?: string): boolean {
   const { projectDecibelRoot } = getRoots(projectHint);
@@ -157,7 +157,7 @@ export function hasProjectLocal(projectHint?: string): boolean {
 }
 
 /**
- * Get current project name (from .decibel location or env)
+ * Get current project name (from decibel/ location or env)
  */
 export function getProjectName(projectHint?: string): string {
   const { projectName } = getRoots(projectHint);
@@ -165,10 +165,10 @@ export function getProjectName(projectHint?: string): string {
 }
 
 /**
- * Initialize .decibel/ structure in a project directory
+ * Initialize decibel/ structure in a project directory
  */
 export function initProjectDecibel(projectRoot: string): void {
-  const decibelRoot = path.join(projectRoot, '.decibel');
+  const decibelRoot = path.join(projectRoot, 'decibel');
   
   const dirs = [
     path.join(decibelRoot, 'sentinel', 'issues'),
@@ -193,7 +193,7 @@ export function initProjectDecibel(projectRoot: string): void {
     }
   }
 
-  log(`DataRoot: Initialized .decibel/ in ${projectRoot}`);
+  log(`DataRoot: Initialized decibel/ in ${projectRoot}`);
 }
 
 /**
