@@ -27,6 +27,3 @@ npm-debug.log*
 
 # Test coverage
 coverage/
-
-# Local decibel data (test artifacts)
-.decibel/
