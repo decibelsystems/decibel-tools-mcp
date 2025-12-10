@@ -10,7 +10,6 @@
 
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { log } from './config.js';
 
 // ============================================================================
@@ -38,13 +37,18 @@ export interface ProjectRegistry {
 // ============================================================================
 
 /**
- * Get the path to the registry file
+ * Get the path to the registry file.
+ * Default: projects.json in the same directory as this MCP tool.
  */
 function getRegistryPath(): string {
-  return (
-    process.env.DECIBEL_REGISTRY_PATH ||
-    path.join(process.env.DECIBEL_MCP_ROOT || path.join(os.homedir(), '.decibel'), 'projects.json')
-  );
+  if (process.env.DECIBEL_REGISTRY_PATH) {
+    return process.env.DECIBEL_REGISTRY_PATH;
+  }
+  
+  // Default: projects.json in the MCP repo root (sibling to src/)
+  // __dirname at runtime is dist/, so go up one level
+  const mcpRoot = path.resolve(__dirname, '..');
+  return path.join(mcpRoot, 'projects.json');
 }
 
 /**
