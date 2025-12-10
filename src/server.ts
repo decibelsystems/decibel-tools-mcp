@@ -10,6 +10,20 @@ import { getConfig, log } from './config.js';
 import { recordDesignDecision, RecordDesignDecisionInput } from './tools/designer.js';
 import { recordArchDecision, RecordArchDecisionInput } from './tools/architect.js';
 import {
+  getRoadmap,
+  GetRoadmapInput,
+  getEpicContext,
+  GetEpicContextInput,
+  getRoadmapHealth,
+  GetRoadmapHealthInput,
+  linkEpicToRoadmap,
+  LinkEpicInput,
+  roadmapList,
+  RoadmapListInput,
+  roadmapInit,
+  RoadmapInitInput,
+} from './tools/roadmap.js';
+import {
   createIssue,
   CreateIssueInput,
   Severity,
@@ -359,6 +373,127 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['query'],
+        },
+      },
+
+      // Roadmap tools
+      {
+        name: 'roadmap_get',
+        description: 'Get the strategic roadmap - objectives, themes, milestones, and epic context. Returns the full roadmap structure with summary stats.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+          },
+          required: ['projectId'],
+        },
+      },
+      {
+        name: 'roadmap_list',
+        description: 'List all epics with their roadmap context (theme, milestone, objectives) and health scores. Sorted by milestone target date.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+          },
+          required: ['projectId'],
+        },
+      },
+      {
+        name: 'roadmap_getEpicContext',
+        description: 'Get the strategic context for a specific epic - theme, milestone, objectives, and Oracle health annotation.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+            epicId: {
+              type: 'string',
+              description: 'Epic ID to look up (e.g., "EPIC-0001")',
+            },
+          },
+          required: ['projectId', 'epicId'],
+        },
+      },
+      {
+        name: 'roadmap_getHealth',
+        description: "Get Oracle's health report - epics with low health scores that need attention. Use to prioritize work and identify risky areas.",
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+            threshold: {
+              type: 'number',
+              description: 'Health score threshold (default: 0.7). Epics below this score are flagged.',
+            },
+          },
+          required: ['projectId'],
+        },
+      },
+      {
+        name: 'roadmap_linkEpic',
+        description: 'Link an epic to roadmap elements (theme, milestone, objectives). Maintains strategic context for your work.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+            epicId: {
+              type: 'string',
+              description: 'Epic ID to link (e.g., "EPIC-0001")',
+            },
+            theme: {
+              type: 'string',
+              description: 'Theme ID (e.g., "foundations", "features")',
+            },
+            milestone: {
+              type: 'string',
+              description: 'Milestone ID (e.g., "M-0001")',
+            },
+            objectives: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Objective IDs to link (e.g., ["OBJ-0001"])',
+            },
+            workType: {
+              type: 'string',
+              enum: ['feature', 'infra', 'refactor', 'experiment', 'policy'],
+              description: 'Type of work (default: feature)',
+            },
+            adrs: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Related ADR IDs',
+            },
+          },
+          required: ['projectId', 'epicId'],
+        },
+      },
+      {
+        name: 'roadmap_init',
+        description: 'Initialize a new roadmap.yaml scaffold with example objectives, themes, and milestones.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+          },
+          required: ['projectId'],
         },
       },
 
@@ -765,6 +900,78 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error('Missing required fields: system_id, change, and rationale are required');
         }
         const result = await recordArchDecision(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // Roadmap tools
+      case 'roadmap_get': {
+        const input = args as unknown as GetRoadmapInput;
+        if (!input.projectId) {
+          throw new Error('Missing required field: projectId');
+        }
+        const result = await getRoadmap(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: 'error' in result,
+        };
+      }
+
+      case 'roadmap_list': {
+        const input = args as unknown as RoadmapListInput;
+        if (!input.projectId) {
+          throw new Error('Missing required field: projectId');
+        }
+        const result = await roadmapList(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: 'error' in result,
+        };
+      }
+
+      case 'roadmap_getEpicContext': {
+        const input = args as unknown as GetEpicContextInput;
+        if (!input.projectId || !input.epicId) {
+          throw new Error('Missing required fields: projectId and epicId are required');
+        }
+        const result = await getEpicContext(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: 'error' in result,
+        };
+      }
+
+      case 'roadmap_getHealth': {
+        const input = args as unknown as GetRoadmapHealthInput;
+        if (!input.projectId) {
+          throw new Error('Missing required field: projectId');
+        }
+        const result = await getRoadmapHealth(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: 'error' in result,
+        };
+      }
+
+      case 'roadmap_linkEpic': {
+        const input = args as unknown as LinkEpicInput;
+        if (!input.projectId || !input.epicId) {
+          throw new Error('Missing required fields: projectId and epicId are required');
+        }
+        const result = await linkEpicToRoadmap(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: result.status === 'error',
+        };
+      }
+
+      case 'roadmap_init': {
+        const input = args as unknown as RoadmapInitInput;
+        if (!input.projectId) {
+          throw new Error('Missing required field: projectId');
+        }
+        const result = await roadmapInit(input);
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
