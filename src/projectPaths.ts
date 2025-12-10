@@ -2,11 +2,12 @@
 // Project Path Resolution
 // ============================================================================
 // Helps MCP tools resolve project roots from project IDs.
-// Uses dynamic discovery based on .decibel folder locations.
+// Uses registry-based resolution with fallback to dynamic discovery.
 // ============================================================================
 
 import fs from 'fs';
 import path from 'path';
+import { resolveProject, ProjectEntry } from './projectRegistry.js';
 
 // ============================================================================
 // Types
@@ -53,75 +54,53 @@ function getProjectNameFromDir(projectRoot: string): string {
 /**
  * Resolve project configuration from a project ID.
  *
- * Resolution strategy:
- * 1. If projectId matches the current project (based on cwd or DECIBEL_PROJECT_ROOT), use that
- * 2. Check if projectId is a valid path to a project with .decibel folder
- * 3. Otherwise throw an error with helpful guidance
+ * Resolution strategy (via projectRegistry):
+ * 1. Check registry for exact ID or alias match
+ * 2. Check DECIBEL_PROJECT_ROOT env var
+ * 3. Check if projectId is a valid absolute path
+ * 4. Walk up from cwd looking for matching project
  *
- * @param projectId - The unique identifier for the project (directory name or path)
+ * @param projectId - The unique identifier for the project (ID, alias, or path)
  * @returns The project configuration including root path
  * @throws Error if the project cannot be resolved
  */
 export async function resolveProjectRoot(
   projectId: string
 ): Promise<ProjectConfig> {
-  // Strategy 1: Check if we're in a project that matches the projectId
-  const currentProjectRoot = process.env.DECIBEL_PROJECT_ROOT || process.cwd();
-  const discoveredRoot = findDecibelDir(currentProjectRoot);
-
-  if (discoveredRoot) {
-    const discoveredName = getProjectNameFromDir(discoveredRoot);
-    if (discoveredName === projectId || path.basename(discoveredRoot) === projectId) {
-      return {
-        projectId,
-        projectName: discoveredName,
-        root: discoveredRoot,
-      };
-    }
+  try {
+    const entry: ProjectEntry = resolveProject(projectId);
+    return {
+      projectId: entry.id,
+      projectName: entry.name || entry.id,
+      root: entry.path,
+    };
+  } catch (err) {
+    // Re-throw with the helpful error message from registry
+    throw err;
   }
-
-  // Strategy 2: Check if projectId is a path to a project with .decibel
-  if (fs.existsSync(projectId)) {
-    const absolutePath = path.resolve(projectId);
-    const decibelPath = path.join(absolutePath, '.decibel');
-    if (fs.existsSync(decibelPath) && fs.statSync(decibelPath).isDirectory()) {
-      return {
-        projectId: path.basename(absolutePath),
-        projectName: path.basename(absolutePath),
-        root: absolutePath,
-      };
-    }
-  }
-
-  // If we have a discovered project, suggest using that
-  if (discoveredRoot) {
-    throw new Error(
-      `Unknown projectId: "${projectId}". ` +
-      `Current project is "${getProjectNameFromDir(discoveredRoot)}" at ${discoveredRoot}. ` +
-      `Either use the current project ID or provide a path to a project with a .decibel folder.`
-    );
-  }
-
-  throw new Error(
-    `Unknown projectId: "${projectId}". ` +
-    `No .decibel folder found in current directory tree. ` +
-    `Run from within a project that has a .decibel folder, or provide a path to one.`
-  );
 }
 
 /**
  * List all known project IDs.
- * Returns the current project if discovered.
+ * Returns projects from the registry plus any discovered from cwd.
  *
  * @returns Array of discovered project IDs
  */
 export function listProjectIds(): string[] {
+  // Import dynamically to avoid circular dependency at module load
+  const { listProjects } = require('./projectRegistry.js');
+  const registeredProjects = listProjects() as ProjectEntry[];
+  const ids = registeredProjects.map((p) => p.id);
+
+  // Also check cwd for a local project not in registry
   const currentProjectRoot = process.env.DECIBEL_PROJECT_ROOT || process.cwd();
   const discoveredRoot = findDecibelDir(currentProjectRoot);
-
   if (discoveredRoot) {
-    return [getProjectNameFromDir(discoveredRoot)];
+    const localId = getProjectNameFromDir(discoveredRoot);
+    if (!ids.includes(localId)) {
+      ids.push(localId);
+    }
   }
 
-  return [];
+  return ids;
 }

@@ -74,6 +74,15 @@ import {
   BumpFrictionInput,
 } from './tools/friction.js';
 import {
+  listProjects,
+  registerProject,
+  unregisterProject,
+  addProjectAlias,
+  resolveProject,
+  getRegistryFilePath,
+  ProjectEntry,
+} from './projectRegistry.js';
+import {
   scanData as scanDataPython,
   ScanDataInput as ScanDataPythonInput,
   ScanDataFlag,
@@ -868,6 +877,89 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['friction_id'],
         },
       },
+
+      // Registry tools
+      {
+        name: 'registry_list',
+        description: 'List all registered projects in the Decibel registry. Shows project IDs, paths, and aliases.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'registry_add',
+        description: 'Register a project in the Decibel registry. The project path must contain a .decibel folder.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Unique project ID (typically the directory name)',
+            },
+            path: {
+              type: 'string',
+              description: 'Absolute path to the project root (must contain .decibel/)',
+            },
+            name: {
+              type: 'string',
+              description: 'Human-readable project name',
+            },
+            aliases: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Alternative names/shortcuts for this project',
+            },
+          },
+          required: ['id', 'path'],
+        },
+      },
+      {
+        name: 'registry_remove',
+        description: 'Remove a project from the Decibel registry. Does not delete project files.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Project ID to remove',
+            },
+          },
+          required: ['id'],
+        },
+      },
+      {
+        name: 'registry_alias',
+        description: 'Add an alias (shortcut name) to an existing project in the registry.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Project ID to add alias to',
+            },
+            alias: {
+              type: 'string',
+              description: 'Alias to add (e.g., "senken" as alias for "senken-trading-agent")',
+            },
+          },
+          required: ['id', 'alias'],
+        },
+      },
+      {
+        name: 'registry_resolve',
+        description: 'Test resolution of a project ID/alias. Shows which project would be resolved and how.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Project ID, alias, or path to resolve',
+            },
+          },
+          required: ['projectId'],
+        },
+      },
     ],
   };
 });
@@ -1406,6 +1498,144 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
+      }
+
+      // Registry tools
+      case 'registry_list': {
+        const projects = listProjects();
+        const registryPath = getRegistryFilePath();
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              registryPath,
+              projectCount: projects.length,
+              projects: projects.map((p) => ({
+                id: p.id,
+                name: p.name,
+                path: p.path,
+                aliases: p.aliases || [],
+              })),
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'registry_add': {
+        const input = args as unknown as { id: string; path: string; name?: string; aliases?: string[] };
+        if (!input.id || !input.path) {
+          throw new Error('Missing required fields: id and path are required');
+        }
+        try {
+          registerProject(input);
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                message: `Project "${input.id}" registered successfully`,
+                project: input,
+              }, null, 2),
+            }],
+          };
+        } catch (err) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: false,
+                error: err instanceof Error ? err.message : String(err),
+              }, null, 2),
+            }],
+            isError: true,
+          };
+        }
+      }
+
+      case 'registry_remove': {
+        const input = args as unknown as { id: string };
+        if (!input.id) {
+          throw new Error('Missing required field: id');
+        }
+        const removed = unregisterProject(input.id);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: removed,
+              message: removed
+                ? `Project "${input.id}" removed from registry`
+                : `Project "${input.id}" not found in registry`,
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'registry_alias': {
+        const input = args as unknown as { id: string; alias: string };
+        if (!input.id || !input.alias) {
+          throw new Error('Missing required fields: id and alias are required');
+        }
+        try {
+          addProjectAlias(input.id, input.alias);
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                message: `Alias "${input.alias}" added to project "${input.id}"`,
+              }, null, 2),
+            }],
+          };
+        } catch (err) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: false,
+                error: err instanceof Error ? err.message : String(err),
+              }, null, 2),
+            }],
+            isError: true,
+          };
+        }
+      }
+
+      case 'registry_resolve': {
+        const input = args as unknown as { projectId: string };
+        if (!input.projectId) {
+          throw new Error('Missing required field: projectId');
+        }
+        try {
+          const entry = resolveProject(input.projectId);
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                input: input.projectId,
+                resolved: {
+                  id: entry.id,
+                  name: entry.name,
+                  path: entry.path,
+                  aliases: entry.aliases,
+                },
+              }, null, 2),
+            }],
+          };
+        } catch (err) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: false,
+                input: input.projectId,
+                error: err instanceof Error ? err.message : String(err),
+              }, null, 2),
+            }],
+            isError: true,
+          };
+        }
       }
 
       default:
