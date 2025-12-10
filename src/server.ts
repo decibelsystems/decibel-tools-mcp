@@ -406,7 +406,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             projectId: {
               type: 'string',
-              description: 'The project identifier (e.g., "senken")',
+              description: 'The project identifier (e.g., "my-project")',
             },
             validate: {
               type: 'boolean',
@@ -441,7 +441,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             projectId: {
               type: 'string',
-              description: 'The project identifier (e.g., "senken")',
+              description: 'The project identifier (e.g., "my-project")',
             },
             status: {
               type: 'string',
@@ -464,7 +464,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             projectId: {
               type: 'string',
-              description: 'The project identifier (e.g., "senken")',
+              description: 'The project identifier (e.g., "my-project")',
             },
             title: {
               type: 'string',
@@ -503,7 +503,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             projectId: {
               type: 'string',
-              description: 'The project identifier (e.g., "senken")',
+              description: 'The project identifier (e.g., "my-project")',
             },
             title: {
               type: 'string',

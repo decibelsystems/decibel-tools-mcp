@@ -49,7 +49,9 @@ The server uses environment variables for configuration:
 |----------|---------|-------------|
 | `DECIBEL_ENV` | `dev` | Environment (dev, staging, prod) |
 | `DECIBEL_ORG` | `mediareason` | Organization name |
-| `DECIBEL_MCP_ROOT` | `./data` | Root directory for data storage |
+| `DECIBEL_MCP_ROOT` | `~/.decibel` | Root directory for global data storage |
+
+Data is stored in project-local `.decibel/` folders when available, falling back to the global root for cross-project data.
 
 Copy `.env.example` to `.env` and configure as needed:
 
@@ -69,10 +71,7 @@ Add to your Cursor MCP configuration (`~/.cursor/mcp.json` or project `.cursor/m
     "decibel-tools": {
       "command": "node",
       "type": "stdio",
-      "args": ["/path/to/decibel-tools-mcp/dist/server.js"],
-      "env": {
-        "DECIBEL_MCP_ROOT": "/path/to/decibel-mcp-data"
-      }
+      "args": ["/path/to/decibel-tools-mcp/dist/server.js"]
     }
   }
 }
@@ -87,14 +86,13 @@ Add to your Claude configuration (`~/Library/Application Support/Claude/claude_d
   "mcpServers": {
     "decibel-tools": {
       "command": "node",
-      "args": ["/path/to/decibel-tools-mcp/dist/server.js"],
-      "env": {
-        "DECIBEL_MCP_ROOT": "/path/to/decibel-mcp-data"
-      }
+      "args": ["/path/to/decibel-tools-mcp/dist/server.js"]
     }
   }
 }
 ```
+
+The server will automatically discover `.decibel/` folders in your projects. No `DECIBEL_MCP_ROOT` environment variable is needed for typical use.
 
 ## Tools Reference
 
@@ -272,25 +270,26 @@ List entries from a project's technical learnings document.
 
 ## Data Storage
 
-All data is stored as Markdown files with YAML frontmatter:
+Data is stored in project-local `.decibel/` folders as YAML files:
 
 ```
-{DECIBEL_MCP_ROOT}/
-├── designer/
-│   └── {project_id}/
-│       └── YYYY-MM-DDTHH-mm-ssZ-{slug}.md
-├── architect/
-│   └── {system_id}/
-│       └── YYYY-MM-DDTHH-mm-ssZ-{slug}.md
-├── sentinel/
-│   ├── epics/
-│   │   └── EPIC-{nnnn}-{slug}.md
-│   └── {repo}/
-│       └── issues/
-│           └── YYYY-MM-DDTHH-mm-ssZ-{slug}.md
-└── learnings/
-    └── {project_id}.md
+{project_root}/
+└── .decibel/
+    ├── sentinel/
+    │   ├── issues/
+    │   │   └── ISS-{nnnn}.yml
+    │   └── epics/
+    │       └── EPIC-{nnnn}.yml
+    ├── architect/
+    │   └── adrs/
+    │       └── ADR-{nnnn}.yml
+    ├── designer/
+    │   └── YYYY-MM-DDTHH-mm-ssZ-{slug}.md
+    └── learnings/
+        └── {project_id}.md
 ```
+
+Global data (friction logs, cross-project learnings) is stored in `~/.decibel/` or the path specified by `DECIBEL_MCP_ROOT`.
 
 ## Development
 

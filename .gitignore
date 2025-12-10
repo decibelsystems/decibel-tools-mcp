@@ -10,6 +10,7 @@ dist/
 
 # Data directory (runtime data)
 data/
+.decibel/
 
 # IDE
 .idea/
