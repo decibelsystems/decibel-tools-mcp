@@ -92,6 +92,20 @@ import {
   createProjectAdr,
   AdrInput,
 } from './architectAdrs.js';
+import {
+  getRoadmap,
+  GetRoadmapInput,
+  getEpicContext,
+  GetEpicContextInput,
+  getRoadmapHealth,
+  GetRoadmapHealthInput,
+  linkEpicToRoadmap,
+  LinkEpicInput,
+  roadmapList,
+  RoadmapListInput,
+  roadmapInit,
+  RoadmapInitInput,
+} from './tools/roadmap.js';
 
 const config = getConfig();
 
@@ -541,7 +555,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             projectId: {
               type: 'string',
-              description: 'The project identifier (e.g., "my-project")',
+              description: 'The project identifier (e.g., "senken")',
             },
             validate: {
               type: 'boolean',
@@ -576,7 +590,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             projectId: {
               type: 'string',
-              description: 'The project identifier (e.g., "my-project")',
+              description: 'The project identifier (e.g., "senken")',
             },
             status: {
               type: 'string',
@@ -599,7 +613,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             projectId: {
               type: 'string',
-              description: 'The project identifier (e.g., "my-project")',
+              description: 'The project identifier (e.g., "senken")',
             },
             title: {
               type: 'string',
@@ -638,7 +652,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             projectId: {
               type: 'string',
-              description: 'The project identifier (e.g., "my-project")',
+              description: 'The project identifier (e.g., "senken")',
             },
             title: {
               type: 'string',
@@ -668,6 +682,127 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['projectId', 'title', 'context', 'decision', 'consequences'],
+        },
+      },
+
+      // Roadmap tools
+      {
+        name: 'roadmap_get',
+        description: 'Get the strategic roadmap - objectives, themes, milestones, and epic context. Returns the full roadmap structure with summary stats.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+          },
+          required: ['projectId'],
+        },
+      },
+      {
+        name: 'roadmap_list',
+        description: 'List all epics with their roadmap context (theme, milestone, objectives) and health scores. Sorted by milestone target date.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+          },
+          required: ['projectId'],
+        },
+      },
+      {
+        name: 'roadmap_getEpicContext',
+        description: 'Get the strategic context for a specific epic - theme, milestone, objectives, and Oracle health annotation.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+            epicId: {
+              type: 'string',
+              description: 'Epic ID to look up (e.g., "EPIC-0001")',
+            },
+          },
+          required: ['projectId', 'epicId'],
+        },
+      },
+      {
+        name: 'roadmap_getHealth',
+        description: "Get Oracle's health report - epics with low health scores that need attention. Use to prioritize work and identify risky areas.",
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+            threshold: {
+              type: 'number',
+              description: 'Health score threshold (default: 0.7). Epics below this score are flagged.',
+            },
+          },
+          required: ['projectId'],
+        },
+      },
+      {
+        name: 'roadmap_linkEpic',
+        description: 'Link an epic to roadmap elements (theme, milestone, objectives). Maintains strategic context for your work.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+            epicId: {
+              type: 'string',
+              description: 'Epic ID to link (e.g., "EPIC-0001")',
+            },
+            theme: {
+              type: 'string',
+              description: 'Theme ID (e.g., "foundations", "features")',
+            },
+            milestone: {
+              type: 'string',
+              description: 'Milestone ID (e.g., "M-0001")',
+            },
+            objectives: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Objective IDs to link (e.g., ["OBJ-0001"])',
+            },
+            workType: {
+              type: 'string',
+              enum: ['feature', 'infra', 'refactor', 'experiment', 'policy'],
+              description: 'Type of work (default: feature)',
+            },
+            adrs: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Related ADR IDs',
+            },
+          },
+          required: ['projectId', 'epicId'],
+        },
+      },
+      {
+        name: 'roadmap_init',
+        description: 'Initialize a new roadmap.yaml scaffold with example objectives, themes, and milestones.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'The project identifier (e.g., "senken")',
+            },
+          },
+          required: ['projectId'],
         },
       },
 
@@ -1256,179 +1391,4 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         // Validate priority if provided
-        if (input.priority) {
-          const validPriorities: SentinelIssuePriority[] = ['low', 'medium', 'high'];
-          if (!validPriorities.includes(input.priority)) {
-            throw new Error(`Invalid priority. Must be one of: ${validPriorities.join(', ')}`);
-          }
-        }
-
-        const result = await createSentinelIssue(input);
-
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      // Architect tools - Project ADRs (projectId-based)
-      case 'architect_createAdr': {
-        const input = args as unknown as AdrInput;
-
-        if (!input.projectId || !input.title || !input.context || !input.decision || !input.consequences) {
-          throw new Error('Missing required fields: projectId, title, context, decision, and consequences are required');
-        }
-
-        const result = await createProjectAdr(input);
-
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      // Oracle tools
-      case 'oracle_next_actions': {
-        const input = args as unknown as NextActionsInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
-        }
-        const result = await nextActions(input);
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      // Learnings tools
-      case 'learnings_append': {
-        const input = args as unknown as AppendLearningInput;
-        if (!input.project_id || !input.category || !input.title || !input.content) {
-          throw new Error('Missing required fields: project_id, category, title, and content are required');
-        }
-        const validCategories: LearningCategory[] = ['debug', 'integration', 'architecture', 'tooling', 'process', 'other'];
-        if (!validCategories.includes(input.category)) {
-          throw new Error(`Invalid category. Must be one of: ${validCategories.join(', ')}`);
-        }
-        const result = await appendLearning(input);
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case 'learnings_list': {
-        const input = args as unknown as ListLearningsInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
-        }
-        if (input.category) {
-          const validCategories: LearningCategory[] = ['debug', 'integration', 'architecture', 'tooling', 'process', 'other'];
-          if (!validCategories.includes(input.category)) {
-            throw new Error(`Invalid category. Must be one of: ${validCategories.join(', ')}`);
-          }
-        }
-        const result = await listLearnings(input);
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      // Friction tools
-      case 'friction_log': {
-        const input = args as unknown as LogFrictionInput;
-        if (!input.context || !input.description) {
-          throw new Error('Missing required fields: context and description are required');
-        }
-        if (input.frequency) {
-          const valid: FrictionFrequency[] = ['once', 'occasional', 'frequent', 'constant'];
-          if (!valid.includes(input.frequency)) {
-            throw new Error(`Invalid frequency. Must be one of: ${valid.join(', ')}`);
-          }
-        }
-        if (input.impact) {
-          const valid: FrictionImpact[] = ['low', 'medium', 'high', 'blocking'];
-          if (!valid.includes(input.impact)) {
-            throw new Error(`Invalid impact. Must be one of: ${valid.join(', ')}`);
-          }
-        }
-        const result = await logFriction(input);
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case 'friction_list': {
-        const input = args as unknown as ListFrictionInput;
-        if (input.status) {
-          const valid: FrictionStatus[] = ['open', 'acknowledged', 'solving', 'resolved', 'wontfix'];
-          if (!valid.includes(input.status)) {
-            throw new Error(`Invalid status. Must be one of: ${valid.join(', ')}`);
-          }
-        }
-        if (input.min_impact) {
-          const valid: FrictionImpact[] = ['low', 'medium', 'high', 'blocking'];
-          if (!valid.includes(input.min_impact)) {
-            throw new Error(`Invalid min_impact. Must be one of: ${valid.join(', ')}`);
-          }
-        }
-        const result = await listFriction(input);
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case 'friction_resolve': {
-        const input = args as unknown as ResolveFrictionInput;
-        if (!input.friction_id || !input.resolution) {
-          throw new Error('Missing required fields: friction_id and resolution are required');
-        }
-        const result = await resolveFriction(input);
-        if ('error' in result) {
-          return {
-            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-            isError: true,
-          };
-        }
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case 'friction_bump': {
-        const input = args as unknown as BumpFrictionInput;
-        if (!input.friction_id) {
-          throw new Error('Missing required field: friction_id');
-        }
-        const result = await bumpFriction(input);
-        if ('error' in result) {
-          return {
-            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-            isError: true,
-          };
-        }
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      default:
-        throw new Error(`Unknown tool: ${name}`);
-    }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    log(`Error in tool ${name}:`, errorMessage);
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ error: errorMessage }) }],
-      isError: true,
-    };
-  }
-});
-
-// Start the server
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  log('Decibel MCP Server running on stdio');
-}
-
-main().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
+        if (input
