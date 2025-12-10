@@ -7,9 +7,9 @@
 
 import fs from 'fs';
 import path from 'path';
-import yaml from 'js-yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { log } from '../config.js';
-import { resolveProjectPath } from '../projectPaths.js';
+import { getWritePath, getReadPath } from '../decibelPaths.js';
 
 // =============================================================================
 // Types
@@ -75,24 +75,24 @@ export interface OracleAnnotations {
 // File Paths
 // =============================================================================
 
-const ROADMAP_DIR = '.decibel/architect/roadmap';
+const ROADMAP_SUBPATH = 'architect/roadmap';
 const ROADMAP_FILE = 'roadmap.yaml';
 const ORACLE_ANNOTATIONS_FILE = 'oracle-annotations.yaml';
 
-function getRoadmapPath(projectRoot: string): string {
-  return path.join(projectRoot, ROADMAP_DIR, ROADMAP_FILE);
+function getRoadmapPath(roadmapDir: string): string {
+  return path.join(roadmapDir, ROADMAP_FILE);
 }
 
-function getOracleAnnotationsPath(projectRoot: string): string {
-  return path.join(projectRoot, ROADMAP_DIR, ORACLE_ANNOTATIONS_FILE);
+function getOracleAnnotationsPath(roadmapDir: string): string {
+  return path.join(roadmapDir, ORACLE_ANNOTATIONS_FILE);
 }
 
 // =============================================================================
 // Loading Functions
 // =============================================================================
 
-function loadRoadmap(projectRoot: string): Roadmap {
-  const roadmapPath = getRoadmapPath(projectRoot);
+function loadRoadmap(roadmapDir: string): Roadmap {
+  const roadmapPath = getRoadmapPath(roadmapDir);
 
   if (!fs.existsSync(roadmapPath)) {
     return {
@@ -104,7 +104,7 @@ function loadRoadmap(projectRoot: string): Roadmap {
   }
 
   const content = fs.readFileSync(roadmapPath, 'utf-8');
-  const data = yaml.load(content) as Record<string, unknown> || {};
+  const data = parseYaml(content) as Record<string, unknown> || {};
 
   return {
     objectives: (data.objectives as Objective[]) || [],
@@ -114,35 +114,33 @@ function loadRoadmap(projectRoot: string): Roadmap {
   };
 }
 
-function loadOracleAnnotations(projectRoot: string): OracleAnnotations {
-  const annotationsPath = getOracleAnnotationsPath(projectRoot);
+function loadOracleAnnotations(roadmapDir: string): OracleAnnotations {
+  const annotationsPath = getOracleAnnotationsPath(roadmapDir);
 
   if (!fs.existsSync(annotationsPath)) {
     return { annotations: {} };
   }
 
   const content = fs.readFileSync(annotationsPath, 'utf-8');
-  const data = yaml.load(content) as Record<string, unknown> || {};
+  const data = parseYaml(content) as Record<string, unknown> || {};
 
   return {
     annotations: (data.annotations as Record<string, OracleAnnotation>) || {},
   };
 }
 
-function saveRoadmap(projectRoot: string, roadmap: Roadmap): void {
-  const roadmapDir = path.join(projectRoot, ROADMAP_DIR);
-
+function saveRoadmap(roadmapDir: string, roadmap: Roadmap): void {
   if (!fs.existsSync(roadmapDir)) {
     fs.mkdirSync(roadmapDir, { recursive: true });
   }
 
-  const roadmapPath = getRoadmapPath(projectRoot);
-  const content = yaml.dump(roadmap, { noRefs: true, sortKeys: false });
+  const roadmapPath = getRoadmapPath(roadmapDir);
+  const content = stringifyYaml(roadmap);
   fs.writeFileSync(roadmapPath, content, 'utf-8');
 }
 
-export function roadmapExists(projectRoot: string): boolean {
-  return fs.existsSync(getRoadmapPath(projectRoot));
+export function roadmapExists(roadmapDir: string): boolean {
+  return fs.existsSync(getRoadmapPath(roadmapDir));
 }
 
 // =============================================================================
@@ -186,17 +184,17 @@ export interface RoadmapInitInput {
 // =============================================================================
 
 export async function getRoadmap(input: GetRoadmapInput): Promise<Record<string, unknown>> {
-  const projectRoot = resolveProjectPath(input.projectId);
+  const roadmapDir = await getReadPath(input.projectId, ROADMAP_SUBPATH);
 
-  if (!roadmapExists(projectRoot)) {
+  if (!roadmapExists(roadmapDir)) {
     return {
       error: 'Roadmap not initialized',
       suggestion: "Run 'decibel-architect roadmap init' or use roadmap_init tool to create roadmap.yaml",
     };
   }
 
-  const roadmap = loadRoadmap(projectRoot);
-  const annotations = loadOracleAnnotations(projectRoot);
+  const roadmap = loadRoadmap(roadmapDir);
+  const annotations = loadOracleAnnotations(roadmapDir);
 
   // Calculate summary stats
   const workTypeCounts: Record<string, number> = {};
@@ -225,17 +223,17 @@ export async function getRoadmap(input: GetRoadmapInput): Promise<Record<string,
 }
 
 export async function getEpicContext(input: GetEpicContextInput): Promise<Record<string, unknown>> {
-  const projectRoot = resolveProjectPath(input.projectId);
+  const roadmapDir = await getReadPath(input.projectId, ROADMAP_SUBPATH);
 
-  if (!roadmapExists(projectRoot)) {
+  if (!roadmapExists(roadmapDir)) {
     return {
       error: 'Roadmap not initialized',
       suggestion: "Run 'decibel-architect roadmap init' or use roadmap_init tool to create roadmap.yaml",
     };
   }
 
-  const roadmap = loadRoadmap(projectRoot);
-  const annotations = loadOracleAnnotations(projectRoot);
+  const roadmap = loadRoadmap(roadmapDir);
+  const annotations = loadOracleAnnotations(roadmapDir);
 
   const ec = roadmap.epic_context[input.epicId];
   if (!ec) {
@@ -267,18 +265,18 @@ export async function getEpicContext(input: GetEpicContextInput): Promise<Record
 }
 
 export async function getRoadmapHealth(input: GetRoadmapHealthInput): Promise<Record<string, unknown>> {
-  const projectRoot = resolveProjectPath(input.projectId);
+  const roadmapDir = await getReadPath(input.projectId, ROADMAP_SUBPATH);
   const threshold = input.threshold ?? 0.7;
 
-  if (!roadmapExists(projectRoot)) {
+  if (!roadmapExists(roadmapDir)) {
     return {
       error: 'Roadmap not initialized',
       suggestion: "Run 'decibel-architect roadmap init' or use roadmap_init tool to create roadmap.yaml",
     };
   }
 
-  const roadmap = loadRoadmap(projectRoot);
-  const annotations = loadOracleAnnotations(projectRoot);
+  const roadmap = loadRoadmap(roadmapDir);
+  const annotations = loadOracleAnnotations(roadmapDir);
 
   if (Object.keys(annotations.annotations).length === 0) {
     return {
@@ -320,16 +318,17 @@ export async function getRoadmapHealth(input: GetRoadmapHealthInput): Promise<Re
 }
 
 export async function linkEpicToRoadmap(input: LinkEpicInput): Promise<Record<string, unknown>> {
-  const projectRoot = resolveProjectPath(input.projectId);
+  const readDir = await getReadPath(input.projectId, ROADMAP_SUBPATH);
+  const writeDir = await getWritePath(input.projectId, ROADMAP_SUBPATH);
 
-  if (!roadmapExists(projectRoot)) {
+  if (!roadmapExists(readDir)) {
     return {
       error: 'Roadmap not initialized',
       suggestion: "Run 'decibel-architect roadmap init' or use roadmap_init tool to create roadmap.yaml",
     };
   }
 
-  const roadmap = loadRoadmap(projectRoot);
+  const roadmap = loadRoadmap(readDir);
 
   // Validate theme
   if (input.theme && !roadmap.themes.find((t) => t.id === input.theme)) {
@@ -380,7 +379,7 @@ export async function linkEpicToRoadmap(input: LinkEpicInput): Promise<Record<st
   };
 
   roadmap.epic_context[input.epicId] = epicContext;
-  saveRoadmap(projectRoot, roadmap);
+  saveRoadmap(writeDir, roadmap);
 
   log(`Roadmap: Linked epic ${input.epicId} to roadmap`);
 
@@ -393,17 +392,17 @@ export async function linkEpicToRoadmap(input: LinkEpicInput): Promise<Record<st
 }
 
 export async function roadmapList(input: RoadmapListInput): Promise<Record<string, unknown>> {
-  const projectRoot = resolveProjectPath(input.projectId);
+  const roadmapDir = await getReadPath(input.projectId, ROADMAP_SUBPATH);
 
-  if (!roadmapExists(projectRoot)) {
+  if (!roadmapExists(roadmapDir)) {
     return {
       error: 'Roadmap not initialized',
       suggestion: "Run 'decibel-architect roadmap init' or use roadmap_init tool to create roadmap.yaml",
     };
   }
 
-  const roadmap = loadRoadmap(projectRoot);
-  const annotations = loadOracleAnnotations(projectRoot);
+  const roadmap = loadRoadmap(roadmapDir);
+  const annotations = loadOracleAnnotations(roadmapDir);
 
   // Build epic list with context and health
   const epics = Object.values(roadmap.epic_context).map((ec) => {
@@ -457,13 +456,14 @@ export async function roadmapList(input: RoadmapListInput): Promise<Record<strin
 }
 
 export async function roadmapInit(input: RoadmapInitInput): Promise<Record<string, unknown>> {
-  const projectRoot = resolveProjectPath(input.projectId);
+  const readDir = await getReadPath(input.projectId, ROADMAP_SUBPATH);
+  const writeDir = await getWritePath(input.projectId, ROADMAP_SUBPATH);
 
-  if (roadmapExists(projectRoot)) {
+  if (roadmapExists(readDir)) {
     return {
       status: 'already_exists',
       message: 'Roadmap already exists',
-      path: getRoadmapPath(projectRoot),
+      path: getRoadmapPath(readDir),
     };
   }
 
@@ -507,13 +507,13 @@ export async function roadmapInit(input: RoadmapInitInput): Promise<Record<strin
     epic_context: {},
   };
 
-  saveRoadmap(projectRoot, roadmap);
+  saveRoadmap(writeDir, roadmap);
 
   log(`Roadmap: Initialized roadmap for ${input.projectId}`);
 
   return {
     status: 'initialized',
-    path: getRoadmapPath(projectRoot),
+    path: getRoadmapPath(writeDir),
     objectives: roadmap.objectives.length,
     themes: roadmap.themes.length,
     milestones: roadmap.milestones.length,
