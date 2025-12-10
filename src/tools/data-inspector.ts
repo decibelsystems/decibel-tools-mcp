@@ -147,14 +147,14 @@ export interface ScanDataOutput {
 // ============================================================================
 
 /**
- * Find the decibel root directory by walking up from the start path
+ * Find the .decibel root directory by walking up from the start path
  */
 export function findDecibelRoot(start?: string): string | undefined {
   const startPath = start || process.env.DECIBEL_PROJECT_ROOT || process.cwd();
   let current = path.resolve(startPath);
 
   while (true) {
-    const candidate = path.join(current, 'decibel');
+    const candidate = path.join(current, '.decibel');
     if (fsSync.existsSync(candidate) && fsSync.statSync(candidate).isDirectory()) {
       return candidate;
     }
@@ -167,7 +167,7 @@ export function findDecibelRoot(start?: string): string | undefined {
 }
 
 /**
- * Get the project name from the decibel root's parent directory
+ * Get the project name from the .decibel root's parent directory
  */
 export function getProjectNameFromRoot(decibelRoot: string): string {
   const projectDir = path.dirname(decibelRoot);
@@ -175,10 +175,10 @@ export function getProjectNameFromRoot(decibelRoot: string): string {
 }
 
 /**
- * Get global data root (DECIBEL_MCP_ROOT or default)
+ * Get global data root (DECIBEL_MCP_ROOT or ~/.decibel)
  */
 export function getGlobalRoot(): string {
-  return process.env.DECIBEL_MCP_ROOT || path.join(os.homedir(), 'decibel-mcp-data');
+  return process.env.DECIBEL_MCP_ROOT || path.join(os.homedir(), '.decibel');
 }
 
 // ============================================================================
@@ -236,7 +236,7 @@ function parseSimpleYaml(content: string): Record<string, unknown> {
 // ============================================================================
 
 /**
- * Load all issues from the decibel/sentinel/issues directory
+ * Load all issues from the .decibel/sentinel/issues directory
  */
 export async function loadIssues(decibelRoot: string): Promise<InspectorIssue[]> {
   const issuesDir = path.join(decibelRoot, 'sentinel', 'issues');
@@ -278,7 +278,7 @@ export async function loadIssues(decibelRoot: string): Promise<InspectorIssue[]>
 }
 
 /**
- * Load all epics from the decibel/sentinel/epics directory
+ * Load all epics from the .decibel/sentinel/epics directory
  */
 export async function loadEpics(decibelRoot: string): Promise<InspectorEpic[]> {
   const epicsDir = path.join(decibelRoot, 'sentinel', 'epics');
@@ -319,7 +319,7 @@ export async function loadEpics(decibelRoot: string): Promise<InspectorEpic[]> {
 }
 
 /**
- * Load all ADRs from the decibel/architect/adrs directory
+ * Load all ADRs from the .decibel/architect/adrs directory
  */
 export async function loadADRs(decibelRoot: string): Promise<InspectorADR[]> {
   const adrsDir = path.join(decibelRoot, 'architect', 'adrs');
@@ -732,13 +732,13 @@ export async function scanData(input: ScanDataInput): Promise<ScanDataOutput> {
     };
   }
 
-  // Find decibel root
+  // Find .decibel root
   const decibelRoot = findDecibelRoot();
   if (!decibelRoot) {
     return {
       scope,
       projectName: 'unknown',
-      error: `No decibel directory found above ${process.cwd()}. Data inspector cannot run.`,
+      error: `No .decibel directory found above ${process.cwd()}. Data inspector cannot run.`,
     };
   }
 
@@ -786,7 +786,7 @@ export function formatScanOutput(output: ScanDataOutput): string {
   lines.push('SENTINEL DATA INSPECTOR');
   lines.push(`  Project: ${output.projectName}`);
   if (output.decibelRoot) {
-    lines.push(`  decibel root: ${output.decibelRoot}`);
+    lines.push(`  .decibel root: ${output.decibelRoot}`);
   }
 
   if (output.error) {

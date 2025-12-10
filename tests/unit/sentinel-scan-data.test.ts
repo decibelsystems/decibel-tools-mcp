@@ -72,7 +72,7 @@ describe('sentinel-scan-data', () => {
     });
 
     it('should build correct args for full input', () => {
-      const args = buildCommandArgs('/Users/ben/decibel/senken-trading-agent', {
+      const args = buildCommandArgs('/path/to/my-project', {
         validate: true,
         flags: ['orphans', 'stale', 'invalid'],
         days: 14,
@@ -82,7 +82,7 @@ describe('sentinel-scan-data', () => {
         '-m',
         'sentinel.data_inspector',
         '--project-root',
-        '/Users/ben/decibel/senken-trading-agent',
+        '/path/to/my-project',
         '--json',
         '--days',
         '14',
@@ -92,9 +92,9 @@ describe('sentinel-scan-data', () => {
       ]);
     });
 
-    it('should build args matching expected format for senken project', () => {
+    it('should build args matching expected format', () => {
       // This test validates the exact format described in requirements
-      const projectRoot = '/Users/ben/decibel/senken-trading-agent';
+      const projectRoot = '/path/to/my-project';
       const args = buildCommandArgs(projectRoot, {
         validate: true,
         flags: ['orphans'],
