@@ -1,0 +1,12 @@
+id: ADR-0002
+scope: project
+project: decibel-tools
+title: Node.js MCP Bridge over Python CLIs for Distribution
+status: accepted
+created_at: 2025-12-10T00:05:05.549Z
+updated_at: 2025-12-10T00:05:05.549Z
+context: Decibel tools need to be distributed to Claude users via Desktop Extension (.mcpb) and Claude Code Plugin. The core implementation is in Python. Full port to Node.js would be expensive, risky, and duplicate logic.
+decision: Use a thin Node.js MCP server as a bridge layer that shells out to Python CLIs. The Node shim handles MCP protocol communication, user config, and JSON parsing. All business logic remains in Python. The Python CLIs become the canonical interface, supporting --json output for programmatic consumption.
+consequences: "Positive: Python logic unchanged; single source of truth; Node shim is minimal (<500 LOC); faster to ship. Negative: Requires Python on user machine for Desktop Extension (acceptable for v1, can bundle frozen binary later); subprocess overhead per tool call (negligible for these use cases); two codebases to maintain (but Node layer is thin). Risk: CLI interface becomes contract; breaking changes require coordination."
+related_epics:
+  - EPIC-0008
