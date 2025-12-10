@@ -1386,9 +1386,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'sentinel_createIssue': {
         const input = args as unknown as CreateSentinelIssueInput;
 
-        if (!input.projectId || !input.title) {
-          throw new Error('Missing required fields: projectId and title are required');
+     // Validate priority if provided
+        if (input.priority) {
+          const validPriorities: SentinelIssuePriority[] = ['low', 'medium', 'high'];
+          if (!validPriorities.includes(input.priority)) {
+            throw new Error(`Invalid priority. Must be one of: ${validPriorities.join(', ')}`);
+          }
         }
 
-        // Validate priority if provided
-        if (input
+        const result = await createSentinelIssue(input);
+
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
