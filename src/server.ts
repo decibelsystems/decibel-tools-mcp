@@ -74,6 +74,13 @@ import {
   BumpFrictionInput,
 } from './tools/friction.js';
 import {
+  logCrit,
+  LogCritInput,
+  CritSentiment,
+  listCrits,
+  ListCritsInput,
+} from './tools/crit.js';
+import {
   listProjects,
   registerProject,
   unregisterProject,
@@ -878,6 +885,71 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
 
+      // Crit tools - Early creative feedback
+      {
+        name: 'designer_crit',
+        description: 'Log early creative feedback before decisions crystallize. Use for gut reactions, observations, questions, and hunches during exploration phases.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'The project identifier',
+            },
+            area: {
+              type: 'string',
+              description: 'Area being critiqued (e.g., "3D", "motion", "layout", "ux")',
+            },
+            observation: {
+              type: 'string',
+              description: 'The crit itself - what you noticed, felt, or wondered',
+            },
+            sentiment: {
+              type: 'string',
+              enum: ['positive', 'negative', 'neutral', 'question'],
+              description: 'The tone of the observation (default: neutral)',
+            },
+            context: {
+              type: 'string',
+              description: 'Optional context - what were you testing/looking at?',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional tags for filtering',
+            },
+          },
+          required: ['project_id', 'area', 'observation'],
+        },
+      },
+      {
+        name: 'designer_list_crits',
+        description: 'List crit observations for a project, optionally filtered by area or sentiment.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'The project identifier',
+            },
+            area: {
+              type: 'string',
+              description: 'Filter by area (e.g., "3D", "motion")',
+            },
+            sentiment: {
+              type: 'string',
+              enum: ['positive', 'negative', 'neutral', 'question'],
+              description: 'Filter by sentiment',
+            },
+            limit: {
+              type: 'integer',
+              description: 'Maximum number of entries to return (most recent first)',
+            },
+          },
+          required: ['project_id'],
+        },
+      },
+
       // Registry tools
       {
         name: 'registry_list',
@@ -1495,6 +1567,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             isError: true,
           };
         }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // Crit tools
+      case 'designer_crit': {
+        const input = args as unknown as LogCritInput;
+        if (!input.project_id || !input.area || !input.observation) {
+          throw new Error('Missing required fields: project_id, area, and observation are required');
+        }
+        if (input.sentiment) {
+          const valid: CritSentiment[] = ['positive', 'negative', 'neutral', 'question'];
+          if (!valid.includes(input.sentiment)) {
+            throw new Error(`Invalid sentiment. Must be one of: ${valid.join(', ')}`);
+          }
+        }
+        const result = await logCrit(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'designer_list_crits': {
+        const input = args as unknown as ListCritsInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
+        if (input.sentiment) {
+          const valid: CritSentiment[] = ['positive', 'negative', 'neutral', 'question'];
+          if (!valid.includes(input.sentiment)) {
+            throw new Error(`Invalid sentiment. Must be one of: ${valid.join(', ')}`);
+          }
+        }
+        const result = await listCrits(input);
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
