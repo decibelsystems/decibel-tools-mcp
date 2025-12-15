@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { parse as parseYaml, parseAllDocuments, stringify as stringifyYaml } from 'yaml';
 import { log } from './config.js';
 import { getWritePath, readFilesFromBothPaths } from './decibelPaths.js';
 
@@ -86,6 +86,37 @@ async function ensureDir(dirPath: string): Promise<void> {
   }
 }
 
+/**
+ * Safely parse YAML content that might contain multiple documents (frontmatter format).
+ * Returns the first document's contents, or throws if no valid document found.
+ */
+function safeParseYaml(content: string): Record<string, unknown> {
+  // First, try simple parse (most common case)
+  try {
+    return parseYaml(content) as Record<string, unknown>;
+  } catch (err) {
+    // Check if error is about multiple documents
+    const message = err instanceof Error ? err.message : String(err);
+    if (!message.includes('multiple documents')) {
+      throw err;
+    }
+  }
+
+  // Handle multi-document YAML (frontmatter format with --- delimiters)
+  const docs = parseAllDocuments(content);
+  if (docs.length === 0) {
+    throw new Error('No YAML documents found');
+  }
+
+  // Return the first document (usually the frontmatter)
+  const firstDoc = docs[0].toJSON();
+  if (typeof firstDoc !== 'object' || firstDoc === null) {
+    throw new Error('First YAML document is not an object');
+  }
+
+  return firstDoc as Record<string, unknown>;
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -111,7 +142,7 @@ export async function listIssuesForProject(
   for (const { filePath, source } of files) {
     try {
       const content = await fs.readFile(filePath, 'utf-8');
-      const parsed = parseYaml(content) as Record<string, unknown>;
+      const parsed = safeParseYaml(content);
 
       // Validate required fields
       const id = parsed.id as string;

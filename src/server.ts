@@ -108,6 +108,81 @@ import {
   createProjectAdr,
   AdrInput,
 } from './architectAdrs.js';
+import {
+  createProposal,
+  CreateProposalInput,
+  scaffoldExperiment,
+  ScaffoldExperimentInput,
+  listDojo,
+  ListDojoInput,
+  runExperiment,
+  RunExperimentInput,
+  getExperimentResults,
+  GetResultsInput,
+  addWish,
+  AddWishInput,
+  listWishes,
+  ListWishesInput,
+  canGraduate,
+  CanGraduateInput,
+  isDojoError,
+  ExperimentType,
+} from './tools/dojo.js';
+import {
+  loadGraduatedTools,
+  graduatedToolsToMcpDefinitions,
+  executeGraduatedTool,
+  findGraduatedTool,
+  GraduatedTool,
+} from './tools/dojoGraduated.js';
+import { startHttpServer, parseHttpArgs } from './httpServer.js';
+
+// ============================================================================
+// Helper: Normalize parameter keys to handle case variations
+// ============================================================================
+
+/**
+ * Normalize object keys to match expected schema.
+ * Handles case-insensitive matching and strips common suffixes like "(summary)".
+ */
+function normalizeParams<T>(
+  args: Record<string, unknown>,
+  expectedKeys: string[]
+): T {
+  const result: Record<string, unknown> = {};
+  const keyMap = new Map<string, string>();
+
+  // Build a lowercase -> expected key map
+  for (const key of expectedKeys) {
+    keyMap.set(key.toLowerCase(), key);
+  }
+
+  // Process each input key
+  for (const [inputKey, value] of Object.entries(args)) {
+    // Clean the key: remove suffixes like "(summary)", trim whitespace
+    let cleanKey = inputKey
+      .replace(/\s*\([^)]*\)\s*/g, '') // Remove (summary), (optional), etc.
+      .trim();
+
+    // Try exact match first
+    if (expectedKeys.includes(cleanKey)) {
+      result[cleanKey] = value;
+      continue;
+    }
+
+    // Try case-insensitive match
+    const lowerKey = cleanKey.toLowerCase();
+    if (keyMap.has(lowerKey)) {
+      result[keyMap.get(lowerKey)!] = value;
+      continue;
+    }
+
+    // Keep unrecognized keys as-is (might be optional params)
+    result[inputKey] = value;
+  }
+
+  return result as T;
+}
 
 const config = getConfig();
 
@@ -115,6 +190,10 @@ log(`Starting Decibel MCP Server`);
 log(`Environment: ${config.env}`);
 log(`Organization: ${config.org}`);
 log(`Root Directory: ${config.rootDir}`);
+
+// Load graduated Dojo tools
+const graduatedTools: GraduatedTool[] = loadGraduatedTools();
+log(`Loaded ${graduatedTools.length} graduated Dojo tools`);
 
 const server = new Server(
   {
@@ -1032,6 +1111,185 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['projectId'],
         },
       },
+
+      // Dojo tools - AI Feature Incubator
+      {
+        name: 'dojo_create_proposal',
+        description: 'Create a new Dojo proposal for a feature or capability. AI can propose, but only humans can enable experiments.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            title: {
+              type: 'string',
+              description: 'Proposal title (e.g., "Exchange Rate Limit Pattern Detector")',
+            },
+            problem: {
+              type: 'string',
+              description: 'The problem this proposal addresses',
+            },
+            hypothesis: {
+              type: 'string',
+              description: 'Why this solution will work',
+            },
+            owner: {
+              type: 'string',
+              enum: ['ai', 'human'],
+              description: 'Who created this proposal (default: ai)',
+            },
+            target_module: {
+              type: 'string',
+              description: 'Target module: sentinel|designer|architect|oracle|tools|dojo',
+            },
+            scope_in: {
+              type: 'array',
+              items: { type: 'string' },
+              description: "What's included in scope",
+            },
+            scope_out: {
+              type: 'array',
+              items: { type: 'string' },
+              description: "What's explicitly NOT included",
+            },
+            acceptance: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Acceptance criteria - how we know it works',
+            },
+            risks: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'What could go wrong',
+            },
+            follows: {
+              type: 'string',
+              description: 'Proposal ID this follows (for feedback loops)',
+            },
+            insight: {
+              type: 'string',
+              description: 'Insight from previous experiment that led to this proposal',
+            },
+          },
+          required: ['title', 'problem', 'hypothesis'],
+        },
+      },
+      {
+        name: 'dojo_scaffold_experiment',
+        description: 'Create an experiment skeleton from a proposal. This creates the experiment directory with manifest, entrypoint, and README.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            proposal_id: {
+              type: 'string',
+              description: 'Proposal ID (e.g., "DOJO-PROP-0001")',
+            },
+            script_type: {
+              type: 'string',
+              enum: ['py', 'ts'],
+              description: 'Script type for entrypoint (default: py)',
+            },
+            experiment_type: {
+              type: 'string',
+              enum: ['script', 'tool', 'check', 'prompt'],
+              description: 'Experiment type: script (default), tool (MCP tool candidate), check (validation), prompt (template)',
+            },
+          },
+          required: ['proposal_id'],
+        },
+      },
+      {
+        name: 'dojo_list',
+        description: 'List Dojo proposals, experiments, and wishes with their states.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            filter: {
+              type: 'string',
+              enum: ['proposals', 'experiments', 'wishes', 'all'],
+              description: 'Filter results (default: all)',
+            },
+          },
+        },
+      },
+      {
+        name: 'dojo_run_experiment',
+        description: 'Run an experiment in SANDBOX mode. Results are written to dojo/results/. NOTE: This always runs in sandbox mode - enabled mode is human-only via CLI.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            experiment_id: {
+              type: 'string',
+              description: 'Experiment ID (e.g., "DOJO-EXP-0001")',
+            },
+          },
+          required: ['experiment_id'],
+        },
+      },
+      {
+        name: 'dojo_get_results',
+        description: 'Get results from a previous experiment run. Use to examine what an experiment produced.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            experiment_id: {
+              type: 'string',
+              description: 'Experiment ID (e.g., "DOJO-EXP-0001")',
+            },
+            run_id: {
+              type: 'string',
+              description: 'Specific run ID (default: latest)',
+            },
+          },
+          required: ['experiment_id'],
+        },
+      },
+      {
+        name: 'dojo_add_wish',
+        description: 'Add a capability wish to the Dojo wishlist. Use when you encounter something you wish you could do but cannot.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            capability: {
+              type: 'string',
+              description: 'The capability you wish you had (e.g., "Scan for API calls inside loops")',
+            },
+            reason: {
+              type: 'string',
+              description: 'Why you need this capability',
+            },
+          },
+          required: ['capability', 'reason'],
+        },
+      },
+      {
+        name: 'dojo_list_wishes',
+        description: 'List wishes from the Dojo wishlist. Shows what capabilities AI has requested.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            unresolved_only: {
+              type: 'boolean',
+              description: 'Only show unresolved wishes (default: false)',
+            },
+          },
+        },
+      },
+      {
+        name: 'dojo_can_graduate',
+        description: 'Check if an experiment can be graduated to a real tool. Returns eligibility and reasons. (Actual graduation is human-only via CLI)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            experiment_id: {
+              type: 'string',
+              description: 'Experiment ID (e.g., "DOJO-EXP-0001")',
+            },
+          },
+          required: ['experiment_id'],
+        },
+      },
+
+      // Dynamically add graduated Dojo tools
+      ...graduatedToolsToMcpDefinitions(graduatedTools),
     ],
   };
 });
@@ -1047,7 +1305,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       // Designer tools
       case 'designer_record_design_decision': {
-        const input = args as unknown as RecordDesignDecisionInput;
+        // Normalize parameter keys to handle case variations
+        const rawInput = args as Record<string, unknown>;
+        const input = normalizeParams<RecordDesignDecisionInput>(
+          rawInput,
+          ['project_id', 'projectId', 'area', 'summary', 'rationale', 'implementation_note', 'implementationNote', 'location']
+        );
+        // Also support projectId as alias for project_id
+        if (!input.project_id && rawInput.projectId) {
+          input.project_id = rawInput.projectId as string;
+        }
         if (!input.project_id || !input.area || !input.summary) {
           throw new Error('Missing required fields: project_id, area, and summary are required');
         }
@@ -1059,7 +1326,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       // Architect tools
       case 'architect_record_arch_decision': {
-        const input = args as unknown as RecordArchDecisionInput;
+        // Normalize parameter keys to handle case variations
+        const rawArchInput = args as Record<string, unknown>;
+        const input = normalizeParams<RecordArchDecisionInput>(
+          rawArchInput,
+          ['system_id', 'systemId', 'change', 'rationale', 'impact', 'location']
+        );
+        // Also support systemId as alias for system_id
+        if (!input.system_id && rawArchInput.systemId) {
+          input.system_id = rawArchInput.systemId as string;
+        }
         if (!input.system_id || !input.change || !input.rationale) {
           throw new Error('Missing required fields: system_id, change, and rationale are required');
         }
@@ -1436,7 +1712,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       // Architect tools - Project ADRs (projectId-based)
       case 'architect_createAdr': {
-        const input = args as unknown as AdrInput;
+        // Normalize parameter keys to handle case variations (e.g., "Context" -> "context")
+        const input = normalizeParams<AdrInput>(
+          args as Record<string, unknown>,
+          ['projectId', 'title', 'context', 'decision', 'consequences', 'relatedIssues', 'relatedEpics']
+        );
 
         if (!input.projectId || !input.title || !input.context || !input.decision || !input.consequences) {
           throw new Error('Missing required fields: projectId, title, context, decision, and consequences are required');
@@ -1745,8 +2025,159 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       }
 
-      default:
+      // Dojo tools - AI Feature Incubator
+      case 'dojo_create_proposal': {
+        const input = args as unknown as CreateProposalInput;
+        if (!input.title || !input.problem || !input.hypothesis) {
+          throw new Error('Missing required fields: title, problem, and hypothesis are required');
+        }
+        const result = await createProposal(input);
+        if (isDojoError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'dojo_scaffold_experiment': {
+        const input = args as unknown as ScaffoldExperimentInput;
+        if (!input.proposal_id) {
+          throw new Error('Missing required field: proposal_id');
+        }
+        if (input.experiment_type) {
+          const validTypes: ExperimentType[] = ['script', 'tool', 'check', 'prompt'];
+          if (!validTypes.includes(input.experiment_type)) {
+            throw new Error(`Invalid experiment_type. Must be one of: ${validTypes.join(', ')}`);
+          }
+        }
+        const result = await scaffoldExperiment(input);
+        if (isDojoError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'dojo_list': {
+        const input = args as unknown as ListDojoInput;
+        const result = await listDojo(input);
+        if (isDojoError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'dojo_run_experiment': {
+        const input = args as unknown as RunExperimentInput;
+        if (!input.experiment_id) {
+          throw new Error('Missing required field: experiment_id');
+        }
+        // SAFETY: runExperiment always uses --sandbox, never --enabled
+        const result = await runExperiment(input);
+        if (isDojoError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'dojo_get_results': {
+        const input = args as unknown as GetResultsInput;
+        if (!input.experiment_id) {
+          throw new Error('Missing required field: experiment_id');
+        }
+        const result = await getExperimentResults(input);
+        if (isDojoError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'dojo_add_wish': {
+        const input = args as unknown as AddWishInput;
+        if (!input.capability || !input.reason) {
+          throw new Error('Missing required fields: capability and reason are required');
+        }
+        const result = await addWish(input);
+        if (isDojoError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'dojo_list_wishes': {
+        const input = args as unknown as ListWishesInput;
+        const result = await listWishes(input);
+        if (isDojoError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'dojo_can_graduate': {
+        const input = args as unknown as CanGraduateInput;
+        if (!input.experiment_id) {
+          throw new Error('Missing required field: experiment_id');
+        }
+        const result = await canGraduate(input);
+        if (isDojoError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      default: {
+        // Check if this is a graduated tool
+        if (name.startsWith('graduated_')) {
+          const tool = findGraduatedTool(graduatedTools, name);
+          if (tool) {
+            log(`Executing graduated tool: ${tool.tool_name}`);
+            const result = await executeGraduatedTool(tool, args as Record<string, unknown>);
+            return {
+              content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+              isError: !result.success,
+            };
+          }
+        }
         throw new Error(`Unknown tool: ${name}`);
+      }
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1760,9 +2191,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start the server
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  log('Decibel MCP Server running on stdio');
+  const { httpMode, port, authToken, host } = parseHttpArgs(process.argv);
+
+  if (httpMode) {
+    // HTTP mode for remote access (ChatGPT, etc.)
+    log('Starting in HTTP mode');
+    await startHttpServer(server, { port, authToken, host });
+  } else {
+    // Default: stdio mode for Claude Code
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    log('Decibel MCP Server running on stdio');
+  }
 }
 
 main().catch((error) => {

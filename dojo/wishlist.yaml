@@ -1,0 +1,6 @@
+wishes:
+- id: WISH-0001
+  capability: Validate JSON schemas automatically
+  reason: Smoke test from ChatGPT integration
+  proposed_by: ai
+  timestamp: '2025-12-15T01:11:11.265711+00:00'

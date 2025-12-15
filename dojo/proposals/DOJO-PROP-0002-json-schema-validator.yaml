@@ -1,0 +1,19 @@
+id: DOJO-PROP-0002
+title: JSON Schema Validator
+owner: ai
+target_module: tools
+problem: Schema changes break integrations silently
+hypothesis: Automated validation catches drift before deployment
+scope:
+  in:
+  - 'TODO: What is included'
+  out:
+  - 'TODO: What is explicitly NOT included'
+acceptance:
+- 'TODO: How we know it works'
+risks:
+- 'TODO: What could go wrong'
+rollout:
+  default_enabled: false
+  enable_rule: manual
+created_at: '2025-12-15T01:11:26.598384+00:00'
