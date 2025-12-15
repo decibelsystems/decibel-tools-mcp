@@ -10,10 +10,17 @@
  *
  * Safety: AI cannot enable/disable/graduate experiments.
  * Those actions are human-only via CLI.
+ *
+ * Project-scoped: All operations require project_id and work within {project_root}/dojo
+ * Role-based: caller_role determines what operations are allowed
  */
 
 import { spawn } from 'child_process';
+import path from 'path';
 import { log } from '../config.js';
+import { resolveProjectRoot } from '../projectPaths.js';
+import { CallerRole, enforceToolAccess, getSandboxPolicy, expandSandboxPaths } from './dojoPolicy.js';
+import { checkRateLimit, recordRequestStart, recordRequestEnd } from './rateLimiter.js';
 
 // ============================================================================
 // Types
@@ -21,7 +28,17 @@ import { log } from '../config.js';
 
 export type ExperimentType = 'script' | 'tool' | 'check' | 'prompt';
 
-export interface CreateProposalInput {
+/**
+ * Base input for all Dojo operations
+ * project_id: Required - identifies which project's Dojo to use
+ * caller_role: Optional - determines permissions (default: 'human')
+ */
+export interface DojoBaseInput {
+  project_id: string;
+  caller_role?: CallerRole;
+}
+
+export interface CreateProposalInput extends DojoBaseInput {
   title: string;
   problem: string;
   hypothesis: string;
@@ -41,7 +58,7 @@ export interface CreateProposalOutput {
   title: string;
 }
 
-export interface ScaffoldExperimentInput {
+export interface ScaffoldExperimentInput extends DojoBaseInput {
   proposal_id: string;
   script_type?: 'py' | 'ts';
   experiment_type?: ExperimentType;
@@ -55,7 +72,7 @@ export interface ScaffoldExperimentOutput {
   files_created: string[];
 }
 
-export interface ListDojoInput {
+export interface ListDojoInput extends DojoBaseInput {
   filter?: 'proposals' | 'experiments' | 'wishes' | 'all';
 }
 
@@ -93,7 +110,7 @@ export interface ListDojoOutput {
   };
 }
 
-export interface RunExperimentInput {
+export interface RunExperimentInput extends DojoBaseInput {
   experiment_id: string;
 }
 
@@ -106,7 +123,7 @@ export interface RunExperimentOutput {
   output?: Record<string, unknown>;
 }
 
-export interface GetResultsInput {
+export interface GetResultsInput extends DojoBaseInput {
   experiment_id: string;
   run_id?: string;
 }
@@ -121,7 +138,7 @@ export interface GetResultsOutput {
   stderr?: string;
 }
 
-export interface AddWishInput {
+export interface AddWishInput extends DojoBaseInput {
   capability: string;
   reason: string;
 }
@@ -132,7 +149,7 @@ export interface AddWishOutput {
   timestamp: string;
 }
 
-export interface ListWishesInput {
+export interface ListWishesInput extends DojoBaseInput {
   unresolved_only?: boolean;
 }
 
@@ -142,7 +159,7 @@ export interface ListWishesOutput {
   unresolved: number;
 }
 
-export interface CanGraduateInput {
+export interface CanGraduateInput extends DojoBaseInput {
   experiment_id: string;
 }
 
@@ -167,18 +184,80 @@ export interface DojoError {
 const DECIBEL_COMMAND = 'decibel';
 
 // ============================================================================
+// Helper: Resolve project Dojo root
+// ============================================================================
+
+export interface DojoContext {
+  projectId: string;
+  projectRoot: string;
+  dojoRoot: string;
+  callerRole: CallerRole;
+}
+
+/**
+ * Resolve the Dojo root for a project.
+ * Returns the path to {project_root}/.decibel/dojo
+ */
+export async function resolveDojoRoot(projectId: string): Promise<{ projectRoot: string; dojoRoot: string }> {
+  const project = await resolveProjectRoot(projectId);
+  const dojoRoot = path.join(project.root, '.decibel', 'dojo');
+  log(`dojo: Resolved project "${projectId}" to Dojo root: ${dojoRoot}`);
+  return { projectRoot: project.root, dojoRoot };
+}
+
+/**
+ * Build a full Dojo context with policy and rate limit enforcement
+ */
+export async function buildDojoContext(
+  projectId: string,
+  callerRole: CallerRole = 'human',
+  toolName: string
+): Promise<DojoContext> {
+  // Check rate limits first (for AI callers)
+  const rateLimitResult = checkRateLimit(callerRole);
+  if (!rateLimitResult.allowed) {
+    throw new Error(`Rate limit: ${rateLimitResult.reason}`);
+  }
+
+  // Enforce policy
+  enforceToolAccess(toolName, callerRole);
+
+  // Record request start (for concurrent tracking)
+  recordRequestStart(callerRole);
+
+  // Resolve paths
+  const { projectRoot, dojoRoot } = await resolveDojoRoot(projectId);
+
+  return {
+    projectId,
+    projectRoot,
+    dojoRoot,
+    callerRole,
+  };
+}
+
+/**
+ * Mark a Dojo request as complete (call in finally block)
+ */
+export function finishDojoRequest(callerRole: CallerRole = 'human'): void {
+  recordRequestEnd(callerRole);
+}
+
+// ============================================================================
 // Helper: Execute decibel CLI command
 // ============================================================================
 
 async function execDecibel(
-  args: string[]
+  args: string[],
+  cwd?: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  log(`dojo: Running ${DECIBEL_COMMAND} ${args.join(' ')}`);
+  log(`dojo: Running ${DECIBEL_COMMAND} ${args.join(' ')}${cwd ? ` (cwd: ${cwd})` : ''}`);
 
   return new Promise((resolve) => {
     const proc = spawn(DECIBEL_COMMAND, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env },
+      cwd: cwd || process.cwd(),
     });
 
     let stdout = '';
@@ -339,33 +418,46 @@ function parseListOutput(text: string): Partial<ListDojoOutput> {
 export async function createProposal(
   input: CreateProposalInput
 ): Promise<CreateProposalOutput | DojoError> {
-  const args = [
-    'dojo',
-    'propose',
-    '--title',
-    input.title,
-    '--problem',
-    input.problem,
-    '--hypothesis',
-    input.hypothesis,
-    '--owner',
-    input.owner || 'ai',
-  ];
+  const callerRole = input.caller_role || 'human';
 
-  if (input.target_module) {
-    args.push('--module', input.target_module);
+  // Build context with policy enforcement
+  const ctx = await buildDojoContext(
+    input.project_id,
+    callerRole,
+    'dojo_create_proposal'
+  );
+
+  try {
+    const args = [
+      'dojo',
+      'propose',
+      '--title',
+      input.title,
+      '--problem',
+      input.problem,
+      '--hypothesis',
+      input.hypothesis,
+      '--owner',
+      input.owner || 'ai',
+    ];
+
+    if (input.target_module) {
+      args.push('--module', input.target_module);
+    }
+
+    if (input.follows) {
+      args.push('--follows', input.follows);
+    }
+
+    if (input.insight) {
+      args.push('--insight', input.insight);
+    }
+
+    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
+    return parseTextOutput<CreateProposalOutput>(stdout, stderr, exitCode, parseProposalOutput);
+  } finally {
+    finishDojoRequest(callerRole);
   }
-
-  if (input.follows) {
-    args.push('--follows', input.follows);
-  }
-
-  if (input.insight) {
-    args.push('--insight', input.insight);
-  }
-
-  const { stdout, stderr, exitCode } = await execDecibel(args);
-  return parseTextOutput<CreateProposalOutput>(stdout, stderr, exitCode, parseProposalOutput);
 }
 
 /**
@@ -374,31 +466,57 @@ export async function createProposal(
 export async function scaffoldExperiment(
   input: ScaffoldExperimentInput
 ): Promise<ScaffoldExperimentOutput | DojoError> {
-  const args = ['dojo', 'scaffold', input.proposal_id];
+  const callerRole = input.caller_role || 'human';
 
-  if (input.script_type) {
-    args.push('--script-type', input.script_type);
+  // Build context with policy enforcement
+  const ctx = await buildDojoContext(
+    input.project_id,
+    callerRole,
+    'dojo_scaffold_experiment'
+  );
+
+  try {
+    const args = ['dojo', 'scaffold', input.proposal_id];
+
+    if (input.script_type) {
+      args.push('--script-type', input.script_type);
+    }
+
+    if (input.experiment_type) {
+      args.push('--type', input.experiment_type);
+    }
+
+    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
+    return parseTextOutput<ScaffoldExperimentOutput>(stdout, stderr, exitCode, parseScaffoldOutput);
+  } finally {
+    finishDojoRequest(callerRole);
   }
-
-  if (input.experiment_type) {
-    args.push('--type', input.experiment_type);
-  }
-
-  const { stdout, stderr, exitCode } = await execDecibel(args);
-  return parseTextOutput<ScaffoldExperimentOutput>(stdout, stderr, exitCode, parseScaffoldOutput);
 }
 
 /**
  * List proposals, experiments, and wishes
  */
 export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | DojoError> {
-  const args = ['dojo', 'list'];
+  const callerRole = input.caller_role || 'human';
 
-  // Note: --filter may not be supported, but we'll try
-  // The CLI will ignore unknown args or error gracefully
+  // Build context with policy enforcement
+  const ctx = await buildDojoContext(
+    input.project_id,
+    callerRole,
+    'dojo_list'
+  );
 
-  const { stdout, stderr, exitCode } = await execDecibel(args);
-  return parseTextOutput<ListDojoOutput>(stdout, stderr, exitCode, parseListOutput);
+  try {
+    const args = ['dojo', 'list'];
+
+    // Note: --filter may not be supported, but we'll try
+    // The CLI will ignore unknown args or error gracefully
+
+    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
+    return parseTextOutput<ListDojoOutput>(stdout, stderr, exitCode, parseListOutput);
+  } finally {
+    finishDojoRequest(callerRole);
+  }
 }
 
 /**
@@ -407,27 +525,44 @@ export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | D
 export async function runExperiment(
   input: RunExperimentInput
 ): Promise<RunExperimentOutput | DojoError> {
-  // SAFETY: Always use --sandbox, never expose --enabled
-  const args = ['dojo', 'run', input.experiment_id, '--sandbox'];
+  const callerRole = input.caller_role || 'human';
 
-  const { stdout, stderr, exitCode } = await execDecibel(args);
+  // Build context with policy enforcement
+  const ctx = await buildDojoContext(
+    input.project_id,
+    callerRole,
+    'dojo_run_experiment'
+  );
 
-  // Parse the output
-  const cleanOutput = stripAnsi(stdout);
+  try {
+    // Get sandbox policy for the caller
+    const sandbox = getSandboxPolicy(ctx.callerRole);
+    const expandedSandbox = expandSandboxPaths(sandbox, ctx.dojoRoot);
 
-  // Try to extract key information
-  const durationMatch = cleanOutput.match(/Duration:\s*([\d.]+)s/);
-  const resultsMatch = cleanOutput.match(/Results:\s*(\S+)/);
-  const successMatch = cleanOutput.match(/✓|completed successfully/i);
+    // SAFETY: Always use --sandbox, never expose --enabled
+    const args = ['dojo', 'run', input.experiment_id, '--sandbox'];
 
-  return {
-    experiment_id: input.experiment_id,
-    status: exitCode === 0 && successMatch ? 'success' : 'failure',
-    exit_code: exitCode,
-    duration_seconds: durationMatch ? parseFloat(durationMatch[1]) : 0,
-    results_dir: resultsMatch?.[1] || 'unknown',
-    output: { raw_output: cleanOutput },
-  };
+    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
+
+    // Parse the output
+    const cleanOutput = stripAnsi(stdout);
+
+    // Try to extract key information
+    const durationMatch = cleanOutput.match(/Duration:\s*([\d.]+)s/);
+    const resultsMatch = cleanOutput.match(/Results:\s*(\S+)/);
+    const successMatch = cleanOutput.match(/✓|completed successfully/i);
+
+    return {
+      experiment_id: input.experiment_id,
+      status: exitCode === 0 && successMatch ? 'success' : 'failure',
+      exit_code: exitCode,
+      duration_seconds: durationMatch ? parseFloat(durationMatch[1]) : 0,
+      results_dir: resultsMatch?.[1] || path.join(ctx.dojoRoot, 'results'),
+      output: { raw_output: cleanOutput, sandbox_policy: expandedSandbox },
+    };
+  } finally {
+    finishDojoRequest(callerRole);
+  }
 }
 
 /**
@@ -436,78 +571,117 @@ export async function runExperiment(
 export async function getExperimentResults(
   input: GetResultsInput
 ): Promise<GetResultsOutput | DojoError> {
-  const args = ['dojo', 'results', input.experiment_id];
+  const callerRole = input.caller_role || 'human';
 
-  if (input.run_id) {
-    args.push('--run', input.run_id);
-  }
+  // Build context with policy enforcement
+  const ctx = await buildDojoContext(
+    input.project_id,
+    callerRole,
+    'dojo_get_results'
+  );
 
-  const { stdout, stderr, exitCode } = await execDecibel(args);
-  const cleanOutput = stripAnsi(stdout);
+  try {
+    const args = ['dojo', 'results', input.experiment_id];
 
-  if (exitCode !== 0) {
+    if (input.run_id) {
+      args.push('--run', input.run_id);
+    }
+
+    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
+    const cleanOutput = stripAnsi(stdout);
+
+    if (exitCode !== 0) {
+      return {
+        error: `Command exited with code ${exitCode}`,
+        exitCode,
+        stderr: stripAnsi(stderr).slice(0, 500),
+      };
+    }
+
+    // Parse run info from output
+    const runMatch = cleanOutput.match(/(\d{8}-\d{6})/);
+
     return {
-      error: `Command exited with code ${exitCode}`,
-      exitCode,
-      stderr: stripAnsi(stderr).slice(0, 500),
+      experiment_id: input.experiment_id,
+      run_id: runMatch?.[1] || 'latest',
+      timestamp: new Date().toISOString(),
+      exit_code: 0,
+      stdout: cleanOutput,
     };
+  } finally {
+    finishDojoRequest(callerRole);
   }
-
-  // Parse run info from output
-  const runMatch = cleanOutput.match(/(\d{8}-\d{6})/);
-
-  return {
-    experiment_id: input.experiment_id,
-    run_id: runMatch?.[1] || 'latest',
-    timestamp: new Date().toISOString(),
-    exit_code: 0,
-    stdout: cleanOutput,
-  };
 }
 
 /**
  * Add a wish to the wishlist
  */
 export async function addWish(input: AddWishInput): Promise<AddWishOutput | DojoError> {
-  const args = ['dojo', 'wish', input.capability, '--reason', input.reason];
+  const callerRole = input.caller_role || 'human';
 
-  const { stdout, stderr, exitCode } = await execDecibel(args);
-  return parseTextOutput<AddWishOutput>(stdout, stderr, exitCode, parseWishOutput);
+  // Build context with policy enforcement
+  const ctx = await buildDojoContext(
+    input.project_id,
+    callerRole,
+    'dojo_add_wish'
+  );
+
+  try {
+    const args = ['dojo', 'wish', input.capability, '--reason', input.reason];
+
+    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
+    return parseTextOutput<AddWishOutput>(stdout, stderr, exitCode, parseWishOutput);
+  } finally {
+    finishDojoRequest(callerRole);
+  }
 }
 
 /**
  * List wishes
  */
 export async function listWishes(input: ListWishesInput): Promise<ListWishesOutput | DojoError> {
-  const args = ['dojo', 'wishes'];
+  const callerRole = input.caller_role || 'human';
 
-  if (input.unresolved_only) {
-    args.push('--unresolved');
-  }
+  // Build context with policy enforcement
+  const ctx = await buildDojoContext(
+    input.project_id,
+    callerRole,
+    'dojo_list_wishes'
+  );
 
-  const { stdout, stderr, exitCode } = await execDecibel(args);
-  const cleanOutput = stripAnsi(stdout);
+  try {
+    const args = ['dojo', 'wishes'];
 
-  if (exitCode !== 0) {
+    if (input.unresolved_only) {
+      args.push('--unresolved');
+    }
+
+    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
+    const cleanOutput = stripAnsi(stdout);
+
+    if (exitCode !== 0) {
+      return {
+        error: `Command exited with code ${exitCode}`,
+        exitCode,
+        stderr: stripAnsi(stderr).slice(0, 500),
+      };
+    }
+
+    // Parse wishes from output
+    const wishMatches = cleanOutput.match(/WISH-\d+/g) || [];
+
     return {
-      error: `Command exited with code ${exitCode}`,
-      exitCode,
-      stderr: stripAnsi(stderr).slice(0, 500),
+      wishes: wishMatches.map((id) => ({
+        id,
+        capability: 'See raw output',
+        reason: 'See raw output',
+      })),
+      total: wishMatches.length,
+      unresolved: wishMatches.length,
     };
+  } finally {
+    finishDojoRequest(callerRole);
   }
-
-  // Parse wishes from output
-  const wishMatches = cleanOutput.match(/WISH-\d+/g) || [];
-
-  return {
-    wishes: wishMatches.map((id) => ({
-      id,
-      capability: 'See raw output',
-      reason: 'See raw output',
-    })),
-    total: wishMatches.length,
-    unresolved: wishMatches.length,
-  };
 }
 
 /**
@@ -516,35 +690,48 @@ export async function listWishes(input: ListWishesInput): Promise<ListWishesOutp
 export async function canGraduate(
   input: CanGraduateInput
 ): Promise<CanGraduateOutput | DojoError> {
-  // Use 'status' command since 'can-graduate' doesn't exist
-  const args = ['dojo', 'status', input.experiment_id];
+  const callerRole = input.caller_role || 'human';
 
-  const { stdout, stderr, exitCode } = await execDecibel(args);
-  const cleanOutput = stripAnsi(stdout);
+  // Build context with policy enforcement
+  const ctx = await buildDojoContext(
+    input.project_id,
+    callerRole,
+    'dojo_can_graduate'
+  );
 
-  if (exitCode !== 0) {
-    // If status fails, the experiment might not exist
+  try {
+    // Use 'status' command since 'can-graduate' doesn't exist
+    const args = ['dojo', 'status', input.experiment_id];
+
+    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
+    const cleanOutput = stripAnsi(stdout);
+
+    if (exitCode !== 0) {
+      // If status fails, the experiment might not exist
+      return {
+        error: `Could not check graduation status: ${stripAnsi(stderr).slice(0, 200)}`,
+        exitCode,
+        stderr: stripAnsi(stderr).slice(0, 500),
+      };
+    }
+
+    // Parse status to determine graduation eligibility
+    const isEnabled = cleanOutput.includes('● enabled');
+    const hasToolDef = cleanOutput.includes('type: tool') || cleanOutput.includes('[tool]');
+
     return {
-      error: `Could not check graduation status: ${stripAnsi(stderr).slice(0, 200)}`,
-      exitCode,
-      stderr: stripAnsi(stderr).slice(0, 500),
+      experiment_id: input.experiment_id,
+      can_graduate: isEnabled && hasToolDef,
+      has_tool_definition: hasToolDef,
+      is_enabled: isEnabled,
+      reasons: [
+        isEnabled ? 'Experiment is enabled' : 'Experiment not enabled yet',
+        hasToolDef ? 'Has tool definition' : 'No tool definition (type != tool)',
+      ],
     };
+  } finally {
+    finishDojoRequest(callerRole);
   }
-
-  // Parse status to determine graduation eligibility
-  const isEnabled = cleanOutput.includes('● enabled');
-  const hasToolDef = cleanOutput.includes('type: tool') || cleanOutput.includes('[tool]');
-
-  return {
-    experiment_id: input.experiment_id,
-    can_graduate: isEnabled && hasToolDef,
-    has_tool_definition: hasToolDef,
-    is_enabled: isEnabled,
-    reasons: [
-      isEnabled ? 'Experiment is enabled' : 'Experiment not enabled yet',
-      hasToolDef ? 'Has tool definition' : 'No tool definition (type != tool)',
-    ],
-  };
 }
 
 /**

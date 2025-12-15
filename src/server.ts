@@ -1124,6 +1124,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID to create proposal in (e.g., "senken" or "decibel-tools-mcp")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
             title: {
               type: 'string',
               description: 'Proposal title (e.g., "Exchange Rate Limit Pattern Detector")',
@@ -1174,7 +1183,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Insight from previous experiment that led to this proposal',
             },
           },
-          required: ['title', 'problem', 'hypothesis'],
+          required: ['project_id', 'title', 'problem', 'hypothesis'],
         },
       },
       {
@@ -1183,6 +1192,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID containing the proposal (e.g., "senken" or "decibel-tools-mcp")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
             proposal_id: {
               type: 'string',
               description: 'Proposal ID (e.g., "DOJO-PROP-0001")',
@@ -1198,7 +1216,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Experiment type: script (default), tool (MCP tool candidate), check (validation), prompt (template)',
             },
           },
-          required: ['proposal_id'],
+          required: ['project_id', 'proposal_id'],
         },
       },
       {
@@ -1207,26 +1225,45 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID to list Dojo items from (e.g., "senken" or "decibel-tools-mcp")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
             filter: {
               type: 'string',
               enum: ['proposals', 'experiments', 'wishes', 'all'],
               description: 'Filter results (default: all)',
             },
           },
+          required: ['project_id'],
         },
       },
       {
         name: 'dojo_run_experiment',
-        description: 'Run an experiment in SANDBOX mode. Results are written to dojo/results/. NOTE: This always runs in sandbox mode - enabled mode is human-only via CLI.',
+        description: 'Run an experiment in SANDBOX mode. Results are written to {project}/.decibel/dojo/results/. NOTE: This always runs in sandbox mode - enabled mode is human-only via CLI.',
         inputSchema: {
           type: 'object',
           properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID containing the experiment (e.g., "senken" or "decibel-tools-mcp")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
             experiment_id: {
               type: 'string',
               description: 'Experiment ID (e.g., "DOJO-EXP-0001")',
             },
           },
-          required: ['experiment_id'],
+          required: ['project_id', 'experiment_id'],
         },
       },
       {
@@ -1235,6 +1272,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID containing the experiment (e.g., "senken" or "decibel-tools-mcp")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
             experiment_id: {
               type: 'string',
               description: 'Experiment ID (e.g., "DOJO-EXP-0001")',
@@ -1244,7 +1290,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Specific run ID (default: latest)',
             },
           },
-          required: ['experiment_id'],
+          required: ['project_id', 'experiment_id'],
         },
       },
       {
@@ -1253,6 +1299,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID to add wish to (e.g., "senken" or "decibel-tools-mcp")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
             capability: {
               type: 'string',
               description: 'The capability you wish you had (e.g., "Scan for API calls inside loops")',
@@ -1262,7 +1317,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Why you need this capability',
             },
           },
-          required: ['capability', 'reason'],
+          required: ['project_id', 'capability', 'reason'],
         },
       },
       {
@@ -1271,11 +1326,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID to list wishes from (e.g., "senken" or "decibel-tools-mcp")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
             unresolved_only: {
               type: 'boolean',
               description: 'Only show unresolved wishes (default: false)',
             },
           },
+          required: ['project_id'],
         },
       },
       {
@@ -1284,12 +1349,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID containing the experiment (e.g., "senken" or "decibel-tools-mcp")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
             experiment_id: {
               type: 'string',
               description: 'Experiment ID (e.g., "DOJO-EXP-0001")',
             },
           },
-          required: ['experiment_id'],
+          required: ['project_id', 'experiment_id'],
         },
       },
 
@@ -2045,6 +2119,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Dojo tools - AI Feature Incubator
       case 'dojo_create_proposal': {
         const input = args as unknown as CreateProposalInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
         if (!input.title || !input.problem || !input.hypothesis) {
           throw new Error('Missing required fields: title, problem, and hypothesis are required');
         }
@@ -2062,6 +2139,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_scaffold_experiment': {
         const input = args as unknown as ScaffoldExperimentInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
         if (!input.proposal_id) {
           throw new Error('Missing required field: proposal_id');
         }
@@ -2085,6 +2165,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_list': {
         const input = args as unknown as ListDojoInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
         const result = await listDojo(input);
         if (isDojoError(result)) {
           return {
@@ -2099,6 +2182,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_run_experiment': {
         const input = args as unknown as RunExperimentInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
         if (!input.experiment_id) {
           throw new Error('Missing required field: experiment_id');
         }
@@ -2117,6 +2203,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_get_results': {
         const input = args as unknown as GetResultsInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
         if (!input.experiment_id) {
           throw new Error('Missing required field: experiment_id');
         }
@@ -2134,6 +2223,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_add_wish': {
         const input = args as unknown as AddWishInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
         if (!input.capability || !input.reason) {
           throw new Error('Missing required fields: capability and reason are required');
         }
@@ -2151,6 +2243,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_list_wishes': {
         const input = args as unknown as ListWishesInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
         const result = await listWishes(input);
         if (isDojoError(result)) {
           return {
@@ -2165,6 +2260,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_can_graduate': {
         const input = args as unknown as CanGraduateInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
         if (!input.experiment_id) {
           throw new Error('Missing required field: experiment_id');
         }
