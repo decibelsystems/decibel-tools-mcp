@@ -599,6 +599,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            projectId: {
+              type: 'string',
+              description: 'Project ID to scan (required for remote/HTTP access)',
+            },
             scope: {
               type: 'string',
               enum: ['runtime', 'data', 'all'],
@@ -624,6 +628,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Threshold in days for stale detection (default: 21)',
             },
           },
+          required: ['projectId'],
         },
       },
 
@@ -1562,7 +1567,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       // Sentinel tools - Data Inspector
       case 'sentinel_scan': {
-        const input = args as unknown as ScanDataInput;
+        const input = args as unknown as ScanDataInput & { projectId?: string };
+
+        // Require projectId for remote access
+        if (!input.projectId) {
+          throw new Error('Missing required field: projectId. Specify the project to scan.');
+        }
 
         // Default scope to 'data' if not provided
         const scope: ScanScope = input.scope || 'data';
@@ -1580,21 +1590,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }
         }
 
-        const result = await scanData({
-          scope,
-          validate: input.validate,
-          flag: input.flag,
-          days: input.days,
+        // Use Python backend when projectId is provided (required for remote access)
+        const result = await scanDataPython({
+          projectId: input.projectId,
+          validate: input.validate ?? false,
+          flags: input.flag || ['orphans', 'stale', 'invalid'],
+          days: input.days || 21,
         });
 
-        // Return both formatted text and structured JSON
-        const formatted = formatScanOutput(result);
+        // Check for errors
+        if ('error' in result) {
+          return {
+            content: [{ type: 'text', text: `Error: ${result.error}\n\nstderr: ${result.stderr || 'none'}` }],
+            isError: true,
+          };
+        }
+
+        // Return formatted result
         return {
           content: [
-            { type: 'text', text: formatted },
-            { type: 'text', text: '\n\n--- JSON ---\n' + JSON.stringify(result, null, 2) },
+            { type: 'text', text: JSON.stringify(result, null, 2) },
           ],
-          isError: !!result.error,
+          isError: false,
         };
       }
 
