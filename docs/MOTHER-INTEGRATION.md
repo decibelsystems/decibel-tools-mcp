@@ -2,7 +2,10 @@
 
 How to integrate Senken's Mother AI with Decibel MCP tools via HTTP.
 
-## Endpoint
+**Current Version:** 0.2.0
+**API Version:** v1
+
+## Endpoints
 
 ```
 Base URL: http://localhost:8787
@@ -10,15 +13,44 @@ Base URL: http://localhost:8787
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Health check |
+| GET | `/health` | Health check (returns version) |
 | GET | `/tools` | List available tools |
-| POST | `/call` | Execute a tool |
+| POST | `/call` | Execute any tool (generic) |
+| POST | `/dojo/wish` | Shorthand for dojo_add_wish |
+| POST | `/dojo/propose` | Shorthand for dojo_create_proposal |
+| POST | `/dojo/scaffold` | Shorthand for dojo_scaffold_experiment |
+| POST | `/dojo/run` | Shorthand for dojo_run_experiment |
+| POST | `/dojo/results` | Shorthand for dojo_get_results |
+| GET/POST | `/dojo/list` | List all (GET supports `?project_id=`) |
+| GET/POST | `/dojo/wishes` | List wishes |
+| POST | `/dojo/can-graduate` | Check graduation eligibility |
+| POST | `/mcp` | Full MCP protocol endpoint |
 
 ## Authentication
 
 Currently none (local use only).
 
 Future: Start server with `--auth-token <token>` and include `Authorization: Bearer <token>` header.
+
+## Response Format (Status Envelope)
+
+All responses use a normalized status envelope:
+
+```json
+// Success
+{"status": "executed", ...data}
+
+// Error
+{"status": "error", "error": "message", "code": "ERROR_CODE"}
+```
+
+Error codes:
+- `RATE_LIMITED` - Too many requests
+- `ACCESS_DENIED` - Tool blocked for caller role
+- `NOT_FOUND` - Resource not found
+- `UNKNOWN_TOOL` - Invalid tool name
+- `PARSE_ERROR` - Invalid JSON
+- `EXIT_N` - CLI exited with code N
 
 ## Request Format
 
@@ -34,6 +66,21 @@ Content-Type: application/json
     "agent_id": "mother-v1",
     ...tool-specific params
   }
+}
+```
+
+Or use shorthand endpoints directly:
+
+```json
+POST /dojo/wish
+Content-Type: application/json
+
+{
+  "project_id": "senken",
+  "caller_role": "mother",
+  "agent_id": "mother-v1",
+  "capability": "Dynamic stop-loss",
+  "reason": "Static SL causes losses"
 }
 ```
 
@@ -301,16 +348,52 @@ node dist/server.js --http --port 8787
 node dist/server.js --http --port 8787 --auth-token secret123
 ```
 
+## Version Checking
+
+Mother should check version on startup:
+
+```python
+def check_dojo_available() -> dict | None:
+    try:
+        resp = requests.get("http://localhost:8787/health", timeout=2)
+        if resp.status_code == 200:
+            data = resp.json()
+            # {"status": "ok", "version": "0.2.0", "api_version": "v1"}
+            return data
+        return None
+    except:
+        return None
+
+# On startup
+caps = check_dojo_available()
+if caps and caps.get("api_version") == "v1":
+    print(f"✓ DOJO connected (v{caps['version']})")
+else:
+    print("○ DOJO offline")
+```
+
 ## Testing Connection
 
 ```bash
-# Health check
+# Health check (shows version)
 curl http://localhost:8787/health
+# {"status":"ok","version":"0.2.0","api_version":"v1"}
 
 # List tools
 curl http://localhost:8787/tools
 
-# Test wish
+# Test wish via shorthand endpoint
+curl -X POST http://localhost:8787/dojo/wish \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "senken",
+    "caller_role": "mother",
+    "agent_id": "mother-test",
+    "capability": "Test capability",
+    "reason": "Testing integration"
+  }'
+
+# Or via generic /call
 curl -X POST http://localhost:8787/call \
   -H "Content-Type: application/json" \
   -d '{
