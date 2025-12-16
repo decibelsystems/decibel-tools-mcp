@@ -2,7 +2,7 @@
 
 How to integrate Senken's Mother AI with Decibel MCP tools via HTTP.
 
-**Current Version:** 0.2.0
+**Current Version:** 0.3.0
 **API Version:** v1
 
 ## Endpoints
@@ -11,20 +11,38 @@ How to integrate Senken's Mother AI with Decibel MCP tools via HTTP.
 Base URL: http://localhost:8787
 ```
 
+### Core Endpoints
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health check (returns version) |
 | GET | `/tools` | List available tools |
 | POST | `/call` | Execute any tool (generic) |
+| POST | `/mcp` | Full MCP protocol endpoint |
+
+### Dojo Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
 | POST | `/dojo/wish` | Shorthand for dojo_add_wish |
 | POST | `/dojo/propose` | Shorthand for dojo_create_proposal |
 | POST | `/dojo/scaffold` | Shorthand for dojo_scaffold_experiment |
 | POST | `/dojo/run` | Shorthand for dojo_run_experiment |
 | POST | `/dojo/results` | Shorthand for dojo_get_results |
+| POST | `/dojo/artifact` | Shorthand for dojo_read_artifact |
 | GET/POST | `/dojo/list` | List all (GET supports `?project_id=`) |
 | GET/POST | `/dojo/wishes` | List wishes |
 | POST | `/dojo/can-graduate` | Check graduation eligibility |
-| POST | `/mcp` | Full MCP protocol endpoint |
+
+### Context Pack Endpoints (v0.3.0+)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/context/refresh` | Refresh context pack |
+| POST | `/context/pin` | Pin a fact to memory |
+| POST | `/context/unpin` | Unpin a fact |
+| GET/POST | `/context/list` | List pinned facts |
+| POST | `/event/append` | Append event to journal |
+| GET/POST | `/event/search` | Search events |
+| POST | `/artifact/list` | List artifacts for a run |
+| POST | `/artifact/read` | Read artifact content |
 
 ## Authentication
 
@@ -79,8 +97,10 @@ Content-Type: application/json
   "project_id": "senken",
   "caller_role": "mother",
   "agent_id": "mother-v1",
-  "capability": "Dynamic stop-loss",
-  "reason": "Static SL causes losses"
+  "capability": "Correlation matrix for active signals",
+  "reason": "Identify when multiple trades create unintended hedging",
+  "inputs": ["active_signals", "price_history_30d"],
+  "outputs": {"correlation_matrix": {}, "hedging_risk_score": 0.0, "conflicts": []}
 }
 ```
 
@@ -97,7 +117,24 @@ Content-Type: application/json
 ## Available Dojo Tools
 
 ### dojo_add_wish
-Log a capability wish with optional context.
+Log a capability wish. Requires 4 fields to ensure wishes are well-formed.
+
+**Required fields (4):**
+| Field | Description |
+|-------|-------------|
+| `capability` | What it does - the core idea |
+| `reason` | Why it improves outcomes - justification |
+| `inputs` | What data it needs - grounds it in reality |
+| `outputs` | What it produces - makes it concrete |
+
+**Optional fields (filled in as wish progresses):**
+| Field | When to add |
+|-------|-------------|
+| `integration_point` | During scaffold (where it plugs in) |
+| `success_metric` | Before enable (how we know it works) |
+| `risks` | Before enable (safety review) |
+| `mvp` | If scoping needed (smallest slice) |
+| `algorithm_outline` | If logic is non-obvious |
 
 ```json
 {
@@ -106,9 +143,14 @@ Log a capability wish with optional context.
     "project_id": "senken",
     "caller_role": "mother",
     "agent_id": "mother-v1",
-    "capability": "Dynamic stop-loss adjustment",
-    "reason": "Static SL causes losses in high-vol periods",
-    "context": {"recent_losses": 3, "volatility_spike": true}
+    "capability": "Correlation matrix for active signals",
+    "reason": "Identify when multiple trades create unintended hedging",
+    "inputs": ["active_signals", "price_history_30d"],
+    "outputs": {
+      "correlation_matrix": {},
+      "hedging_risk_score": 0.0,
+      "conflicts": []
+    }
   }
 }
 ```
@@ -116,8 +158,9 @@ Log a capability wish with optional context.
 Response:
 ```json
 {
+  "status": "executed",
   "wish_id": "WISH-0001",
-  "capability": "Dynamic stop-loss adjustment",
+  "capability": "Correlation matrix for active signals",
   "timestamp": "2025-12-15T10:30:00Z"
 }
 ```
@@ -183,17 +226,20 @@ Run experiment in sandbox mode. Results written to `{project}/.decibel/dojo/resu
 Response:
 ```json
 {
+  "status": "executed",
   "experiment_id": "DOJO-EXP-0001",
+  "run_id": "20251216-070615",
   "status": "success",
   "exit_code": 0,
-  "duration_seconds": 45,
-  "results_dir": ".decibel/dojo/results/DOJO-EXP-0001/20251215-103000",
-  "output": {
-    "metrics": {"improvement": 0.15},
-    "artifacts": ["results.json", "plot.png"]
-  }
+  "duration_seconds": 0.63,
+  "artifacts": ["result.yaml", "stdout.log"],
+  "stdout": "=== CORRELATION ANALYSIS ===\nTotal Signals: 5\n..."
 }
 ```
+
+**Key fields:**
+- `run_id` - Canonical run identifier (use this for `dojo_get_results` and `dojo_read_artifact`)
+- `artifacts` - List of files in results directory
 
 ### dojo_get_results
 Get results from a previous run.
@@ -206,10 +252,60 @@ Get results from a previous run.
     "caller_role": "mother",
     "agent_id": "mother-v1",
     "experiment_id": "DOJO-EXP-0001",
-    "run_id": "20251215-103000"
+    "run_id": "20251216-070615"
   }
 }
 ```
+
+Response:
+```json
+{
+  "status": "executed",
+  "experiment_id": "DOJO-EXP-0001",
+  "run_id": "20251216-070615",
+  "timestamp": "2025-12-16T07:06:15Z",
+  "exit_code": 0,
+  "artifacts": ["result.yaml", "stdout.log"],
+  "stdout": "..."
+}
+```
+
+### dojo_read_artifact
+Read an artifact file from experiment results. **Use this instead of raw file paths.**
+
+```json
+{
+  "tool": "dojo_read_artifact",
+  "arguments": {
+    "project_id": "senken",
+    "caller_role": "mother",
+    "agent_id": "mother-v1",
+    "experiment_id": "DOJO-EXP-0001",
+    "run_id": "20251216-070615",
+    "filename": "result.yaml"
+  }
+}
+```
+
+Response:
+```json
+{
+  "status": "executed",
+  "experiment_id": "DOJO-EXP-0001",
+  "run_id": "20251216-070615",
+  "filename": "result.yaml",
+  "content_type": "yaml",
+  "content": {
+    "metrics": {"improvement": 0.15, "hedge_risk": 0.20},
+    "artifacts": ["plot.png"]
+  }
+}
+```
+
+**Content types:**
+- `yaml` / `json` - Parsed into object
+- `text` - Raw string (for .txt, .log, .py, etc.)
+- `binary` - Base64 encoded (for images, etc.)
 
 ### dojo_list
 List proposals, experiments, and wishes.
@@ -268,6 +364,227 @@ Response:
   "reasons": ["Experiment not enabled yet", "Has tool definition"]
 }
 ```
+
+## Context Pack Tools (v0.3.0+)
+
+Context Pack provides persistent memory for AI agents via pinned facts, event journal, and artifact access. Based on ADR-002.
+
+### decibel_context_refresh
+Compile full context pack for the project.
+
+```json
+{
+  "tool": "decibel_context_refresh",
+  "arguments": {
+    "project_id": "senken",
+    "caller_role": "mother",
+    "agent_id": "mother-v1",
+    "sections": ["facts", "events", "config"]
+  }
+}
+```
+
+Response:
+```json
+{
+  "status": "executed",
+  "context_pack": {
+    "facts": [...],
+    "events": [...],
+    "config": {...}
+  }
+}
+```
+
+### decibel_context_pin
+Pin a fact to persistent memory.
+
+```json
+{
+  "tool": "decibel_context_pin",
+  "arguments": {
+    "project_id": "senken",
+    "caller_role": "mother",
+    "agent_id": "mother-v1",
+    "title": "Signal correlation threshold",
+    "body": "Correlations above 0.7 indicate hedging risk",
+    "trust": "high",
+    "refs": ["experiments/DOJO-EXP-0001"]
+  }
+}
+```
+
+Response:
+```json
+{
+  "status": "pinned",
+  "id": "FACT-0001"
+}
+```
+
+**Trust levels:** `high` | `medium` | `low`
+
+### decibel_context_unpin
+Remove a pinned fact.
+
+```json
+{
+  "tool": "decibel_context_unpin",
+  "arguments": {
+    "project_id": "senken",
+    "caller_role": "mother",
+    "agent_id": "mother-v1",
+    "id": "FACT-0001"
+  }
+}
+```
+
+### decibel_context_list
+List all pinned facts.
+
+```json
+{
+  "tool": "decibel_context_list",
+  "arguments": {
+    "project_id": "senken",
+    "caller_role": "mother",
+    "agent_id": "mother-v1"
+  }
+}
+```
+
+Response:
+```json
+{
+  "status": "executed",
+  "facts": [
+    {
+      "id": "FACT-0001",
+      "title": "Signal correlation threshold",
+      "body": "Correlations above 0.7 indicate hedging risk",
+      "trust": "high",
+      "refs": ["experiments/DOJO-EXP-0001"],
+      "pinned_at": "2025-12-16T10:30:00Z"
+    }
+  ]
+}
+```
+
+### decibel_event_append
+Append an event to the activity journal.
+
+```json
+{
+  "tool": "decibel_event_append",
+  "arguments": {
+    "project_id": "senken",
+    "caller_role": "mother",
+    "agent_id": "mother-v1",
+    "title": "Experiment completed",
+    "body": "DOJO-EXP-0001 ran successfully with 15% improvement",
+    "tags": ["experiment", "success", "correlation"]
+  }
+}
+```
+
+Response:
+```json
+{
+  "status": "appended",
+  "event_id": "EVT-0001"
+}
+```
+
+### decibel_event_search
+Search events in the journal.
+
+```json
+{
+  "tool": "decibel_event_search",
+  "arguments": {
+    "project_id": "senken",
+    "caller_role": "mother",
+    "agent_id": "mother-v1",
+    "query": "correlation",
+    "limit": 10
+  }
+}
+```
+
+Response:
+```json
+{
+  "status": "executed",
+  "results": [
+    {
+      "id": "EVT-0001",
+      "title": "Experiment completed",
+      "body": "DOJO-EXP-0001 ran successfully with 15% improvement",
+      "tags": ["experiment", "success", "correlation"],
+      "timestamp": "2025-12-16T10:35:00Z"
+    }
+  ]
+}
+```
+
+### decibel_artifact_list
+List artifacts for a specific run.
+
+```json
+{
+  "tool": "decibel_artifact_list",
+  "arguments": {
+    "project_id": "senken",
+    "caller_role": "mother",
+    "agent_id": "mother-v1",
+    "run_id": "20251216-070615"
+  }
+}
+```
+
+Response:
+```json
+{
+  "status": "executed",
+  "run_id": "20251216-070615",
+  "artifacts": [
+    {"name": "result.yaml", "size": 1024, "ref": "result.yaml"},
+    {"name": "plot.png", "size": 45000, "ref": "plot.png"}
+  ]
+}
+```
+
+### decibel_artifact_read
+Read artifact content by canonical reference.
+
+```json
+{
+  "tool": "decibel_artifact_read",
+  "arguments": {
+    "project_id": "senken",
+    "caller_role": "mother",
+    "agent_id": "mother-v1",
+    "run_id": "20251216-070615",
+    "name": "result.yaml"
+  }
+}
+```
+
+Response:
+```json
+{
+  "status": "executed",
+  "run_id": "20251216-070615",
+  "name": "result.yaml",
+  "content": "metrics:\n  improvement: 0.15\n  hedge_risk: 0.20",
+  "mime_type": "text/yaml"
+}
+```
+
+**Why use this instead of raw paths?**
+- No path traversal risks
+- Canonical addressing: `(project_id, run_id, name)`
+- Works across environments
 
 ## Blocked Tools (Human-Only)
 
@@ -358,7 +675,7 @@ def check_dojo_available() -> dict | None:
         resp = requests.get("http://localhost:8787/health", timeout=2)
         if resp.status_code == 200:
             data = resp.json()
-            # {"status": "ok", "version": "0.2.0", "api_version": "v1"}
+            # {"status": "ok", "version": "0.3.0", "api_version": "v1"}
             return data
         return None
     except:
@@ -377,7 +694,7 @@ else:
 ```bash
 # Health check (shows version)
 curl http://localhost:8787/health
-# {"status":"ok","version":"0.2.0","api_version":"v1"}
+# {"status":"ok","version":"0.3.0","api_version":"v1"}
 
 # List tools
 curl http://localhost:8787/tools
@@ -389,8 +706,10 @@ curl -X POST http://localhost:8787/dojo/wish \
     "project_id": "senken",
     "caller_role": "mother",
     "agent_id": "mother-test",
-    "capability": "Test capability",
-    "reason": "Testing integration"
+    "capability": "Test correlation check",
+    "reason": "Testing integration",
+    "inputs": ["test_data"],
+    "outputs": {"result": "test"}
   }'
 
 # Or via generic /call
@@ -402,8 +721,10 @@ curl -X POST http://localhost:8787/call \
       "project_id": "senken",
       "caller_role": "mother",
       "agent_id": "mother-test",
-      "capability": "Test capability",
-      "reason": "Testing integration"
+      "capability": "Test correlation check",
+      "reason": "Testing integration",
+      "inputs": ["test_data"],
+      "outputs": {"result": "test"}
     }
   }'
 ```

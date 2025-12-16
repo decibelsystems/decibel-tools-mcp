@@ -16,7 +16,9 @@
  */
 
 import { spawn } from 'child_process';
+import fs from 'fs/promises';
 import path from 'path';
+import YAML from 'yaml';
 import { log } from '../config.js';
 import { resolveProjectRoot } from '../projectPaths.js';
 import { CallerRole, enforceToolAccess, getSandboxPolicy, expandSandboxPaths } from './dojoPolicy.js';
@@ -119,11 +121,12 @@ export interface RunExperimentInput extends DojoBaseInput {
 
 export interface RunExperimentOutput {
   experiment_id: string;
+  run_id: string;  // canonical run ID (e.g., "20251216-070615")
   status: 'success' | 'failure';
   exit_code: number;
   duration_seconds: number;
-  results_dir: string;
-  output?: Record<string, unknown>;
+  artifacts: string[];  // files in results dir (e.g., ["result.yaml", "plot.png"])
+  stdout?: string;  // captured output
 }
 
 export interface GetResultsInput extends DojoBaseInput {
@@ -136,14 +139,40 @@ export interface GetResultsOutput {
   run_id: string;
   timestamp: string;
   exit_code: number;
-  output?: Record<string, unknown>;
+  artifacts: string[];  // files in results dir
   stdout?: string;
   stderr?: string;
 }
 
+export interface ReadArtifactInput extends DojoBaseInput {
+  experiment_id: string;
+  run_id: string;
+  filename: string;  // e.g., "result.yaml", "plot.png"
+}
+
+export interface ReadArtifactOutput {
+  experiment_id: string;
+  run_id: string;
+  filename: string;
+  content_type: 'yaml' | 'json' | 'text' | 'binary';
+  content: unknown;  // parsed if yaml/json, string if text, base64 if binary
+}
+
 export interface AddWishInput extends DojoBaseInput {
-  capability: string;
-  reason: string;
+  // Required fields (4)
+  capability: string;  // What it does - the core idea
+  reason: string;      // Why it improves outcomes - justification
+  inputs: string[];    // What data it needs - grounds it in reality
+  outputs: Record<string, unknown> | string; // What it produces - makes it concrete
+
+  // Optional fields (filled in as wish progresses)
+  integration_point?: string;  // Where it plugs in (filled during scaffold)
+  success_metric?: string;     // How we know it works (filled before enable)
+  risks?: string[];            // Safety review (filled before enable)
+  mvp?: string;                // Smallest viable slice (if scoping needed)
+  algorithm_outline?: string;  // If logic is non-obvious
+
+  // Legacy/convenience
   context?: Record<string, unknown>; // structured context about when/why wish occurred
 }
 
@@ -557,7 +586,7 @@ export async function runExperiment(
   try {
     // Get sandbox policy for the caller
     const sandbox = getSandboxPolicy(ctx.callerRole);
-    const expandedSandbox = expandSandboxPaths(sandbox, ctx.dojoRoot);
+    expandSandboxPaths(sandbox, ctx.dojoRoot);
 
     // SAFETY: Always use --sandbox, never expose --enabled
     const args = ['dojo', 'run', input.experiment_id, '--sandbox'];
@@ -569,16 +598,31 @@ export async function runExperiment(
 
     // Try to extract key information
     const durationMatch = cleanOutput.match(/Duration:\s*([\d.]+)s/);
-    const resultsMatch = cleanOutput.match(/Results:\s*(\S+)/);
     const successMatch = cleanOutput.match(/✓|completed successfully/i);
+
+    // Extract run_id from output (format: YYYYMMDD-HHMMSS)
+    const runIdMatch = cleanOutput.match(/(\d{8}-\d{6})/);
+    const runId = runIdMatch?.[1] || new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15).replace(/(\d{8})(\d{6})/, '$1-$2');
+
+    // Scan results directory for artifacts
+    const resultsDir = path.join(ctx.dojoRoot, 'results', input.experiment_id, runId);
+    let artifacts: string[] = [];
+    try {
+      const files = await fs.readdir(resultsDir);
+      artifacts = files.filter(f => !f.startsWith('.'));
+    } catch {
+      // Results dir may not exist yet
+      log(`dojo: Could not read results dir: ${resultsDir}`);
+    }
 
     return {
       experiment_id: input.experiment_id,
+      run_id: runId,
       status: exitCode === 0 && successMatch ? 'success' : 'failure',
       exit_code: exitCode,
       duration_seconds: durationMatch ? parseFloat(durationMatch[1]) : 0,
-      results_dir: resultsMatch?.[1] || path.join(ctx.dojoRoot, 'results'),
-      output: { raw_output: cleanOutput, sandbox_policy: expandedSandbox },
+      artifacts,
+      stdout: cleanOutput,
     };
   } finally {
     finishDojoRequest(callerRole);
@@ -621,12 +665,24 @@ export async function getExperimentResults(
 
     // Parse run info from output
     const runMatch = cleanOutput.match(/(\d{8}-\d{6})/);
+    const runId = input.run_id || runMatch?.[1] || 'latest';
+
+    // Scan results directory for artifacts
+    const resultsDir = path.join(ctx.dojoRoot, 'results', input.experiment_id, runId);
+    let artifacts: string[] = [];
+    try {
+      const files = await fs.readdir(resultsDir);
+      artifacts = files.filter(f => !f.startsWith('.'));
+    } catch {
+      log(`dojo: Could not read results dir: ${resultsDir}`);
+    }
 
     return {
       experiment_id: input.experiment_id,
-      run_id: runMatch?.[1] || 'latest',
+      run_id: runId,
       timestamp: new Date().toISOString(),
       exit_code: 0,
+      artifacts,
       stdout: cleanOutput,
     };
   } finally {
@@ -651,6 +707,40 @@ export async function addWish(input: AddWishInput): Promise<AddWishOutput | Dojo
   try {
     const args = ['dojo', 'wish', input.capability, '--reason', input.reason];
 
+    // Required fields: inputs and outputs
+    if (input.inputs && input.inputs.length > 0) {
+      args.push('--inputs', JSON.stringify(input.inputs));
+    }
+
+    if (input.outputs) {
+      const outputsStr = typeof input.outputs === 'string'
+        ? input.outputs
+        : JSON.stringify(input.outputs);
+      args.push('--outputs', outputsStr);
+    }
+
+    // Optional fields (filled in as wish progresses)
+    if (input.integration_point) {
+      args.push('--integration-point', input.integration_point);
+    }
+
+    if (input.success_metric) {
+      args.push('--success-metric', input.success_metric);
+    }
+
+    if (input.risks && input.risks.length > 0) {
+      args.push('--risks', JSON.stringify(input.risks));
+    }
+
+    if (input.mvp) {
+      args.push('--mvp', input.mvp);
+    }
+
+    if (input.algorithm_outline) {
+      args.push('--algorithm', input.algorithm_outline);
+    }
+
+    // Legacy context field
     if (input.context) {
       args.push('--context', JSON.stringify(input.context));
     }
@@ -756,6 +846,96 @@ export async function canGraduate(
         isEnabled ? 'Experiment is enabled' : 'Experiment not enabled yet',
         hasToolDef ? 'Has tool definition' : 'No tool definition (type != tool)',
       ],
+    };
+  } finally {
+    finishDojoRequest(callerRole);
+  }
+}
+
+/**
+ * Read an artifact file from experiment results
+ * Returns parsed content for yaml/json, raw text for others
+ */
+export async function readArtifact(
+  input: ReadArtifactInput
+): Promise<ReadArtifactOutput | DojoError> {
+  const callerRole = input.caller_role || 'human';
+
+  // Build context with policy enforcement
+  const ctx = await buildDojoContext(
+    input.project_id,
+    callerRole,
+    'dojo_read_artifact',
+    input.agent_id
+  );
+
+  try {
+    // Validate filename (no path traversal)
+    if (input.filename.includes('/') || input.filename.includes('..')) {
+      return {
+        error: 'Invalid filename: path traversal not allowed',
+        exitCode: 1,
+        stderr: 'Filename must be a simple filename without path separators',
+      };
+    }
+
+    // Build path to artifact
+    const artifactPath = path.join(
+      ctx.dojoRoot,
+      'results',
+      input.experiment_id,
+      input.run_id,
+      input.filename
+    );
+
+    // Check file exists
+    try {
+      await fs.access(artifactPath);
+    } catch {
+      return {
+        error: `Artifact not found: ${input.filename}`,
+        exitCode: 1,
+        stderr: `File does not exist: ${artifactPath}`,
+      };
+    }
+
+    // Determine content type from extension
+    const ext = path.extname(input.filename).toLowerCase();
+    let contentType: 'yaml' | 'json' | 'text' | 'binary';
+    let content: unknown;
+
+    if (ext === '.yaml' || ext === '.yml') {
+      contentType = 'yaml';
+      const raw = await fs.readFile(artifactPath, 'utf-8');
+      try {
+        content = YAML.parse(raw);
+      } catch {
+        content = raw; // Return raw if parsing fails
+      }
+    } else if (ext === '.json') {
+      contentType = 'json';
+      const raw = await fs.readFile(artifactPath, 'utf-8');
+      try {
+        content = JSON.parse(raw);
+      } catch {
+        content = raw;
+      }
+    } else if (['.txt', '.log', '.md', '.py', '.ts', '.js'].includes(ext)) {
+      contentType = 'text';
+      content = await fs.readFile(artifactPath, 'utf-8');
+    } else {
+      // Binary files (images, etc.) - return base64
+      contentType = 'binary';
+      const buffer = await fs.readFile(artifactPath);
+      content = buffer.toString('base64');
+    }
+
+    return {
+      experiment_id: input.experiment_id,
+      run_id: input.run_id,
+      filename: input.filename,
+      content_type: contentType,
+      content,
     };
   } finally {
     finishDojoRequest(callerRole);

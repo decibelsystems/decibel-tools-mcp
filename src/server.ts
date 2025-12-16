@@ -125,9 +125,30 @@ import {
   ListWishesInput,
   canGraduate,
   CanGraduateInput,
+  readArtifact,
+  ReadArtifactInput,
   isDojoError,
   ExperimentType,
 } from './tools/dojo.js';
+import {
+  contextRefresh,
+  ContextRefreshInput,
+  contextPin,
+  ContextPinInput,
+  contextUnpin,
+  ContextUnpinInput,
+  contextList,
+  ContextListInput,
+  eventAppend,
+  EventAppendInput,
+  eventSearch,
+  EventSearchInput,
+  artifactList,
+  ArtifactListInput,
+  artifactRead,
+  ArtifactReadInput,
+  isContextError,
+} from './tools/context.js';
 import {
   loadGraduatedTools,
   graduatedToolsToMcpDefinitions,
@@ -1319,7 +1340,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'dojo_add_wish',
-        description: 'Add a capability wish to the Dojo wishlist. Use when you encounter something you wish you could do but cannot.',
+        description: 'Add a capability wish to the Dojo wishlist. Requires 4 fields: capability (what), reason (why), inputs (data needed), outputs (what it produces).',
         inputSchema: {
           type: 'object',
           properties: {
@@ -1336,20 +1357,52 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               description: 'Identifier for the calling agent (e.g., "mother", "chatgpt") - used for audit trails',
             },
+            // Required fields (4)
             capability: {
               type: 'string',
-              description: 'The capability you wish you had (e.g., "Scan for API calls inside loops")',
+              description: 'What it does - the core idea (e.g., "Correlation matrix for active signals")',
             },
             reason: {
               type: 'string',
-              description: 'Why you need this capability',
+              description: 'Why it improves outcomes (e.g., "Identify when multiple trades create unintended hedging")',
+            },
+            inputs: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'What data it needs (e.g., ["active_signals", "price_history_30d"])',
+            },
+            outputs: {
+              type: ['string', 'object'],
+              description: 'What it produces (e.g., {"correlation_matrix": {}, "hedging_risk_score": 0.0, "conflicts": []})',
+            },
+            // Optional fields (filled in as wish progresses)
+            integration_point: {
+              type: 'string',
+              description: 'Where it plugs in - filled during scaffold phase',
+            },
+            success_metric: {
+              type: 'string',
+              description: 'How we know it works - filled before enable phase',
+            },
+            risks: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Safety review items - filled before enable phase',
+            },
+            mvp: {
+              type: 'string',
+              description: 'Smallest viable slice - if scoping is needed',
+            },
+            algorithm_outline: {
+              type: 'string',
+              description: 'Logic outline - if the algorithm is non-obvious',
             },
             context: {
               type: 'object',
-              description: 'Structured context about when/why this wish occurred (e.g., {"recent_losses": 3, "volatility_spike": true})',
+              description: 'Additional structured context about when/why this wish occurred',
             },
           },
-          required: ['project_id', 'capability', 'reason'],
+          required: ['project_id', 'capability', 'reason', 'inputs', 'outputs'],
         },
       },
       {
@@ -1404,6 +1457,289 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['project_id', 'experiment_id'],
+        },
+      },
+      {
+        name: 'dojo_read_artifact',
+        description: 'Read an artifact file from experiment results. Returns parsed content for yaml/json, raw text for others, base64 for binary.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID containing the experiment (e.g., "senken" or "decibel-tools-mcp")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent (e.g., "mother", "chatgpt") - used for audit trails',
+            },
+            experiment_id: {
+              type: 'string',
+              description: 'Experiment ID (e.g., "DOJO-EXP-0001")',
+            },
+            run_id: {
+              type: 'string',
+              description: 'Run ID from dojo_run_experiment response (e.g., "20251216-070615")',
+            },
+            filename: {
+              type: 'string',
+              description: 'Artifact filename (e.g., "result.yaml", "plot.png")',
+            },
+          },
+          required: ['project_id', 'experiment_id', 'run_id', 'filename'],
+        },
+      },
+
+      // ========================================================================
+      // Context Pack Tools (ADR-002)
+      // ========================================================================
+      {
+        name: 'decibel_context_refresh',
+        description: 'Compile full context pack for AI memory. Returns pinned facts, recent events, and current state.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID (e.g., "senken")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent',
+            },
+            sections: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Specific sections to include (e.g., ["pinned_facts", "recent_runs"])',
+            },
+          },
+          required: ['project_id'],
+        },
+      },
+      {
+        name: 'decibel_context_pin',
+        description: 'Pin a fact to persistent memory. Mother uses this to remember important insights.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID (e.g., "senken")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent',
+            },
+            title: {
+              type: 'string',
+              description: 'Short title for the fact',
+            },
+            body: {
+              type: 'string',
+              description: 'Detailed content of the fact',
+            },
+            trust: {
+              type: 'string',
+              enum: ['high', 'medium', 'low'],
+              description: 'Trust level for this fact',
+            },
+            refs: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'References (e.g., ["DOJO-EXP-0001", "ADR-002"])',
+            },
+          },
+          required: ['project_id', 'title'],
+        },
+      },
+      {
+        name: 'decibel_context_unpin',
+        description: 'Remove a pinned fact from persistent memory.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID (e.g., "senken")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent',
+            },
+            id: {
+              type: 'string',
+              description: 'Fact ID to unpin',
+            },
+          },
+          required: ['project_id', 'id'],
+        },
+      },
+      {
+        name: 'decibel_context_list',
+        description: 'List all pinned facts.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID (e.g., "senken")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent',
+            },
+          },
+          required: ['project_id'],
+        },
+      },
+      {
+        name: 'decibel_event_append',
+        description: 'Append an event to the activity journal. Append-only log of significant activities.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID (e.g., "senken")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent',
+            },
+            title: {
+              type: 'string',
+              description: 'Event title',
+            },
+            body: {
+              type: 'string',
+              description: 'Event details',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Tags for categorization (e.g., ["experiment", "success"])',
+            },
+          },
+          required: ['project_id', 'title'],
+        },
+      },
+      {
+        name: 'decibel_event_search',
+        description: 'Search events in the activity journal.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID (e.g., "senken")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent',
+            },
+            query: {
+              type: 'string',
+              description: 'Search query',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results to return (default: 20)',
+            },
+          },
+          required: ['project_id', 'query'],
+        },
+      },
+      {
+        name: 'decibel_artifact_list',
+        description: 'List artifacts for a specific run. Use run_id from dojo_run_experiment response.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID (e.g., "senken")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent',
+            },
+            run_id: {
+              type: 'string',
+              description: 'Run ID (e.g., "20251216-070615")',
+            },
+          },
+          required: ['project_id', 'run_id'],
+        },
+      },
+      {
+        name: 'decibel_artifact_read',
+        description: 'Read an artifact by run_id and name. Returns content with mime type.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: {
+              type: 'string',
+              description: 'Project ID (e.g., "senken")',
+            },
+            caller_role: {
+              type: 'string',
+              enum: ['human', 'mother', 'ai'],
+              description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent',
+            },
+            run_id: {
+              type: 'string',
+              description: 'Run ID (e.g., "20251216-070615")',
+            },
+            name: {
+              type: 'string',
+              description: 'Artifact name (e.g., "result.yaml")',
+            },
+          },
+          required: ['project_id', 'run_id', 'name'],
         },
       },
 
@@ -2308,6 +2644,192 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const result = await canGraduate(input);
         if (isDojoError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'dojo_read_artifact': {
+        const input = args as unknown as ReadArtifactInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
+        if (!input.experiment_id) {
+          throw new Error('Missing required field: experiment_id');
+        }
+        if (!input.run_id) {
+          throw new Error('Missing required field: run_id');
+        }
+        if (!input.filename) {
+          throw new Error('Missing required field: filename');
+        }
+        const result = await readArtifact(input);
+        if (isDojoError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // ========================================================================
+      // Context Pack Tools (ADR-002)
+      // ========================================================================
+      case 'decibel_context_refresh': {
+        const input = args as unknown as ContextRefreshInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
+        const result = await contextRefresh(input);
+        if (isContextError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'decibel_context_pin': {
+        const input = args as unknown as ContextPinInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
+        if (!input.title) {
+          throw new Error('Missing required field: title');
+        }
+        const result = await contextPin(input);
+        if (isContextError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'decibel_context_unpin': {
+        const input = args as unknown as ContextUnpinInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
+        if (!input.id) {
+          throw new Error('Missing required field: id');
+        }
+        const result = await contextUnpin(input);
+        if (isContextError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'decibel_context_list': {
+        const input = args as unknown as ContextListInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
+        const result = await contextList(input);
+        if (isContextError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'decibel_event_append': {
+        const input = args as unknown as EventAppendInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
+        if (!input.title) {
+          throw new Error('Missing required field: title');
+        }
+        const result = await eventAppend(input);
+        if (isContextError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'decibel_event_search': {
+        const input = args as unknown as EventSearchInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
+        if (!input.query) {
+          throw new Error('Missing required field: query');
+        }
+        const result = await eventSearch(input);
+        if (isContextError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'decibel_artifact_list': {
+        const input = args as unknown as ArtifactListInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
+        if (!input.run_id) {
+          throw new Error('Missing required field: run_id');
+        }
+        const result = await artifactList(input);
+        if (isContextError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'decibel_artifact_read': {
+        const input = args as unknown as ArtifactReadInput;
+        if (!input.project_id) {
+          throw new Error('Missing required field: project_id');
+        }
+        if (!input.run_id) {
+          throw new Error('Missing required field: run_id');
+        }
+        if (!input.name) {
+          throw new Error('Missing required field: name');
+        }
+        const result = await artifactRead(input);
+        if (isContextError(result)) {
           return {
             content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
             isError: true,

@@ -16,6 +16,7 @@
  *   POST /dojo/scaffold       - Shorthand for dojo_scaffold_experiment
  *   POST /dojo/run            - Shorthand for dojo_run_experiment
  *   POST /dojo/results        - Shorthand for dojo_get_results
+ *   POST /dojo/artifact       - Shorthand for dojo_read_artifact
  *   GET  /dojo/list           - Shorthand for dojo_list
  *   POST /mcp                 - Full MCP protocol endpoint
  *
@@ -40,6 +41,7 @@ import {
   addWish,
   listWishes,
   canGraduate,
+  readArtifact,
   isDojoError,
   CreateProposalInput,
   ScaffoldExperimentInput,
@@ -49,7 +51,27 @@ import {
   AddWishInput,
   ListWishesInput,
   CanGraduateInput,
+  ReadArtifactInput,
 } from './tools/dojo.js';
+import {
+  contextRefresh,
+  ContextRefreshInput,
+  contextPin,
+  ContextPinInput,
+  contextUnpin,
+  ContextUnpinInput,
+  contextList,
+  ContextListInput,
+  eventAppend,
+  EventAppendInput,
+  eventSearch,
+  EventSearchInput,
+  artifactList,
+  ArtifactListInput,
+  artifactRead,
+  ArtifactReadInput,
+  isContextError,
+} from './tools/context.js';
 
 // ============================================================================
 // Version Info
@@ -65,7 +87,7 @@ function getVersion(): { version: string; name: string } {
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
     return { version: pkg.version || '0.0.0', name: pkg.name || 'decibel-tools-mcp' };
   } catch {
-    return { version: '0.2.0', name: 'decibel-tools-mcp' };
+    return { version: '0.3.0', name: 'decibel-tools-mcp' };
   }
 }
 
@@ -169,6 +191,34 @@ async function executeDojoTool(
       case 'dojo_can_graduate':
         result = await canGraduate(args as unknown as CanGraduateInput);
         break;
+      case 'dojo_read_artifact':
+        result = await readArtifact(args as unknown as ReadArtifactInput);
+        break;
+      // Context Pack tools
+      case 'decibel_context_refresh':
+        result = await contextRefresh(args as unknown as ContextRefreshInput);
+        break;
+      case 'decibel_context_pin':
+        result = await contextPin(args as unknown as ContextPinInput);
+        break;
+      case 'decibel_context_unpin':
+        result = await contextUnpin(args as unknown as ContextUnpinInput);
+        break;
+      case 'decibel_context_list':
+        result = await contextList(args as unknown as ContextListInput);
+        break;
+      case 'decibel_event_append':
+        result = await eventAppend(args as unknown as EventAppendInput);
+        break;
+      case 'decibel_event_search':
+        result = await eventSearch(args as unknown as EventSearchInput);
+        break;
+      case 'decibel_artifact_list':
+        result = await artifactList(args as unknown as ArtifactListInput);
+        break;
+      case 'decibel_artifact_read':
+        result = await artifactRead(args as unknown as ArtifactReadInput);
+        break;
       default:
         return wrapError(`Unknown tool: ${tool}`, 'UNKNOWN_TOOL');
     }
@@ -176,6 +226,10 @@ async function executeDojoTool(
     // Check for Dojo error response
     if (isDojoError(result)) {
       return wrapError(result.error, `EXIT_${result.exitCode}`);
+    }
+    // Check for Context error response
+    if (isContextError(result)) {
+      return wrapError(result.error, 'CONTEXT_ERROR');
     }
 
     return wrapSuccess(result as Record<string, unknown>);
@@ -210,6 +264,16 @@ function getAvailableTools(): { name: string; description: string }[] {
     { name: 'dojo_list', description: 'List proposals, experiments, wishes' },
     { name: 'dojo_list_wishes', description: 'List wishes' },
     { name: 'dojo_can_graduate', description: 'Check graduation eligibility' },
+    { name: 'dojo_read_artifact', description: 'Read artifact from experiment results' },
+    // Context Pack tools (ADR-002)
+    { name: 'decibel_context_refresh', description: 'Compile full context pack' },
+    { name: 'decibel_context_pin', description: 'Pin a fact to persistent memory' },
+    { name: 'decibel_context_unpin', description: 'Remove a pinned fact' },
+    { name: 'decibel_context_list', description: 'List pinned facts' },
+    { name: 'decibel_event_append', description: 'Append event to journal' },
+    { name: 'decibel_event_search', description: 'Search events' },
+    { name: 'decibel_artifact_list', description: 'List artifacts for a run' },
+    { name: 'decibel_artifact_read', description: 'Read artifact by run_id and name' },
   ];
 }
 
@@ -468,6 +532,156 @@ export async function startHttpServer(
       return;
     }
 
+    // POST /dojo/artifact - Read artifact from experiment results
+    if (path === '/dojo/artifact' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /dojo/artifact');
+        const result = await executeDojoTool('dojo_read_artifact', body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // ========================================================================
+    // Context Pack Endpoints (ADR-002)
+    // ========================================================================
+
+    // POST /context/refresh - Compile full context pack
+    if (path === '/context/refresh' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /context/refresh');
+        const result = await executeDojoTool('decibel_context_refresh', body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // POST /context/pin - Pin a fact
+    if (path === '/context/pin' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /context/pin');
+        const result = await executeDojoTool('decibel_context_pin', body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // POST /context/unpin - Unpin a fact
+    if (path === '/context/unpin' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /context/unpin');
+        const result = await executeDojoTool('decibel_context_unpin', body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // GET/POST /context/list - List pinned facts
+    if (path === '/context/list' && (req.method === 'GET' || req.method === 'POST')) {
+      try {
+        const body = req.method === 'POST' ? await parseBody(req) : {};
+        if (req.method === 'GET') {
+          const projectId = url.searchParams.get('project_id');
+          if (projectId) {
+            (body as Record<string, unknown>).project_id = projectId;
+          }
+        }
+        log('HTTP: /context/list');
+        const result = await executeDojoTool('decibel_context_list', body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // POST /event/append - Append event to journal
+    if (path === '/event/append' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /event/append');
+        const result = await executeDojoTool('decibel_event_append', body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // GET/POST /event/search - Search events
+    if (path === '/event/search' && (req.method === 'GET' || req.method === 'POST')) {
+      try {
+        const body = req.method === 'POST' ? await parseBody(req) : {};
+        if (req.method === 'GET') {
+          const projectId = url.searchParams.get('project_id');
+          const query = url.searchParams.get('query');
+          const limit = url.searchParams.get('limit');
+          if (projectId) {
+            (body as Record<string, unknown>).project_id = projectId;
+          }
+          if (query) {
+            (body as Record<string, unknown>).query = query;
+          }
+          if (limit) {
+            (body as Record<string, unknown>).limit = parseInt(limit, 10);
+          }
+        }
+        log('HTTP: /event/search');
+        const result = await executeDojoTool('decibel_event_search', body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // POST /artifact/list - List artifacts for a run
+    if (path === '/artifact/list' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /artifact/list');
+        const result = await executeDojoTool('decibel_artifact_list', body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // POST /artifact/read - Read artifact by run_id and name
+    if (path === '/artifact/read' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /artifact/read');
+        const result = await executeDojoTool('decibel_artifact_read', body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
     // ========================================================================
     // Full MCP Protocol Endpoint
     // ========================================================================
@@ -507,6 +721,7 @@ export async function startHttpServer(
 ║    POST /dojo/scaffold    Scaffold experiment                ║
 ║    POST /dojo/run         Run experiment                     ║
 ║    POST /dojo/results     Get results                        ║
+║    POST /dojo/artifact    Read artifact file                 ║
 ║    GET  /dojo/list        List all                           ║
 ║    POST /mcp              Full MCP protocol                  ║
 ╠══════════════════════════════════════════════════════════════╣
