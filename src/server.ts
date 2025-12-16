@@ -1133,6 +1133,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               enum: ['human', 'mother', 'ai'],
               description: 'Role of the caller for access control (default: human)',
             },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent (e.g., "mother", "chatgpt") - used for audit trails',
+            },
             title: {
               type: 'string',
               description: 'Proposal title (e.g., "Exchange Rate Limit Pattern Detector")',
@@ -1182,6 +1186,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               description: 'Insight from previous experiment that led to this proposal',
             },
+            wish_id: {
+              type: 'string',
+              description: 'Link to existing wish (e.g., "WISH-0001"). Auto-fills problem from wish reason and marks wish as resolved.',
+            },
           },
           required: ['project_id', 'title', 'problem', 'hypothesis'],
         },
@@ -1200,6 +1208,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               enum: ['human', 'mother', 'ai'],
               description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent (e.g., "mother", "chatgpt") - used for audit trails',
             },
             proposal_id: {
               type: 'string',
@@ -1234,6 +1246,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               enum: ['human', 'mother', 'ai'],
               description: 'Role of the caller for access control (default: human)',
             },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent (e.g., "mother", "chatgpt") - used for audit trails',
+            },
             filter: {
               type: 'string',
               enum: ['proposals', 'experiments', 'wishes', 'all'],
@@ -1258,6 +1274,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               enum: ['human', 'mother', 'ai'],
               description: 'Role of the caller for access control (default: human)',
             },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent (e.g., "mother", "chatgpt") - used for audit trails',
+            },
             experiment_id: {
               type: 'string',
               description: 'Experiment ID (e.g., "DOJO-EXP-0001")',
@@ -1280,6 +1300,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               enum: ['human', 'mother', 'ai'],
               description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent (e.g., "mother", "chatgpt") - used for audit trails',
             },
             experiment_id: {
               type: 'string',
@@ -1308,6 +1332,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               enum: ['human', 'mother', 'ai'],
               description: 'Role of the caller for access control (default: human)',
             },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent (e.g., "mother", "chatgpt") - used for audit trails',
+            },
             capability: {
               type: 'string',
               description: 'The capability you wish you had (e.g., "Scan for API calls inside loops")',
@@ -1315,6 +1343,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             reason: {
               type: 'string',
               description: 'Why you need this capability',
+            },
+            context: {
+              type: 'object',
+              description: 'Structured context about when/why this wish occurred (e.g., {"recent_losses": 3, "volatility_spike": true})',
             },
           },
           required: ['project_id', 'capability', 'reason'],
@@ -1334,6 +1366,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               enum: ['human', 'mother', 'ai'],
               description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent (e.g., "mother", "chatgpt") - used for audit trails',
             },
             unresolved_only: {
               type: 'boolean',
@@ -1357,6 +1393,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               enum: ['human', 'mother', 'ai'],
               description: 'Role of the caller for access control (default: human)',
+            },
+            agent_id: {
+              type: 'string',
+              description: 'Identifier for the calling agent (e.g., "mother", "chatgpt") - used for audit trails',
             },
             experiment_id: {
               type: 'string',

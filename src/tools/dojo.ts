@@ -32,10 +32,12 @@ export type ExperimentType = 'script' | 'tool' | 'check' | 'prompt';
  * Base input for all Dojo operations
  * project_id: Required - identifies which project's Dojo to use
  * caller_role: Optional - determines permissions (default: 'human')
+ * agent_id: Optional - identifies the calling agent for audit trails
  */
 export interface DojoBaseInput {
   project_id: string;
   caller_role?: CallerRole;
+  agent_id?: string;
 }
 
 export interface CreateProposalInput extends DojoBaseInput {
@@ -50,6 +52,7 @@ export interface CreateProposalInput extends DojoBaseInput {
   risks?: string[];
   follows?: string; // proposal_id this follows
   insight?: string; // insight from previous experiment
+  wish_id?: string; // link to existing wish (auto-fills problem, marks wish resolved)
 }
 
 export interface CreateProposalOutput {
@@ -141,6 +144,7 @@ export interface GetResultsOutput {
 export interface AddWishInput extends DojoBaseInput {
   capability: string;
   reason: string;
+  context?: Record<string, unknown>; // structured context about when/why wish occurred
 }
 
 export interface AddWishOutput {
@@ -192,6 +196,7 @@ export interface DojoContext {
   projectRoot: string;
   dojoRoot: string;
   callerRole: CallerRole;
+  agentId?: string;
 }
 
 /**
@@ -211,7 +216,8 @@ export async function resolveDojoRoot(projectId: string): Promise<{ projectRoot:
 export async function buildDojoContext(
   projectId: string,
   callerRole: CallerRole = 'human',
-  toolName: string
+  toolName: string,
+  agentId?: string
 ): Promise<DojoContext> {
   // Check rate limits first (for AI callers)
   const rateLimitResult = checkRateLimit(callerRole);
@@ -228,11 +234,17 @@ export async function buildDojoContext(
   // Resolve paths
   const { projectRoot, dojoRoot } = await resolveDojoRoot(projectId);
 
+  // Audit log for AI callers
+  if (callerRole !== 'human') {
+    log(`dojo-audit: [${new Date().toISOString()}] agent=${agentId || 'unknown'} role=${callerRole} tool=${toolName} project=${projectId}`);
+  }
+
   return {
     projectId,
     projectRoot,
     dojoRoot,
     callerRole,
+    agentId,
   };
 }
 
@@ -424,7 +436,8 @@ export async function createProposal(
   const ctx = await buildDojoContext(
     input.project_id,
     callerRole,
-    'dojo_create_proposal'
+    'dojo_create_proposal',
+    input.agent_id
   );
 
   try {
@@ -453,6 +466,10 @@ export async function createProposal(
       args.push('--insight', input.insight);
     }
 
+    if (input.wish_id) {
+      args.push('--wish', input.wish_id);
+    }
+
     const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
     return parseTextOutput<CreateProposalOutput>(stdout, stderr, exitCode, parseProposalOutput);
   } finally {
@@ -472,7 +489,8 @@ export async function scaffoldExperiment(
   const ctx = await buildDojoContext(
     input.project_id,
     callerRole,
-    'dojo_scaffold_experiment'
+    'dojo_scaffold_experiment',
+    input.agent_id
   );
 
   try {
@@ -503,7 +521,8 @@ export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | D
   const ctx = await buildDojoContext(
     input.project_id,
     callerRole,
-    'dojo_list'
+    'dojo_list',
+    input.agent_id
   );
 
   try {
@@ -531,7 +550,8 @@ export async function runExperiment(
   const ctx = await buildDojoContext(
     input.project_id,
     callerRole,
-    'dojo_run_experiment'
+    'dojo_run_experiment',
+    input.agent_id
   );
 
   try {
@@ -577,7 +597,8 @@ export async function getExperimentResults(
   const ctx = await buildDojoContext(
     input.project_id,
     callerRole,
-    'dojo_get_results'
+    'dojo_get_results',
+    input.agent_id
   );
 
   try {
@@ -623,11 +644,16 @@ export async function addWish(input: AddWishInput): Promise<AddWishOutput | Dojo
   const ctx = await buildDojoContext(
     input.project_id,
     callerRole,
-    'dojo_add_wish'
+    'dojo_add_wish',
+    input.agent_id
   );
 
   try {
     const args = ['dojo', 'wish', input.capability, '--reason', input.reason];
+
+    if (input.context) {
+      args.push('--context', JSON.stringify(input.context));
+    }
 
     const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
     return parseTextOutput<AddWishOutput>(stdout, stderr, exitCode, parseWishOutput);
@@ -646,7 +672,8 @@ export async function listWishes(input: ListWishesInput): Promise<ListWishesOutp
   const ctx = await buildDojoContext(
     input.project_id,
     callerRole,
-    'dojo_list_wishes'
+    'dojo_list_wishes',
+    input.agent_id
   );
 
   try {
@@ -696,7 +723,8 @@ export async function canGraduate(
   const ctx = await buildDojoContext(
     input.project_id,
     callerRole,
-    'dojo_can_graduate'
+    'dojo_can_graduate',
+    input.agent_id
   );
 
   try {
