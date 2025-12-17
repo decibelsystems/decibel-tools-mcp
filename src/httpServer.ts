@@ -59,6 +59,14 @@ import {
   DojoBenchInput,
 } from './tools/dojoBench.js';
 import {
+  decibelBench,
+  decibelBenchCompare,
+  isDecibelBenchError,
+  isBenchCompareError,
+  DecibelBenchInput,
+  BenchCompareInput,
+} from './tools/bench.js';
+import {
   contextRefresh,
   ContextRefreshInput,
   contextPin,
@@ -202,6 +210,13 @@ async function executeDojoTool(
       case 'dojo_bench':
         result = await dojoBench(args as unknown as DojoBenchInput);
         break;
+      // Benchmark tools (ISS-0014)
+      case 'decibel_bench':
+        result = await decibelBench(args as unknown as DecibelBenchInput);
+        break;
+      case 'decibel_bench_compare':
+        result = await decibelBenchCompare(args as unknown as BenchCompareInput);
+        break;
       // Context Pack tools
       case 'decibel_context_refresh':
         result = await contextRefresh(args as unknown as ContextRefreshInput);
@@ -237,6 +252,14 @@ async function executeDojoTool(
     }
     // Check for Bench error response
     if (isDojoBenchError(result)) {
+      return wrapError(result.error, `EXIT_${result.exitCode}`);
+    }
+    // Check for Decibel Bench error response
+    if (isDecibelBenchError(result)) {
+      return wrapError(result.error, `EXIT_${result.exitCode}`);
+    }
+    // Check for Bench Compare error response
+    if (isBenchCompareError(result)) {
       return wrapError(result.error, `EXIT_${result.exitCode}`);
     }
     // Check for Context error response
@@ -565,6 +588,38 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/bench');
         const result = await executeDojoTool('dojo_bench', body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // ========================================================================
+    // Benchmark Endpoints (ISS-0014)
+    // ========================================================================
+
+    // POST /bench/run - Run a benchmark suite
+    if (path === '/bench/run' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /bench/run');
+        const result = await executeDojoTool('decibel_bench', body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // POST /bench/compare - Compare two baselines
+    if (path === '/bench/compare' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /bench/compare');
+        const result = await executeDojoTool('decibel_bench_compare', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
