@@ -1,0 +1,51 @@
+id: ISS-0013
+title: Context tools fail with "spawn decibel ENOENT" - need fallback to direct YAML
+project: decibel-tools-mcp
+status: open
+priority: medium
+tags:
+  - mcp
+  - cli
+  - context-pack
+  - fallback
+  - dx
+created_at: 2025-12-17T14:06:00.075Z
+updated_at: 2025-12-17T14:06:00.075Z
+description: |-
+  ## Problem
+
+  The context pack tools (`decibel_context_list`, `decibel_context_refresh`, `decibel_context_pin`, etc.) shell out to the `decibel` CLI binary. When the MCP server process doesn't have the CLI in its PATH, these tools fail with:
+
+  ```
+  "error": "spawn decibel ENOENT",
+  "exitCode": -1
+  ```
+
+  This happens even when the CLI works fine in the user's terminal - the MCP server process inherits a different PATH.
+
+  ## Impact
+
+  - Claude Desktop users can't use context tools unless CLI is in system-wide PATH
+  - Registry tools work fine (they read JSON directly)
+  - Workaround: use filesystem tools to read/write `.decibel/context/pinned.yaml` directly
+
+  ## Proposed Fix
+
+  Implement graceful fallback:
+
+  1. Try CLI first (`spawn decibel context list ...`)
+  2. If ENOENT error, fall back to direct YAML I/O
+  3. Log which mode is being used for debugging
+
+  This matches the design intent of supporting both CLI and YAML.
+
+  ## Alternative Fixes
+
+  - **Absolute path**: Detect CLI location at startup, use full path
+  - **PATH injection**: MCP server startup explicitly sets PATH
+  - **Config option**: Let user specify CLI path in MCP config
+
+  ## Files Likely Affected
+
+  - Context tool implementations in decibel-tools-mcp
+  - Possibly a shared "exec with fallback" utility

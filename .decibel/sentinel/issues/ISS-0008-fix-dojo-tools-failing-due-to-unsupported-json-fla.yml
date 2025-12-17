@@ -1,0 +1,34 @@
+id: ISS-0008
+title: Fix Dojo tools failing due to unsupported --json flag in decibel CLI
+project: decibel-tools-mcp
+status: open
+priority: high
+tags:
+  - dojo
+  - mcp
+  - cli
+  - bug
+  - compat
+created_at: 2025-12-15T01:44:12.891Z
+updated_at: 2025-12-15T01:44:12.891Z
+description: |-
+  Observed: Decibel MCP Dojo tools `dojo_list` and `dojo_list_wishes` fail with `decibel: error: unrecognized arguments: --json`.
+
+  Likely cause: the MCP wrapper invokes the `decibel` CLI with `--json` (e.g., `decibel list --json` / `decibel wishes --json`), but the installed CLI does not support that option.
+
+  Impact: blocks listing Dojo proposals/experiments/wishes from chat.
+
+  Suggested fix (robust):
+  1) In the MCP tool wrapper, implement a compatibility fallback:
+     - Try `decibel <cmd> --json`
+     - If stderr contains `unrecognized arguments: --json`, retry without `--json` and return either raw text or parsed structure.
+
+  Better long-term fix:
+  2) Add first-class structured output support to the `decibel` CLI:
+     - Add `--json` (or `--format json`) to relevant subcommands (at least `list` and `wishes`).
+     - Ensure output schema matches what the MCP tool expects.
+
+  Acceptance criteria:
+  - `dojo_list(filter=all)` succeeds on a machine where `decibel list` exists but `--json` is not supported.
+  - `dojo_list_wishes(unresolved_only=...)` succeeds under same conditions.
+  - No regression when `--json` *is* supported.

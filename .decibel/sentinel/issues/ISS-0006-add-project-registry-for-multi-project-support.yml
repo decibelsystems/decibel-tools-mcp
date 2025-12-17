@@ -1,0 +1,29 @@
+id: ISS-0006
+title: Add project registry for multi-project support
+project: /Volumes/Ashitaka/Documents/GitHub/decibel-tools-mcp
+status: open
+priority: high
+tags:
+  - mcp
+  - dx
+  - blocking
+created_at: 2025-12-10T04:15:06.590Z
+updated_at: 2025-12-10T04:15:06.590Z
+description: |-
+  Currently projectPaths.ts only supports single project via DECIBEL_PROJECT_ROOT env var or cwd discovery. Need a registry to map project IDs (like "senken") to their full paths.
+
+  **Problem:**
+  - `roadmap_get projectId:senken` fails with "Unknown projectId"
+  - `roadmap_get projectId:/full/path/to/senken` works
+  - Other tools work because they use legacy DECIBEL_MCP_ROOT
+
+  **Solution:**
+  Add projects.json registry at DECIBEL_MCP_ROOT:
+  ```json
+  {
+    "senken": "/Volumes/Ashitaka/Documents/GitHub/senken-trading-agent",
+    "decibel-tools-mcp": "/Volumes/Ashitaka/Documents/GitHub/decibel-tools-mcp"
+  }
+  ```
+
+  Update resolveProjectRoot() to check registry before failing.

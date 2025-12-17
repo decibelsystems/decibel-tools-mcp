@@ -1,0 +1,72 @@
+# Dojo Role-Based Access Policy
+# Defines what each caller role can do with Dojo tools
+#
+# Roles:
+#   - human: Full access (can enable, disable, graduate)
+#   - mother: Sandbox-only access (propose, scaffold, run, read results)
+#   - ai: Same as mother (default for AI callers)
+
+roles:
+  human:
+    description: "Full Dojo access including enable/disable/graduate"
+    allowed_tools: ["*"]
+    sandbox:
+      fs_read: ["**"]
+      fs_write: ["**"]
+      exec_allowlist: ["*"]
+      net: true
+
+  mother:
+    description: "Mother AI - sandbox-only Dojo access"
+    allowed_tools:
+      - dojo_add_wish
+      - dojo_list_wishes
+      - dojo_create_proposal
+      - dojo_list
+      - dojo_scaffold_experiment
+      - dojo_run_experiment
+      - dojo_get_results
+      - dojo_can_graduate
+    # Explicitly denied (never allowed even if tool exists):
+    denied_tools:
+      - dojo_enable_experiment
+      - dojo_disable_experiment
+      - dojo_graduate_experiment
+    sandbox:
+      fs_read:
+        - "{DOJO_ROOT}/data/**"
+        - "{DOJO_ROOT}/proposals/**"
+        - "{DOJO_ROOT}/experiments/**"
+        - "{DOJO_ROOT}/wishes/**"
+      fs_write:
+        - "{DOJO_ROOT}/results/**"
+        - "{DOJO_ROOT}/wishes/**"
+        - "{DOJO_ROOT}/proposals/**"
+      exec_allowlist:
+        - python
+        - python3
+        - node
+        - rg
+        - git
+      net: false
+
+  ai:
+    description: "Generic AI caller - same as mother"
+    inherits: mother
+
+# Default role if caller_role not specified
+default_role: human
+
+# Safety settings
+safety:
+  # Hard-coded deny list - these tools never exist for any AI caller
+  never_expose_to_ai:
+    - dojo_enable_experiment
+    - dojo_disable_experiment
+    - dojo_graduate_experiment
+
+  # Sandbox is always enforced for dojo_run_experiment regardless of role
+  always_sandbox_run: true
+
+  # Results write fence - experiments can only write here
+  results_write_fence: "{DOJO_ROOT}/results/**"

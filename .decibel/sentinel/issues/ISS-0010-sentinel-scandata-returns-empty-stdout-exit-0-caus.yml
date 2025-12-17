@@ -1,0 +1,25 @@
+id: ISS-0010
+title: sentinel_scanData returns empty stdout (exit 0), causing JSON parse failure
+project: decibel-tools-mcp
+status: open
+priority: high
+tags:
+  - sentinel
+  - scanData
+  - mcp
+  - json
+  - bug
+  - python
+created_at: 2025-12-15T02:33:36.561Z
+updated_at: 2025-12-15T02:33:36.561Z
+description: |-
+  `sentinel_scanData` fails for multiple projects (`senken-trading-agent`, `senken`, `decibel-tools-mcp`) with: `Failed to parse Python output as JSON: Unexpected end of JSON input`. The tool reports exitCode 0 but stderr shows `stdout:` empty.
+
+  This suggests the underlying Python inspector runs but emits no JSON to stdout (or output is being swallowed), while the MCP wrapper expects JSON.
+
+  Acceptance criteria:
+  - sentinel_scanData prints valid JSON to stdout for success cases.
+  - On failure, it prints structured JSON error details (or propagates stderr) and exits non-zero.
+  - Add a guard: if stdout is empty, return a clear error including captured logs and which projectId was resolved.
+
+  Note: user mentioned Claude recently modified scan method to take a project param; this still reproduces with project-scoped calls.
