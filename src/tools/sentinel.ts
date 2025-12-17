@@ -1,7 +1,34 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { getConfig, log } from '../config.js';
-import { resolvePath, ensureDir, hasProjectLocal } from '../dataRoot.js';
+import { resolvePath, ensureDir, hasProjectLocal, ResolvePathOptions } from '../dataRoot.js';
+
+// ============================================================================
+// Project Resolution Error
+// ============================================================================
+
+export interface ProjectResolutionError {
+  error: 'PROJECT_NOT_FOUND';
+  message: string;
+  suggestion: string;
+}
+
+export function isProjectResolutionError(result: unknown): result is ProjectResolutionError {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    'error' in result &&
+    (result as ProjectResolutionError).error === 'PROJECT_NOT_FOUND'
+  );
+}
+
+function makeProjectResolutionError(operation: string): ProjectResolutionError {
+  return {
+    error: 'PROJECT_NOT_FOUND',
+    message: `Cannot ${operation}: No .decibel/ folder found in project directory.`,
+    suggestion: 'Run from a directory with a .decibel/ folder, set DECIBEL_PROJECT_ROOT environment variable, or initialize with `decibel init`.',
+  };
+}
 
 // ============================================================================
 // Types
@@ -412,7 +439,15 @@ async function getRepoIssues(repo: string): Promise<Array<{ id: string; title: s
 
 export async function createIssue(
   input: CreateIssueInput
-): Promise<CreateIssueOutput | EpicNotFoundError> {
+): Promise<CreateIssueOutput | EpicNotFoundError | ProjectResolutionError> {
+  // Resolve issues directory first - fail fast if no project
+  let issuesDir: string;
+  try {
+    issuesDir = resolvePath('sentinel-issues');
+  } catch (err) {
+    return makeProjectResolutionError('create issue');
+  }
+
   // Validate epic_id if provided
   if (input.epic_id) {
     const allEpics = await getAllEpics();
@@ -439,8 +474,6 @@ export async function createIssue(
   const slug = slugify(input.title);
   const filename = `${fileTimestamp}-${slug}.md`;
 
-  // Use project-local path if decibel/ exists, else global
-  const issuesDir = resolvePath('sentinel-issues');
   ensureDir(issuesDir);
   const filePath = path.join(issuesDir, filename);
 
@@ -490,7 +523,14 @@ export async function createIssue(
 
 export async function closeIssue(
   input: CloseIssueInput
-): Promise<CloseIssueOutput | CloseIssueError> {
+): Promise<CloseIssueOutput | CloseIssueError | ProjectResolutionError> {
+  // Verify project exists first
+  try {
+    resolvePath('sentinel-issues');
+  } catch (err) {
+    return makeProjectResolutionError('close issue');
+  }
+
   const found = await findIssueFile(input.repo, input.issue_id);
 
   if (!found) {
@@ -563,8 +603,13 @@ export async function closeIssue(
 
 export async function listRepoIssues(
   input: ListRepoIssuesInput
-): Promise<ListRepoIssuesOutput> {
-  const issuesDir = resolvePath('sentinel-issues');
+): Promise<ListRepoIssuesOutput | ProjectResolutionError> {
+  let issuesDir: string;
+  try {
+    issuesDir = resolvePath('sentinel-issues');
+  } catch (err) {
+    return makeProjectResolutionError('list issues');
+  }
   const issues: IssueSummary[] = [];
 
   try {
@@ -593,11 +638,17 @@ export async function listRepoIssues(
 // Epic Functions
 // ============================================================================
 
-export async function logEpic(input: LogEpicInput): Promise<LogEpicOutput> {
+export async function logEpic(input: LogEpicInput): Promise<LogEpicOutput | ProjectResolutionError> {
+  let epicsDir: string;
+  try {
+    epicsDir = resolvePath('sentinel-epics');
+  } catch (err) {
+    return makeProjectResolutionError('log epic');
+  }
+
   const now = new Date();
   const timestamp = now.toISOString();
 
-  const epicsDir = resolvePath('sentinel-epics');
   ensureDir(epicsDir);
 
   const epicNum = await getNextEpicNumber(epicsDir);
@@ -668,8 +719,13 @@ export async function logEpic(input: LogEpicInput): Promise<LogEpicOutput> {
   };
 }
 
-export async function listEpics(input: ListEpicsInput): Promise<ListEpicsOutput> {
-  const epicsDir = resolvePath('sentinel-epics');
+export async function listEpics(input: ListEpicsInput): Promise<ListEpicsOutput | ProjectResolutionError> {
+  let epicsDir: string;
+  try {
+    epicsDir = resolvePath('sentinel-epics');
+  } catch (err) {
+    return makeProjectResolutionError('list epics');
+  }
 
   const epics: EpicSummary[] = [];
 
@@ -707,8 +763,13 @@ export async function listEpics(input: ListEpicsInput): Promise<ListEpicsOutput>
   return { epics };
 }
 
-export async function getEpic(input: GetEpicInput): Promise<GetEpicOutput> {
-  const epicsDir = resolvePath('sentinel-epics');
+export async function getEpic(input: GetEpicInput): Promise<GetEpicOutput | ProjectResolutionError> {
+  let epicsDir: string;
+  try {
+    epicsDir = resolvePath('sentinel-epics');
+  } catch (err) {
+    return makeProjectResolutionError('get epic');
+  }
 
   try {
     const files = await fs.readdir(epicsDir);
@@ -733,8 +794,13 @@ export async function getEpic(input: GetEpicInput): Promise<GetEpicOutput> {
 
 export async function getEpicIssues(
   input: GetEpicIssuesInput
-): Promise<GetEpicIssuesOutput> {
-  const issuesDir = resolvePath('sentinel-issues');
+): Promise<GetEpicIssuesOutput | ProjectResolutionError> {
+  let issuesDir: string;
+  try {
+    issuesDir = resolvePath('sentinel-issues');
+  } catch (err) {
+    return makeProjectResolutionError('get epic issues');
+  }
   const issues: IssueSummary[] = [];
 
   try {
@@ -761,7 +827,14 @@ export async function getEpicIssues(
   return { issues };
 }
 
-export async function resolveEpic(input: ResolveEpicInput): Promise<ResolveEpicOutput> {
+export async function resolveEpic(input: ResolveEpicInput): Promise<ResolveEpicOutput | ProjectResolutionError> {
+  // Verify project exists first
+  try {
+    resolvePath('sentinel-epics');
+  } catch (err) {
+    return makeProjectResolutionError('resolve epic');
+  }
+
   const limit = input.limit || 5;
   const allEpics = await getAllEpics();
 

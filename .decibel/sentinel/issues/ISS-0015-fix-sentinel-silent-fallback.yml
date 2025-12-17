@@ -1,0 +1,25 @@
+id: ISS-0015
+title: Fix Sentinel Silent Fallback
+project: decibel-tools-mcp
+status: open
+priority: high
+tags:
+  - sentinel
+  - dataRoot
+  - bug
+created_at: 2025-12-17T00:00:00.000Z
+updated_at: 2025-12-17T00:00:00.000Z
+description: |-
+  When a project ID can't be resolved, dataRoot.ts silently falls back to
+  ~/.decibel/sentinel/unknown_project/ instead of erroring. This causes data
+  to be written to the wrong location without user awareness.
+
+  **Fix:**
+  1. Remove 'unknown_project' fallback from getRoots()
+  2. Add `requireProject` option to resolvePath()
+  3. Throw explicit errors for project-local domains when no project found
+  4. Update sentinel.ts functions to return ProjectResolutionError
+
+  **Testing:**
+  After fix, calling sentinel functions without a valid project should return
+  a structured error instead of silently writing to unknown_project folder.

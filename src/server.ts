@@ -44,6 +44,7 @@ import {
   GetEpicIssuesInput,
   resolveEpic,
   ResolveEpicInput,
+  isProjectResolutionError,
 } from './tools/sentinel.js';
 import {
   scanData,
@@ -1982,6 +1983,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error('Missing required field: epic_id');
         }
         const result = await getEpic(input);
+        if (isProjectResolutionError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result) }],
+            isError: true,
+          };
+        }
         if (result.error) {
           return {
             content: [{ type: 'text', text: JSON.stringify({ error: result.error }) }],

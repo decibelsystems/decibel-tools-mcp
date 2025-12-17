@@ -18,10 +18,28 @@ export type DataDomain =
   | 'learnings-project'
   | 'learnings-global';
 
+/** Domains that require a project-local .decibel/ folder */
+const PROJECT_LOCAL_DOMAINS: DataDomain[] = [
+  'sentinel-issues',
+  'sentinel-epics',
+  'architect-project',
+  'designer-project',
+  'learnings-project',
+];
+
 interface Roots {
   projectDecibelRoot?: string;
   projectName?: string;
   globalRoot: string;
+}
+
+export interface ResolvePathOptions {
+  /**
+   * If true (default), throws an error when a project-local domain
+   * cannot resolve to a .decibel/ folder. Set to false to allow
+   * fallback to global paths (legacy behavior).
+   */
+  requireProject?: boolean;
 }
 
 // ============================================================================
@@ -74,9 +92,10 @@ function getRoots(projectHint?: string): Roots {
     log(`DataRoot: Created global root at ${globalRoot}`);
   }
 
+  // Only set projectName if we have a valid source
   const projectName = projectDecibelRoot
     ? inferProjectName(projectDecibelRoot)
-    : process.env.DECIBEL_PROJECT_ID || 'unknown_project';
+    : process.env.DECIBEL_PROJECT_ID;  // No fallback to 'unknown_project'
 
   return { projectDecibelRoot, projectName, globalRoot };
 }
@@ -84,6 +103,19 @@ function getRoots(projectHint?: string): Roots {
 // ============================================================================
 // Public API
 // ============================================================================
+
+/**
+ * Helper to throw a consistent project resolution error
+ */
+function throwProjectResolutionError(domain: DataDomain, projectHint?: string): never {
+  const hintInfo = projectHint ? ` (hint: ${projectHint})` : '';
+  throw new Error(
+    `Cannot resolve project path for domain "${domain}"${hintInfo}. ` +
+    `No .decibel/ folder found. Either run from a project directory, ` +
+    `set DECIBEL_PROJECT_ROOT environment variable, or use resolveProject() ` +
+    `from projectRegistry.ts first.`
+  );
+}
 
 /**
  * Resolve the appropriate data path for a given domain.
@@ -95,31 +127,50 @@ function getRoots(projectHint?: string): Roots {
  * Global domains (always use DECIBEL_MCP_ROOT or ~/.decibel):
  * - architect-global, designer-global, learnings-global
  * - friction-global
+ *
+ * @param domain - The data domain to resolve
+ * @param projectHint - Optional project path hint
+ * @param options - Resolution options
+ * @param options.requireProject - If true (default), throws error when project-local
+ *   domain cannot be resolved to a .decibel/ folder. Set to false for legacy fallback.
  */
-export function resolvePath(domain: DataDomain, projectHint?: string): string {
+export function resolvePath(
+  domain: DataDomain,
+  projectHint?: string,
+  options?: ResolvePathOptions
+): string {
   const { projectDecibelRoot, projectName, globalRoot } = getRoots(projectHint);
+  const requireProject = options?.requireProject !== false; // Default true
 
   switch (domain) {
-    // ========== Sentinel (prefer project-local) ==========
+    // ========== Sentinel (project-local required) ==========
     case 'sentinel-issues':
       if (projectDecibelRoot) {
         return path.join(projectDecibelRoot, 'sentinel', 'issues');
       }
-      return path.join(globalRoot, 'sentinel', projectName!, 'issues');
+      if (requireProject) {
+        throwProjectResolutionError(domain, projectHint);
+      }
+      return path.join(globalRoot, 'sentinel', projectName || 'unknown_project', 'issues');
 
     case 'sentinel-epics':
       if (projectDecibelRoot) {
         return path.join(projectDecibelRoot, 'sentinel', 'epics');
       }
-      return path.join(globalRoot, 'sentinel', projectName!, 'epics');
+      if (requireProject) {
+        throwProjectResolutionError(domain, projectHint);
+      }
+      return path.join(globalRoot, 'sentinel', projectName || 'unknown_project', 'epics');
 
     // ========== Architect ==========
     case 'architect-project':
       if (projectDecibelRoot) {
         return path.join(projectDecibelRoot, 'architect', 'adrs');
       }
-      // Fallback to global with project namespace
-      return path.join(globalRoot, 'architect', projectName!);
+      if (requireProject) {
+        throwProjectResolutionError(domain, projectHint);
+      }
+      return path.join(globalRoot, 'architect', projectName || 'unknown_project');
 
     case 'architect-global':
       return path.join(globalRoot, 'architect', 'adrs');
@@ -129,7 +180,10 @@ export function resolvePath(domain: DataDomain, projectHint?: string): string {
       if (projectDecibelRoot) {
         return path.join(projectDecibelRoot, 'designer');
       }
-      return path.join(globalRoot, 'designer', projectName!);
+      if (requireProject) {
+        throwProjectResolutionError(domain, projectHint);
+      }
+      return path.join(globalRoot, 'designer', projectName || 'unknown_project');
 
     case 'designer-global':
       return path.join(globalRoot, 'designer', 'global');
@@ -139,7 +193,10 @@ export function resolvePath(domain: DataDomain, projectHint?: string): string {
       if (projectDecibelRoot) {
         return path.join(projectDecibelRoot, 'learnings');
       }
-      return path.join(globalRoot, 'learnings', projectName!);
+      if (requireProject) {
+        throwProjectResolutionError(domain, projectHint);
+      }
+      return path.join(globalRoot, 'learnings', projectName || 'unknown_project');
 
     case 'learnings-global':
       return path.join(globalRoot, 'learnings', 'global');
@@ -160,10 +217,11 @@ export function hasProjectLocal(projectHint?: string): boolean {
 
 /**
  * Get current project name (from .decibel/ location or env)
+ * Returns undefined if no project can be resolved
  */
-export function getProjectName(projectHint?: string): string {
+export function getProjectName(projectHint?: string): string | undefined {
   const { projectName } = getRoots(projectHint);
-  return projectName || 'unknown_project';
+  return projectName;
 }
 
 /**
