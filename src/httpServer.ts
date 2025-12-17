@@ -54,6 +54,11 @@ import {
   ReadArtifactInput,
 } from './tools/dojo.js';
 import {
+  dojoBench,
+  isDojoBenchError,
+  DojoBenchInput,
+} from './tools/dojoBench.js';
+import {
   contextRefresh,
   ContextRefreshInput,
   contextPin,
@@ -194,6 +199,9 @@ async function executeDojoTool(
       case 'dojo_read_artifact':
         result = await readArtifact(args as unknown as ReadArtifactInput);
         break;
+      case 'dojo_bench':
+        result = await dojoBench(args as unknown as DojoBenchInput);
+        break;
       // Context Pack tools
       case 'decibel_context_refresh':
         result = await contextRefresh(args as unknown as ContextRefreshInput);
@@ -225,6 +233,10 @@ async function executeDojoTool(
 
     // Check for Dojo error response
     if (isDojoError(result)) {
+      return wrapError(result.error, `EXIT_${result.exitCode}`);
+    }
+    // Check for Bench error response
+    if (isDojoBenchError(result)) {
       return wrapError(result.error, `EXIT_${result.exitCode}`);
     }
     // Check for Context error response
@@ -265,6 +277,7 @@ function getAvailableTools(): { name: string; description: string }[] {
     { name: 'dojo_list_wishes', description: 'List wishes' },
     { name: 'dojo_can_graduate', description: 'Check graduation eligibility' },
     { name: 'dojo_read_artifact', description: 'Read artifact from experiment results' },
+    { name: 'dojo_bench', description: 'Run benchmark on a Dojo experiment' },
     // Context Pack tools (ADR-002)
     { name: 'decibel_context_refresh', description: 'Compile full context pack' },
     { name: 'decibel_context_pin', description: 'Pin a fact to persistent memory' },
@@ -538,6 +551,20 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/artifact');
         const result = await executeDojoTool('dojo_read_artifact', body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // POST /dojo/bench - Run benchmark on experiment
+    if (path === '/dojo/bench' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /dojo/bench');
+        const result = await executeDojoTool('dojo_bench', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
