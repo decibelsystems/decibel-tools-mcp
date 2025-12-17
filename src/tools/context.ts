@@ -8,13 +8,27 @@
  * - List/read artifacts (experiment outputs)
  *
  * Based on ADR-002: Context Pack
+ *
+ * Uses direct imports from @decibel/cli for reliability
+ * (no PATH issues in sandboxed environments like Claude Desktop)
  */
 
-import { spawn } from 'child_process';
 import { log } from '../config.js';
 import { resolveProjectRoot } from '../projectPaths.js';
 import { CallerRole, enforceToolAccess } from './dojoPolicy.js';
 import { checkRateLimit, recordRequestStart, recordRequestEnd } from './rateLimiter.js';
+
+// Direct imports from @decibel/cli
+import {
+  compileContextPack,
+  pinFact,
+  unpinFact,
+  listPinnedFacts,
+  appendEvent,
+  searchEvents,
+  listArtifacts,
+  readArtifact,
+} from '@decibel/cli/lib/compiler';
 
 // ============================================================================
 // Types
@@ -142,68 +156,9 @@ export interface ContextError {
 }
 
 // ============================================================================
-// Constants
+// Helper: Build context with policy enforcement
 // ============================================================================
 
-const DECIBEL_COMMAND = 'decibel';
-
-// ============================================================================
-// Helper: Execute decibel CLI command
-// ============================================================================
-
-async function execDecibel(
-  args: string[],
-  cwd?: string
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  log(`context: Running ${DECIBEL_COMMAND} ${args.join(' ')}${cwd ? ` (cwd: ${cwd})` : ''}`);
-
-  return new Promise((resolve) => {
-    const proc = spawn(DECIBEL_COMMAND, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env },
-      cwd: cwd || process.cwd(),
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    proc.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    proc.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString();
-    });
-
-    proc.on('error', (err) => {
-      log(`context: Process error: ${err.message}`);
-      resolve({
-        stdout: '',
-        stderr: err.message,
-        exitCode: -1,
-      });
-    });
-
-    proc.on('close', (code) => {
-      resolve({
-        stdout,
-        stderr,
-        exitCode: code ?? -1,
-      });
-    });
-  });
-}
-
-/**
- * Strip ANSI escape codes from string
- */
-function stripAnsi(str: string): string {
-  return str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
-}
-
-/**
- * Build context with policy enforcement
- */
 async function buildContext(
   projectId: string,
   callerRole: CallerRole = 'human',
@@ -234,7 +189,7 @@ async function buildContext(
 }
 
 // ============================================================================
-// Tool Implementations
+// Tool Implementations - Direct imports from @decibel/cli
 // ============================================================================
 
 /**
@@ -253,34 +208,21 @@ export async function contextRefresh(
       input.agent_id
     );
 
-    const args = ['context', 'refresh', '--json'];
+    log(`context: Compiling context pack for ${projectRoot}`);
+    const contextPack = compileContextPack(projectRoot, input.sections);
 
-    if (input.sections && input.sections.length > 0) {
-      args.push('--sections', input.sections.join(','));
-    }
-
-    const { stdout, stderr, exitCode } = await execDecibel(args, projectRoot);
-
-    if (exitCode !== 0) {
-      return {
-        status: 'error',
-        error: stripAnsi(stderr).slice(0, 500) || `Exit code ${exitCode}`,
-        exitCode,
-      };
-    }
-
-    try {
-      const contextPack = JSON.parse(stripAnsi(stdout));
-      return {
-        status: 'executed',
-        context_pack: contextPack,
-      };
-    } catch {
-      return {
-        status: 'executed',
-        context_pack: { raw: stripAnsi(stdout) },
-      };
-    }
+    return {
+      status: 'executed',
+      context_pack: contextPack as unknown as Record<string, unknown>,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`context: Error compiling context pack: ${message}`);
+    return {
+      status: 'error',
+      error: message,
+      exitCode: 1,
+    };
   } finally {
     recordRequestEnd(callerRole);
   }
@@ -302,46 +244,21 @@ export async function contextPin(
       input.agent_id
     );
 
-    const args = ['context', 'pin', '--title', input.title];
+    log(`context: Pinning fact "${input.title}" to ${projectRoot}`);
+    const fact = pinFact(projectRoot, input.title, input.body, input.trust, input.refs);
 
-    if (input.body) {
-      args.push('--body', input.body);
-    }
-
-    if (input.trust) {
-      args.push('--trust', input.trust);
-    }
-
-    if (input.refs && input.refs.length > 0) {
-      args.push('--refs', input.refs.join(','));
-    }
-
-    args.push('--json');
-
-    const { stdout, stderr, exitCode } = await execDecibel(args, projectRoot);
-
-    if (exitCode !== 0) {
-      return {
-        status: 'error',
-        error: stripAnsi(stderr).slice(0, 500) || `Exit code ${exitCode}`,
-        exitCode,
-      };
-    }
-
-    try {
-      const result = JSON.parse(stripAnsi(stdout));
-      return {
-        status: 'pinned',
-        id: result.id || result.fact_id || 'unknown',
-      };
-    } catch {
-      // Parse ID from text output
-      const match = stripAnsi(stdout).match(/(?:id|ID):\s*(\S+)/);
-      return {
-        status: 'pinned',
-        id: match?.[1] || 'unknown',
-      };
-    }
+    return {
+      status: 'pinned',
+      id: fact.id,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`context: Error pinning fact: ${message}`);
+    return {
+      status: 'error',
+      error: message,
+      exitCode: 1,
+    };
   } finally {
     recordRequestEnd(callerRole);
   }
@@ -363,19 +280,26 @@ export async function contextUnpin(
       input.agent_id
     );
 
-    const args = ['context', 'unpin', input.id, '--json'];
+    log(`context: Unpinning fact ${input.id} from ${projectRoot}`);
+    const success = unpinFact(projectRoot, input.id);
 
-    const { stdout, stderr, exitCode } = await execDecibel(args, projectRoot);
-
-    if (exitCode !== 0) {
+    if (!success) {
       return {
         status: 'error',
-        error: stripAnsi(stderr).slice(0, 500) || `Exit code ${exitCode}`,
-        exitCode,
+        error: `Fact ${input.id} not found`,
+        exitCode: 1,
       };
     }
 
     return { status: 'unpinned' };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`context: Error unpinning fact: ${message}`);
+    return {
+      status: 'error',
+      error: message,
+      exitCode: 1,
+    };
   } finally {
     recordRequestEnd(callerRole);
   }
@@ -397,30 +321,31 @@ export async function contextList(
       input.agent_id
     );
 
-    const args = ['context', 'list', '--json'];
+    log(`context: Listing pinned facts from ${projectRoot}`);
+    const facts = listPinnedFacts(projectRoot);
 
-    const { stdout, stderr, exitCode } = await execDecibel(args, projectRoot);
+    // Map to output format
+    const mappedFacts: PinnedFact[] = facts.map(f => ({
+      id: f.id,
+      title: f.title,
+      body: f.body,
+      trust: f.trust,
+      refs: f.refs,
+      pinned_at: f.ts,
+    }));
 
-    if (exitCode !== 0) {
-      return {
-        status: 'error',
-        error: stripAnsi(stderr).slice(0, 500) || `Exit code ${exitCode}`,
-        exitCode,
-      };
-    }
-
-    try {
-      const result = JSON.parse(stripAnsi(stdout));
-      return {
-        status: 'executed',
-        facts: result.facts || result || [],
-      };
-    } catch {
-      return {
-        status: 'executed',
-        facts: [],
-      };
-    }
+    return {
+      status: 'executed',
+      facts: mappedFacts,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`context: Error listing facts: ${message}`);
+    return {
+      status: 'error',
+      error: message,
+      exitCode: 1,
+    };
   } finally {
     recordRequestEnd(callerRole);
   }
@@ -442,41 +367,21 @@ export async function eventAppend(
       input.agent_id
     );
 
-    const args = ['event', 'append', '--title', input.title];
+    log(`context: Appending event "${input.title}" to ${projectRoot}`);
+    const event = appendEvent(projectRoot, input.title, input.body, input.tags);
 
-    if (input.body) {
-      args.push('--body', input.body);
-    }
-
-    if (input.tags && input.tags.length > 0) {
-      args.push('--tags', input.tags.join(','));
-    }
-
-    args.push('--json');
-
-    const { stdout, stderr, exitCode } = await execDecibel(args, projectRoot);
-
-    if (exitCode !== 0) {
-      return {
-        status: 'error',
-        error: stripAnsi(stderr).slice(0, 500) || `Exit code ${exitCode}`,
-        exitCode,
-      };
-    }
-
-    try {
-      const result = JSON.parse(stripAnsi(stdout));
-      return {
-        status: 'appended',
-        event_id: result.id || result.event_id || 'unknown',
-      };
-    } catch {
-      const match = stripAnsi(stdout).match(/(?:id|ID):\s*(\S+)/);
-      return {
-        status: 'appended',
-        event_id: match?.[1] || 'unknown',
-      };
-    }
+    return {
+      status: 'appended',
+      event_id: event.id,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`context: Error appending event: ${message}`);
+    return {
+      status: 'error',
+      error: message,
+      exitCode: 1,
+    };
   } finally {
     recordRequestEnd(callerRole);
   }
@@ -498,36 +403,30 @@ export async function eventSearch(
       input.agent_id
     );
 
-    const args = ['event', 'search', input.query];
+    log(`context: Searching events for "${input.query}" in ${projectRoot}`);
+    const events = searchEvents(projectRoot, input.query, input.limit);
 
-    if (input.limit) {
-      args.push('--limit', input.limit.toString());
-    }
+    // Map to output format
+    const results: EventRecord[] = events.map(e => ({
+      id: e.id,
+      title: e.title,
+      body: e.body,
+      tags: e.tags || [],
+      timestamp: e.ts,
+    }));
 
-    args.push('--json');
-
-    const { stdout, stderr, exitCode } = await execDecibel(args, projectRoot);
-
-    if (exitCode !== 0) {
-      return {
-        status: 'error',
-        error: stripAnsi(stderr).slice(0, 500) || `Exit code ${exitCode}`,
-        exitCode,
-      };
-    }
-
-    try {
-      const result = JSON.parse(stripAnsi(stdout));
-      return {
-        status: 'executed',
-        results: result.results || result || [],
-      };
-    } catch {
-      return {
-        status: 'executed',
-        results: [],
-      };
-    }
+    return {
+      status: 'executed',
+      results,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`context: Error searching events: ${message}`);
+    return {
+      status: 'error',
+      error: message,
+      exitCode: 1,
+    };
   } finally {
     recordRequestEnd(callerRole);
   }
@@ -549,32 +448,30 @@ export async function artifactList(
       input.agent_id
     );
 
-    const args = ['artifact', 'list', input.run_id, '--json'];
+    log(`context: Listing artifacts for run ${input.run_id} in ${projectRoot}`);
+    const result = listArtifacts(projectRoot, input.run_id);
 
-    const { stdout, stderr, exitCode } = await execDecibel(args, projectRoot);
-
-    if (exitCode !== 0) {
+    if (!result) {
       return {
         status: 'error',
-        error: stripAnsi(stderr).slice(0, 500) || `Exit code ${exitCode}`,
-        exitCode,
+        error: `Run ${input.run_id} not found`,
+        exitCode: 1,
       };
     }
 
-    try {
-      const result = JSON.parse(stripAnsi(stdout));
-      return {
-        status: 'executed',
-        run_id: input.run_id,
-        artifacts: result.artifacts || result || [],
-      };
-    } catch {
-      return {
-        status: 'executed',
-        run_id: input.run_id,
-        artifacts: [],
-      };
-    }
+    return {
+      status: 'executed',
+      run_id: result.run_id,
+      artifacts: result.artifacts,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`context: Error listing artifacts: ${message}`);
+    return {
+      status: 'error',
+      error: message,
+      exitCode: 1,
+    };
   } finally {
     recordRequestEnd(callerRole);
   }
@@ -596,36 +493,32 @@ export async function artifactRead(
       input.agent_id
     );
 
-    const args = ['artifact', 'read', input.run_id, input.name, '--json'];
+    log(`context: Reading artifact ${input.name} from run ${input.run_id} in ${projectRoot}`);
+    const result = readArtifact(projectRoot, input.run_id, input.name);
 
-    const { stdout, stderr, exitCode } = await execDecibel(args, projectRoot);
-
-    if (exitCode !== 0) {
+    if (!result) {
       return {
         status: 'error',
-        error: stripAnsi(stderr).slice(0, 500) || `Exit code ${exitCode}`,
-        exitCode,
+        error: `Artifact ${input.name} not found in run ${input.run_id}`,
+        exitCode: 1,
       };
     }
 
-    try {
-      const result = JSON.parse(stripAnsi(stdout));
-      return {
-        status: 'executed',
-        run_id: result.run_id || input.run_id,
-        name: result.name || input.name,
-        content: result.content || '',
-        mime_type: result.mime_type || 'text/plain',
-      };
-    } catch {
-      return {
-        status: 'executed',
-        run_id: input.run_id,
-        name: input.name,
-        content: stripAnsi(stdout),
-        mime_type: 'text/plain',
-      };
-    }
+    return {
+      status: 'executed',
+      run_id: result.run_id,
+      name: result.name,
+      content: result.content,
+      mime_type: result.mime_type,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`context: Error reading artifact: ${message}`);
+    return {
+      status: 'error',
+      error: message,
+      exitCode: 1,
+    };
   } finally {
     recordRequestEnd(callerRole);
   }
