@@ -31,6 +31,8 @@ export interface ProjectEntry {
   path: string;
   /** Optional aliases (e.g., "senken" -> "senken-trading-agent") */
   aliases?: string[];
+  /** If true, this is the default project when none specified */
+  default?: boolean;
 }
 
 export interface ProjectRegistry {
@@ -294,4 +296,84 @@ export function addProjectAlias(projectId: string, alias: string): void {
  */
 export function getRegistryFilePath(): string {
   return getRegistryPath();
+}
+
+/**
+ * Get the default project.
+ * Resolution order:
+ * 1. Project explicitly marked as default
+ * 2. DECIBEL_DEFAULT_PROJECT env var
+ * 3. If only one project registered, use it
+ * 4. Discover from cwd
+ *
+ * @returns The default project entry or undefined if none can be determined
+ */
+export function getDefaultProject(): ProjectEntry | undefined {
+  const registry = loadRegistry();
+
+  // Strategy 1: Explicitly marked default
+  const explicitDefault = registry.projects.find((p) => p.default === true);
+  if (explicitDefault && hasDecibelFolder(explicitDefault.path)) {
+    log(`ProjectRegistry: Using explicit default project "${explicitDefault.id}"`);
+    return explicitDefault;
+  }
+
+  // Strategy 2: DECIBEL_DEFAULT_PROJECT env var
+  const envDefault = process.env.DECIBEL_DEFAULT_PROJECT;
+  if (envDefault) {
+    const envMatch = registry.projects.find(
+      (p) => p.id === envDefault || p.aliases?.includes(envDefault)
+    );
+    if (envMatch && hasDecibelFolder(envMatch.path)) {
+      log(`ProjectRegistry: Using DECIBEL_DEFAULT_PROJECT "${envMatch.id}"`);
+      return envMatch;
+    }
+  }
+
+  // Strategy 3: If only one project, use it
+  const validProjects = registry.projects.filter((p) => hasDecibelFolder(p.path));
+  if (validProjects.length === 1) {
+    log(`ProjectRegistry: Using only registered project "${validProjects[0].id}" as default`);
+    return validProjects[0];
+  }
+
+  // Strategy 4: Discover from cwd
+  const discoveredRoot = findDecibelDir(process.cwd());
+  if (discoveredRoot) {
+    const discoveredId = path.basename(discoveredRoot);
+    // Check if it matches a registered project
+    const registeredMatch = registry.projects.find((p) => p.id === discoveredId);
+    if (registeredMatch) {
+      log(`ProjectRegistry: Using cwd-discovered project "${registeredMatch.id}" as default`);
+      return registeredMatch;
+    }
+    // Return an ad-hoc entry for the discovered project
+    log(`ProjectRegistry: Using cwd-discovered unregistered project "${discoveredId}" as default`);
+    return { id: discoveredId, path: discoveredRoot };
+  }
+
+  log(`ProjectRegistry: No default project could be determined`);
+  return undefined;
+}
+
+/**
+ * Set a project as the default
+ */
+export function setDefaultProject(projectId: string): void {
+  const registry = loadRegistry();
+  const project = registry.projects.find((p) => p.id === projectId);
+
+  if (!project) {
+    throw new Error(`Project not found: ${projectId}`);
+  }
+
+  // Clear existing defaults
+  for (const p of registry.projects) {
+    p.default = false;
+  }
+
+  // Set new default
+  project.default = true;
+  saveRegistry(registry);
+  log(`ProjectRegistry: Set "${projectId}" as default project`);
 }

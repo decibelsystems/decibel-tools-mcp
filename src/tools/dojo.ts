@@ -21,6 +21,7 @@ import path from 'path';
 import YAML from 'yaml';
 import { log } from '../config.js';
 import { resolveProjectRoot } from '../projectPaths.js';
+import { getDefaultProject, listProjects, ProjectEntry } from '../projectRegistry.js';
 import { CallerRole, enforceToolAccess, getSandboxPolicy, expandSandboxPaths } from './dojoPolicy.js';
 import { checkRateLimit, recordRequestStart, recordRequestEnd } from './rateLimiter.js';
 
@@ -32,12 +33,12 @@ export type ExperimentType = 'script' | 'tool' | 'check' | 'prompt';
 
 /**
  * Base input for all Dojo operations
- * project_id: Required - identifies which project's Dojo to use
+ * project_id: Optional - identifies which project's Dojo to use (uses default if not provided)
  * caller_role: Optional - determines permissions (default: 'human')
  * agent_id: Optional - identifies the calling agent for audit trails
  */
 export interface DojoBaseInput {
-  project_id: string;
+  project_id?: string;
   caller_role?: CallerRole;
   agent_id?: string;
 }
@@ -231,19 +232,42 @@ export interface DojoContext {
 /**
  * Resolve the Dojo root for a project.
  * Returns the path to {project_root}/.decibel/dojo
+ * If projectId is not provided, attempts to use the default project.
  */
-export async function resolveDojoRoot(projectId: string): Promise<{ projectRoot: string; dojoRoot: string }> {
-  const project = await resolveProjectRoot(projectId);
-  const dojoRoot = path.join(project.root, '.decibel', 'dojo');
-  log(`dojo: Resolved project "${projectId}" to Dojo root: ${dojoRoot}`);
-  return { projectRoot: project.root, dojoRoot };
+export async function resolveDojoRoot(projectId?: string): Promise<{ projectId: string; projectRoot: string; dojoRoot: string }> {
+  // If project_id provided, use it directly
+  if (projectId) {
+    const project = await resolveProjectRoot(projectId);
+    const dojoRoot = path.join(project.root, '.decibel', 'dojo');
+    log(`dojo: Resolved project "${projectId}" to Dojo root: ${dojoRoot}`);
+    return { projectId, projectRoot: project.root, dojoRoot };
+  }
+
+  // Try to get default project
+  const defaultProject = getDefaultProject();
+  if (defaultProject) {
+    const dojoRoot = path.join(defaultProject.path, '.decibel', 'dojo');
+    log(`dojo: Using default project "${defaultProject.id}" -> Dojo root: ${dojoRoot}`);
+    return { projectId: defaultProject.id, projectRoot: defaultProject.path, dojoRoot };
+  }
+
+  // No project could be resolved - provide helpful error
+  const registered = listProjects();
+  let errorMsg = 'No project specified and no default project could be determined.';
+  if (registered.length > 0) {
+    errorMsg += ` Available projects: ${registered.map(p => p.id).join(', ')}.`;
+    errorMsg += ' Specify project_id or set one as default with DECIBEL_DEFAULT_PROJECT env var.';
+  } else {
+    errorMsg += ' No projects registered. Register a project with "decibel registry add".';
+  }
+  throw new Error(errorMsg);
 }
 
 /**
  * Build a full Dojo context with policy and rate limit enforcement
  */
 export async function buildDojoContext(
-  projectId: string,
+  projectId: string | undefined,
   callerRole: CallerRole = 'human',
   toolName: string,
   agentId?: string
@@ -260,18 +284,18 @@ export async function buildDojoContext(
   // Record request start (for concurrent tracking)
   recordRequestStart(callerRole);
 
-  // Resolve paths
-  const { projectRoot, dojoRoot } = await resolveDojoRoot(projectId);
+  // Resolve paths (handles default project fallback)
+  const resolved = await resolveDojoRoot(projectId);
 
   // Audit log for AI callers
   if (callerRole !== 'human') {
-    log(`dojo-audit: [${new Date().toISOString()}] agent=${agentId || 'unknown'} role=${callerRole} tool=${toolName} project=${projectId}`);
+    log(`dojo-audit: [${new Date().toISOString()}] agent=${agentId || 'unknown'} role=${callerRole} tool=${toolName} project=${resolved.projectId}`);
   }
 
   return {
-    projectId,
-    projectRoot,
-    dojoRoot,
+    projectId: resolved.projectId,
+    projectRoot: resolved.projectRoot,
+    dojoRoot: resolved.dojoRoot,
     callerRole,
     agentId,
   };
@@ -952,4 +976,56 @@ export function isDojoError(result: unknown): result is DojoError {
     'error' in result &&
     'exitCode' in result
   );
+}
+
+// ============================================================================
+// Project Discovery Tool
+// ============================================================================
+
+export interface ListProjectsOutput {
+  projects: {
+    id: string;
+    name?: string;
+    path: string;
+    aliases?: string[];
+    isDefault: boolean;
+  }[];
+  defaultProject?: string;
+  hint: string;
+}
+
+/**
+ * List all available projects for Dojo operations.
+ * Helps AI callers discover what projects they can use.
+ */
+export function dojoListProjects(): ListProjectsOutput {
+  const registered = listProjects();
+  const defaultProject = getDefaultProject();
+
+  const projects = registered.map((p) => ({
+    id: p.id,
+    name: p.name,
+    path: p.path,
+    aliases: p.aliases,
+    isDefault: p.default === true || p.id === defaultProject?.id,
+  }));
+
+  // If there's a discovered project not in registry, add it
+  if (defaultProject && !registered.find((p) => p.id === defaultProject.id)) {
+    projects.push({
+      id: defaultProject.id,
+      name: undefined,
+      path: defaultProject.path,
+      aliases: undefined,
+      isDefault: true,
+    });
+  }
+
+  return {
+    projects,
+    defaultProject: defaultProject?.id,
+    hint: defaultProject
+      ? `Default project: "${defaultProject.id}". You can omit project_id to use it.`
+      : 'No default project. Specify project_id in your requests.',
+  };
 }

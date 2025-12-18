@@ -130,6 +130,7 @@ import {
   ReadArtifactInput,
   isDojoError,
   ExperimentType,
+  dojoListProjects,
 } from './tools/dojo.js';
 import {
   contextRefresh,
@@ -1213,7 +1214,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Link to existing wish (e.g., "WISH-0001"). Auto-fills problem from wish reason and marks wish as resolved.',
             },
           },
-          required: ['project_id', 'title', 'problem', 'hypothesis'],
+          required: ['title', 'problem', 'hypothesis'],
         },
       },
       {
@@ -1250,7 +1251,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Experiment type: script (default), tool (MCP tool candidate), check (validation), prompt (template)',
             },
           },
-          required: ['project_id', 'proposal_id'],
+          required: ['proposal_id'],
         },
       },
       {
@@ -1278,7 +1279,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Filter results (default: all)',
             },
           },
-          required: ['project_id'],
+          required: [],
         },
       },
       {
@@ -1305,7 +1306,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Experiment ID (e.g., "DOJO-EXP-0001")',
             },
           },
-          required: ['project_id', 'experiment_id'],
+          required: ['experiment_id'],
         },
       },
       {
@@ -1336,7 +1337,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Specific run ID (default: latest)',
             },
           },
-          required: ['project_id', 'experiment_id'],
+          required: ['experiment_id'],
         },
       },
       {
@@ -1403,7 +1404,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Additional structured context about when/why this wish occurred',
             },
           },
-          required: ['project_id', 'capability', 'reason', 'inputs', 'outputs'],
+          required: ['capability', 'reason', 'inputs', 'outputs'],
         },
       },
       {
@@ -1430,7 +1431,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Only show unresolved wishes (default: false)',
             },
           },
-          required: ['project_id'],
+          required: [],
         },
       },
       {
@@ -1457,7 +1458,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Experiment ID (e.g., "DOJO-EXP-0001")',
             },
           },
-          required: ['project_id', 'experiment_id'],
+          required: ['experiment_id'],
         },
       },
       {
@@ -1492,7 +1493,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Artifact filename (e.g., "result.yaml", "plot.png")',
             },
           },
-          required: ['project_id', 'experiment_id', 'run_id', 'filename'],
+          required: ['experiment_id', 'run_id', 'filename'],
+        },
+      },
+      {
+        name: 'dojo_projects',
+        description: 'List available projects for Dojo operations. Helps discover which projects you can use. Shows the default project if one exists.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: [],
         },
       },
 
@@ -2502,9 +2512,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Dojo tools - AI Feature Incubator
       case 'dojo_create_proposal': {
         const input = args as unknown as CreateProposalInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
-        }
         if (!input.title || !input.problem || !input.hypothesis) {
           throw new Error('Missing required fields: title, problem, and hypothesis are required');
         }
@@ -2522,9 +2529,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_scaffold_experiment': {
         const input = args as unknown as ScaffoldExperimentInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
-        }
         if (!input.proposal_id) {
           throw new Error('Missing required field: proposal_id');
         }
@@ -2548,9 +2552,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_list': {
         const input = args as unknown as ListDojoInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
-        }
         const result = await listDojo(input);
         if (isDojoError(result)) {
           return {
@@ -2565,9 +2566,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_run_experiment': {
         const input = args as unknown as RunExperimentInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
-        }
         if (!input.experiment_id) {
           throw new Error('Missing required field: experiment_id');
         }
@@ -2586,9 +2584,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_get_results': {
         const input = args as unknown as GetResultsInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
-        }
         if (!input.experiment_id) {
           throw new Error('Missing required field: experiment_id');
         }
@@ -2606,9 +2601,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_add_wish': {
         const input = args as unknown as AddWishInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
-        }
         if (!input.capability || !input.reason) {
           throw new Error('Missing required fields: capability and reason are required');
         }
@@ -2626,9 +2618,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_list_wishes': {
         const input = args as unknown as ListWishesInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
-        }
         const result = await listWishes(input);
         if (isDojoError(result)) {
           return {
@@ -2643,9 +2632,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_can_graduate': {
         const input = args as unknown as CanGraduateInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
-        }
         if (!input.experiment_id) {
           throw new Error('Missing required field: experiment_id');
         }
@@ -2663,9 +2649,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_read_artifact': {
         const input = args as unknown as ReadArtifactInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
-        }
         if (!input.experiment_id) {
           throw new Error('Missing required field: experiment_id');
         }
@@ -2682,6 +2665,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             isError: true,
           };
         }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'dojo_projects': {
+        const result = dojoListProjects();
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
