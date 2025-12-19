@@ -1,0 +1,32 @@
+id: ISS-0016
+title: Set up private beta repository
+project: decibel-tools-mcp
+status: open
+priority: high
+epic_id: EPIC-0001
+tags:
+  - beta
+  - release
+  - distribution
+created_at: 2025-12-19T01:25:17.579Z
+updated_at: 2025-12-19T01:25:17.579Z
+description: |-
+  Create a private beta release at https://github.com/decibelsystems/decibel-tools-beta
+
+  ## Completed
+  - [x] Create repository structure
+  - [x] Beta README with feature matrix
+  - [x] RELEASES.yaml for stage tracking
+  - [x] Issue templates
+  - [x] CHANGELOG.md
+  - [x] Beta testing guide
+
+  ## Pending
+  - [ ] Sync full source code (see issue #1 in beta repo)
+  - [ ] Invite beta testers
+  - [ ] Set up feedback collection process
+
+  ## Release Staging System
+  Implemented: dojo → alpha → beta → release
+
+  See ADR-0003 for details.

@@ -1,0 +1,28 @@
+id: ADR-0003
+scope: project
+project: decibel-tools-mcp
+title: Feature Release Staging System
+status: accepted
+created_at: 2025-12-19T01:25:09.420Z
+updated_at: 2025-12-19T01:25:09.420Z
+context: We need a way to manage feature maturity and communicate stability to users. As Decibel Tools grows, some features are experimental (AI-proposed experiments in sandbox), some are working but unstable, and some are ready for production. Without clear staging, users may rely on APIs that will break.
+decision: |-
+  Implement a four-stage release system tracked in RELEASES.yaml:
+
+  1. **dojo**: Experimental, AI-proposed features. Sandbox-only execution. APIs not stable.
+  2. **alpha**: Working implementation but API may change between releases. Use with caution.
+  3. **beta**: Stable API, gathering user feedback. Breaking changes only with deprecation notice.
+  4. **release**: Production-ready. Semantic versioning applies.
+
+  Each tool and individual feature gets a stage tag. Tools can have features at different stages (e.g., sentinel is beta but sentinel_scanData might be alpha).
+consequences: |-
+  Positive:
+  - Clear communication of feature stability
+  - Users can make informed decisions about which features to depend on
+  - Provides a graduation path for experimental features
+  - Enables separate beta repository for early feedback
+
+  Negative:
+  - Overhead of maintaining RELEASES.yaml
+  - Need to enforce stage checks in tooling
+  - May slow down feature shipping if stages are too rigid

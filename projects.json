@@ -5,13 +5,26 @@
       "id": "senken-trading-agent",
       "name": "Senken Trading Agent",
       "path": "/Volumes/Ashitaka/Documents/GitHub/senken-trading-agent",
-      "aliases": ["senken"]
+      "aliases": [
+        "senken"
+      ]
     },
     {
       "id": "decibel-tools-mcp",
       "name": "Decibel Tools MCP",
       "path": "/Volumes/Ashitaka/Documents/GitHub/decibel-tools-mcp",
-      "aliases": ["decibel", "decibel-tools"]
+      "aliases": [
+        "decibel",
+        "decibel-tools"
+      ]
+    },
+    {
+      "aliases": [
+        "studio"
+      ],
+      "id": "decibel-studio",
+      "name": "Decibel Studio",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/decibel-studio"
     }
   ]
 }
