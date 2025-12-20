@@ -3,6 +3,7 @@ import path from 'path';
 import { log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
+import { emitCreateProvenance } from './provenance.js';
 
 // ============================================================================
 // Project Resolution Error
@@ -287,6 +288,14 @@ export async function logFriction(input: LogFrictionInput): Promise<LogFrictionO
   validateWritePath(filePath, resolved);
   await fs.writeFile(filePath, content, 'utf-8');
   log(`Friction: Logged friction at ${filePath} (project: ${resolved.id})`);
+
+  // Emit provenance event for this creation
+  await emitCreateProvenance(
+    `friction:log:${filename.replace('.md', '')}`,
+    content,
+    `Logged friction: ${input.description}`,
+    input.projectId
+  );
 
   return {
     id: filename.replace('.md', ''),

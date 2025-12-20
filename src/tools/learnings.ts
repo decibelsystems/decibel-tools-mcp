@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { log } from '../config.js';
 import { resolvePath, ensureDir, hasProjectLocal } from '../dataRoot.js';
+import { emitCreateProvenance } from './provenance.js';
 
 export type LearningCategory = 'debug' | 'integration' | 'architecture' | 'tooling' | 'process' | 'other';
 
@@ -140,9 +141,17 @@ export async function appendLearning(
   // Append to file
   const newContent = existingContent + entry;
   await fs.writeFile(filePath, newContent, 'utf-8');
-  
+
   entryCount++;
   log(`Learnings: Appended entry to ${filePath} (${location})`);
+
+  // Emit provenance event for this creation
+  await emitCreateProvenance(
+    `learnings:entry:${input.project_id}:${entryCount}`,
+    entry,
+    `Appended learning: ${input.title}`,
+    input.project_id
+  );
 
   return {
     timestamp,

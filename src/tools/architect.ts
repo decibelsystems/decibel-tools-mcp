@@ -3,6 +3,7 @@ import path from 'path';
 import { log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
+import { emitCreateProvenance } from './provenance.js';
 
 // ============================================================================
 // Project Resolution Error
@@ -118,6 +119,14 @@ export async function recordArchDecision(
   validateWritePath(filePath, resolved);
   await fs.writeFile(filePath, content, 'utf-8');
   log(`Architect: Recorded architecture decision to ${filePath} (project: ${resolved.id})`);
+
+  // Emit provenance event for this creation
+  await emitCreateProvenance(
+    `architect:adr:${filename}`,
+    content,
+    `Created ADR: ${input.change}`,
+    input.projectId
+  );
 
   return {
     id: filename,

@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { log } from '../config.js';
 import { resolvePath, ensureDir, hasProjectLocal } from '../dataRoot.js';
+import { emitCreateProvenance } from './provenance.js';
 
 export interface RecordDesignDecisionInput {
   project_id: string;
@@ -91,6 +92,15 @@ export async function recordDesignDecision(
 
   await fs.writeFile(filePath, content, 'utf-8');
   log(`Designer: Recorded design decision to ${filePath} (${location})`);
+
+  // Emit provenance event for this creation
+  // Designer uses project_id naming, but we pass it through for provenance
+  await emitCreateProvenance(
+    `designer:decision:${filename}`,
+    content,
+    `Created design decision: ${input.summary}`,
+    input.project_id
+  );
 
   return {
     id: filename,

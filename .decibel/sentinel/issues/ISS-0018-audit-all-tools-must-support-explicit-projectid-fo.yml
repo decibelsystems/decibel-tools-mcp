@@ -1,0 +1,53 @@
+id: ISS-0018
+title: "Audit: All tools must support explicit projectId for beta"
+project: decibel-tools-mcp
+status: open
+priority: high
+tags:
+  - pathing
+  - beta-blocker
+  - audit
+created_at: 2025-12-20T22:19:39.228Z
+updated_at: 2025-12-20T22:19:39.228Z
+description: |-
+  ## Audit of projectId support across all Decibel tools
+
+  ### Tools MISSING projectId (BROKEN for remote MCP):
+
+  **Sentinel Epic tools:**
+  - sentinel_log_epic ❌
+  - sentinel_list_epics ❌
+  - sentinel_get_epic ❌
+  - sentinel_get_epic_issues ❌
+  - sentinel_resolve_epic ❌
+
+  **Friction tools (use "context" not projectId):**
+  - friction_log - has "context" field but no projectId
+  - friction_list - no projectId
+  - friction_resolve - no projectId  
+  - friction_bump - no projectId
+
+  **Old Sentinel tools (use "repo" not projectId):**
+  - sentinel_create_issue (old) - uses "repo"
+  - sentinel_close_issue - uses "repo"
+  - sentinel_list_repo_issues - uses "repo"
+
+  ### Tools WITH projectId (GOOD):
+  - sentinel_createIssue ✓
+  - sentinel_listIssues ✓
+  - sentinel_scan/scanData ✓
+  - roadmap_* (all 6 tools) ✓
+  - architect_createAdr ✓
+  - dojo_* (all tools) ✓
+  - decibel_context_* ✓
+  - decibel_event_* ✓
+  - decibel_artifact_* ✓
+  - learnings_* ✓
+  - designer_* ✓
+  - oracle_next_actions ✓
+
+  ### Naming inconsistency:
+  - architect_record_arch_decision uses "system_id" not "project_id"
+
+  ### Required fix:
+  All tools must accept explicit projectId and resolve via registry. No reliance on cwd/env for beta.

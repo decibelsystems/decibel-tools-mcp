@@ -3,6 +3,7 @@ import path from 'path';
 import { getConfig, log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
+import { emitCreateProvenance } from './provenance.js';
 
 // ============================================================================
 // Project Resolution Error
@@ -520,6 +521,14 @@ export async function createIssue(
   await fs.writeFile(filePath, content, 'utf-8');
   log(`Sentinel: Created issue at ${filePath} (project: ${resolved.id})`);
 
+  // Emit provenance event for this creation
+  await emitCreateProvenance(
+    `sentinel:issue:${filename}`,
+    content,
+    `Created issue: ${input.title}`,
+    input.projectId
+  );
+
   return {
     id: filename,
     timestamp,
@@ -722,6 +731,14 @@ export async function logEpic(input: LogEpicInput): Promise<LogEpicOutput | Proj
 
   await fs.writeFile(filePath, content, 'utf-8');
   log(`Sentinel: Created epic at ${filePath} (project: ${resolved.id})`);
+
+  // Emit provenance event for this creation
+  await emitCreateProvenance(
+    `sentinel:epic:${epicId}`,
+    content,
+    `Created epic: ${input.title}`,
+    input.projectId
+  );
 
   return {
     epic_id: epicId,

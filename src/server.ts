@@ -82,6 +82,10 @@ import {
   ListCritsInput,
 } from './tools/crit.js';
 import {
+  listProvenance,
+  ListProvenanceInput,
+} from './tools/provenance.js';
+import {
   listProjects,
   registerProject,
   unregisterProject,
@@ -1789,6 +1793,34 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
 
+      // Provenance tools
+      {
+        name: 'provenance_list',
+        description: 'List provenance events for an artifact or actor. Shows the history of changes with fingerprints for tracking who did what and when.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
+            artifact_ref: {
+              type: 'string',
+              description: 'Filter by artifact reference (e.g., "sentinel:issue:2025-01-01T00-00-00Z-my-issue.md")',
+            },
+            actor_id: {
+              type: 'string',
+              description: 'Filter by actor ID (e.g., "ai:claude", "human:alice")',
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum number of events to return (default: 50)',
+            },
+          },
+          required: [],
+        },
+      },
+
       // Dynamically add graduated Dojo tools
       ...graduatedToolsToMcpDefinitions(graduatedTools),
     ],
@@ -2859,6 +2891,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const result = await artifactRead(input);
         if (isContextError(result)) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // Provenance tools
+      case 'provenance_list': {
+        const input = args as unknown as ListProvenanceInput;
+        const result = await listProvenance(input);
+        if ('error' in result && result.error === 'project_resolution_failed') {
           return {
             content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
             isError: true,
