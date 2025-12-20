@@ -22,20 +22,20 @@ describe('Architect Tool', () => {
   describe('recordArchDecision', () => {
     it('should create an ADR markdown file', async () => {
       const result = await recordArchDecision({
-        system_id: 'main-system',
+        projectId: 'main-system',
         change: 'Migrate to microservices',
         rationale: 'Better scalability and team independence',
       });
 
       expect(result.id).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-.*\.md$/);
       expect(result.timestamp).toBeValidTimestamp();
-      expect(result.path).toContain('architect/main-system');
+      expect(result.path).toContain('architect/adrs');
       await expect(result.path).toBeMarkdownFile();
     });
 
     it('should include correct frontmatter', async () => {
       const result = await recordArchDecision({
-        system_id: 'api-service',
+        projectId: 'api-service',
         change: 'Add caching layer',
         rationale: 'Reduce database load',
       });
@@ -43,7 +43,7 @@ describe('Architect Tool', () => {
       const { frontmatter } = await readFileWithFrontmatter(result.path);
 
       expect(frontmatter).toMatchFrontmatter({
-        system_id: 'api-service',
+        projectId: 'api-service',
         change: 'Add caching layer',
       });
       expect(frontmatter.timestamp).toBeValidTimestamp();
@@ -51,7 +51,7 @@ describe('Architect Tool', () => {
 
     it('should include ADR sections in body', async () => {
       const result = await recordArchDecision({
-        system_id: 'system',
+        projectId: 'system',
         change: 'Switch to PostgreSQL',
         rationale: 'Better JSON support and performance',
         impact: 'Requires migration scripts',
@@ -69,7 +69,7 @@ describe('Architect Tool', () => {
 
     it('should use default impact text when not provided', async () => {
       const result = await recordArchDecision({
-        system_id: 'system',
+        projectId: 'system',
         change: 'Minor refactor',
         rationale: 'Code cleanup',
       });
@@ -82,7 +82,7 @@ describe('Architect Tool', () => {
 
     it('should include ADR prefix in title', async () => {
       const result = await recordArchDecision({
-        system_id: 'system',
+        projectId: 'system',
         change: 'Important Change',
         rationale: 'Good reasons',
       });
@@ -93,7 +93,7 @@ describe('Architect Tool', () => {
 
     it('should generate safe slugs from change descriptions', async () => {
       const result = await recordArchDecision({
-        system_id: 'system',
+        projectId: 'system',
         change: 'Use Event-Driven Architecture!!!',
         rationale: 'Better decoupling',
       });
@@ -104,14 +104,14 @@ describe('Architect Tool', () => {
       expect(slug).toBeSafeSlug();
     });
 
-    it('should create directories for new system_ids', async () => {
+    it('should create directories for new projects', async () => {
       const result = await recordArchDecision({
-        system_id: 'brand-new-system',
+        projectId: 'brand-new-system',
         change: 'Initial architecture',
         rationale: 'Starting fresh',
       });
 
-      expect(result.path).toContain('brand-new-system');
+      expect(result.path).toContain('architect/adrs');
       await expect(result.path).toBeMarkdownFile();
     });
 
@@ -121,7 +121,7 @@ Second reason.
 Third reason with details.`;
 
       const result = await recordArchDecision({
-        system_id: 'system',
+        projectId: 'system',
         change: 'Complex change',
         rationale: multilineRationale,
       });

@@ -1,10 +1,34 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { log } from '../config.js';
-import { resolvePath, ensureDir, hasProjectLocal } from '../dataRoot.js';
+import { ensureDir } from '../dataRoot.js';
+import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
+
+// ============================================================================
+// Project Resolution Error
+// ============================================================================
+
+export interface ProjectResolutionError {
+  error: 'project_resolution_failed';
+  message: string;
+  hint: string;
+}
+
+function makeProjectResolutionError(operation: string): ProjectResolutionError {
+  return {
+    error: 'project_resolution_failed',
+    message: `Cannot ${operation}: No project context available.`,
+    hint:
+      'Either specify projectId parameter, set DECIBEL_PROJECT_ROOT env var, or run from a directory containing .decibel/',
+  };
+}
+
+// ============================================================================
+// Types
+// ============================================================================
 
 export interface RecordArchDecisionInput {
-  system_id: string;
+  projectId?: string;  // optional project ID, uses default if not specified
   change: string;
   rationale: string;
   impact?: string;
@@ -14,8 +38,12 @@ export interface RecordArchDecisionOutput {
   id: string;
   timestamp: string;
   path: string;
-  location: 'project' | 'global';
+  location: 'project';  // Always project-local now
 }
+
+// ============================================================================
+// Helpers
+// ============================================================================
 
 function slugify(text: string): string {
   return text
@@ -33,56 +61,39 @@ function formatTimestampForFilename(date: Date): string {
     .replace(/\.\\d{3}Z$/, 'Z');
 }
 
-// Known global system IDs (ADRs about the tooling itself)
-const GLOBAL_SYSTEMS = [
-  'decibel-tools-mcp',
-  'decibel-tools',
-  'decibel-ecosystem',
-  'mcp',
-];
+// ============================================================================
+// Functions
+// ============================================================================
 
 export async function recordArchDecision(
   input: RecordArchDecisionInput
-): Promise<RecordArchDecisionOutput> {
+): Promise<RecordArchDecisionOutput | ProjectResolutionError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch (err) {
+    return makeProjectResolutionError('record architecture decision');
+  }
+
   const now = new Date();
   const timestamp = now.toISOString();
   const fileTimestamp = formatTimestampForFilename(now);
   const slug = slugify(input.change);
   const filename = `${fileTimestamp}-${slug}.md`;
 
-  // Determine if this is a global ADR (about tooling) or project ADR
-  const isGlobalSystem = GLOBAL_SYSTEMS.includes(input.system_id.toLowerCase());
-  
-  let dirPath: string;
-  let location: 'project' | 'global';
-
-  if (isGlobalSystem) {
-    // Always use global for tooling ADRs
-    const baseDir = resolvePath('architect-global');
-    dirPath = path.join(baseDir, input.system_id);
-    location = 'global';
-  } else if (hasProjectLocal()) {
-    // Use project-local for project-specific ADRs
-    const baseDir = resolvePath('architect-project');
-    dirPath = path.join(baseDir, input.system_id);
-    location = 'project';
-  } else {
-    // Fallback to global with system_id namespace
-    const baseDir = resolvePath('architect-global');
-    dirPath = path.join(baseDir, input.system_id);
-    location = 'global';
-  }
-
+  // Always use project-local storage under .decibel/architect/adrs/
+  const dirPath = resolved.subPath('architect', 'adrs');
   const filePath = path.join(dirPath, filename);
+
   ensureDir(dirPath);
 
   // Build ADR-style markdown content
   const frontmatter = [
     '---',
-    `system_id: ${input.system_id}`,
+    `projectId: ${resolved.id}`,
     `change: ${input.change}`,
     `timestamp: ${timestamp}`,
-    `location: ${location}`,
+    `location: project`,
     '---',
   ].join('\n');
 
@@ -104,13 +115,14 @@ export async function recordArchDecision(
 
   const content = `${frontmatter}\n\n${sections}\n`;
 
+  validateWritePath(filePath, resolved);
   await fs.writeFile(filePath, content, 'utf-8');
-  log(`Architect: Recorded architecture decision to ${filePath} (${location})`);
+  log(`Architect: Recorded architecture decision to ${filePath} (project: ${resolved.id})`);
 
   return {
     id: filename,
     timestamp,
     path: filePath,
-    location,
+    location: 'project',
   };
 }

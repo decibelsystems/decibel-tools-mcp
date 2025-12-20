@@ -33,7 +33,7 @@ describe('Sentinel Tool', () => {
   describe('createIssue', () => {
     it('should create an issue markdown file', async () => {
       const result = await createIssue({
-        repo: 'my-repo',
+        projectId: 'my-repo',
         severity: 'high',
         title: 'Memory leak detected',
         details: 'Process memory grows unbounded',
@@ -41,14 +41,14 @@ describe('Sentinel Tool', () => {
 
       expect(result.id).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-.*\.md$/);
       expect(result.timestamp).toBeValidTimestamp();
-      expect(result.path).toContain('sentinel/my-repo/issues');
+      expect(result.path).toContain('sentinel/issues');
       expect(result.status).toBe('open');
       await expect(result.path).toBeMarkdownFile();
     });
 
     it('should include correct frontmatter', async () => {
       const result = await createIssue({
-        repo: 'test-repo',
+        projectId: 'test-repo',
         severity: 'critical',
         title: 'Security vulnerability',
         details: 'SQL injection found',
@@ -57,7 +57,7 @@ describe('Sentinel Tool', () => {
       const { frontmatter } = await readFileWithFrontmatter(result.path);
 
       expect(frontmatter).toMatchFrontmatter({
-        repo: 'test-repo',
+        projectId: 'test-repo',
         severity: 'critical',
         status: 'open',
       });
@@ -66,7 +66,7 @@ describe('Sentinel Tool', () => {
 
     it('should include title and details in body', async () => {
       const result = await createIssue({
-        repo: 'repo',
+        projectId: 'repo',
         severity: 'med',
         title: 'Performance Issue',
         details: 'Response times have increased by 50%',
@@ -81,7 +81,7 @@ describe('Sentinel Tool', () => {
 
     it('should display severity in body', async () => {
       const result = await createIssue({
-        repo: 'repo',
+        projectId: 'repo',
         severity: 'high',
         title: 'Test',
         details: 'Test details',
@@ -96,7 +96,7 @@ describe('Sentinel Tool', () => {
       'should accept severity level: %s',
       async (severity) => {
         const result = await createIssue({
-          repo: 'repo',
+          projectId: 'repo',
           severity,
           title: `Test ${severity}`,
           details: 'Details',
@@ -110,7 +110,7 @@ describe('Sentinel Tool', () => {
 
     it('should generate safe slugs from titles', async () => {
       const result = await createIssue({
-        repo: 'repo',
+        projectId: 'repo',
         severity: 'low',
         title: 'Bug: Something is Wrong! (Critical)',
         details: 'Details here',
@@ -124,31 +124,31 @@ describe('Sentinel Tool', () => {
 
     it('should create issues directory structure', async () => {
       const result = await createIssue({
-        repo: 'new-repo',
+        projectId: 'new-repo',
         severity: 'low',
         title: 'First issue',
         details: 'Details',
       });
 
-      expect(result.path).toContain('sentinel/new-repo/issues');
+      expect(result.path).toContain('sentinel/issues');
       await expect(result.path).toBeMarkdownFile();
     });
 
-    it('should handle repos with special characters', async () => {
+    it('should handle projectIds with special characters', async () => {
       const result = await createIssue({
-        repo: 'org/repo-name',
+        projectId: 'org-repo-name',
         severity: 'med',
         title: 'Issue in nested repo',
         details: 'Details',
       });
 
-      expect(result.path).toContain('org/repo-name');
+      expect(result.path).toContain('sentinel/issues');
       await expect(result.path).toBeMarkdownFile();
     });
 
     it('should always return status as open for new issues', async () => {
       const result = await createIssue({
-        repo: 'repo',
+        projectId: 'repo',
         severity: 'low',
         title: 'Test',
         details: 'Test',
@@ -164,7 +164,7 @@ describe('Sentinel Tool', () => {
       const longDetails = 'X'.repeat(10000);
 
       const result = await createIssue({
-        repo: 'repo',
+        projectId: 'repo',
         severity: 'low',
         title: 'Issue with long details',
         details: longDetails,
@@ -179,7 +179,7 @@ describe('Sentinel Tool', () => {
       await logEpic({ title: 'Test Epic', summary: 'Summary' });
 
       const result = await createIssue({
-        repo: 'repo',
+        projectId: 'repo',
         severity: 'high',
         title: 'Issue linked to epic',
         details: 'Details',
@@ -199,7 +199,7 @@ describe('Sentinel Tool', () => {
 
     it('should not include epic_id when not provided', async () => {
       const result = await createIssue({
-        repo: 'repo',
+        projectId: 'repo',
         severity: 'low',
         title: 'Issue without epic',
         details: 'Details',
@@ -440,7 +440,7 @@ describe('Sentinel Tool', () => {
       await logEpic({ title: 'Parent Epic', summary: 'Has issues' });
 
       await createIssue({
-        repo: 'repo1',
+        projectId: 'repo1',
         severity: 'high',
         title: 'Linked Issue 1',
         details: 'Details',
@@ -448,7 +448,7 @@ describe('Sentinel Tool', () => {
       });
 
       await createIssue({
-        repo: 'repo2',
+        projectId: 'repo2',
         severity: 'low',
         title: 'Linked Issue 2',
         details: 'Details',
@@ -456,7 +456,7 @@ describe('Sentinel Tool', () => {
       });
 
       await createIssue({
-        repo: 'repo1',
+        projectId: 'repo1',
         severity: 'med',
         title: 'Unlinked Issue',
         details: 'Details',
@@ -470,11 +470,11 @@ describe('Sentinel Tool', () => {
       expect(result.issues.map((i) => i.title)).not.toContain('Unlinked Issue');
     });
 
-    it('should search across multiple repos', async () => {
-      await logEpic({ title: 'Cross-repo Epic', summary: 'Summary' });
+    it('should search across multiple projects', async () => {
+      await logEpic({ title: 'Cross-project Epic', summary: 'Summary' });
 
       await createIssue({
-        repo: 'repo-a',
+        projectId: 'repo-a',
         severity: 'high',
         title: 'Issue A',
         details: 'Details',
@@ -482,7 +482,7 @@ describe('Sentinel Tool', () => {
       });
 
       await createIssue({
-        repo: 'repo-b',
+        projectId: 'repo-b',
         severity: 'low',
         title: 'Issue B',
         details: 'Details',
@@ -502,7 +502,7 @@ describe('Sentinel Tool', () => {
   describe('createIssue with epic validation', () => {
     it('should return EPIC_NOT_FOUND for invalid epic_id', async () => {
       const result = await createIssue({
-        repo: 'repo',
+        projectId: 'repo',
         severity: 'high',
         title: 'Issue with bad epic',
         details: 'Details',
@@ -524,7 +524,7 @@ describe('Sentinel Tool', () => {
       await logEpic({ title: 'Another Epic', summary: 'Summary' });
 
       const result = await createIssue({
-        repo: 'repo',
+        projectId: 'repo',
         severity: 'low',
         title: 'Issue',
         details: 'Details',
@@ -543,7 +543,7 @@ describe('Sentinel Tool', () => {
       await logEpic({ title: 'Valid Epic', summary: 'Summary' });
 
       const result = await createIssue({
-        repo: 'repo',
+        projectId: 'repo',
         severity: 'high',
         title: 'Issue linked to valid epic',
         details: 'Details',
@@ -559,7 +559,7 @@ describe('Sentinel Tool', () => {
 
     it('should allow issues without epic_id', async () => {
       const result = await createIssue({
-        repo: 'repo',
+        projectId: 'repo',
         severity: 'low',
         title: 'Standalone issue',
         details: 'Details',

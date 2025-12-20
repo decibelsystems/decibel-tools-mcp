@@ -265,13 +265,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // Architect tools
       {
         name: 'architect_record_arch_decision',
-        description: 'Record an architectural decision (ADR) for a system. Creates a markdown file with Change, Rationale, and Impact sections.',
+        description: 'Record an architectural decision (ADR) for a project. Creates a markdown file with Change, Rationale, and Impact sections.',
         inputSchema: {
           type: 'object',
           properties: {
-            system_id: {
+            projectId: {
               type: 'string',
-              description: 'The system identifier',
+              description: 'Optional project identifier. Uses default project if not specified.',
             },
             change: {
               type: 'string',
@@ -286,7 +286,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Optional description of the expected impact',
             },
           },
-          required: ['system_id', 'change', 'rationale'],
+          required: ['change', 'rationale'],
         },
       },
 
@@ -414,13 +414,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // Sentinel tools - Issues
       {
         name: 'sentinel_create_issue',
-        description: 'Create a new issue for a repository. Creates a markdown file with severity and status tracking. Can optionally link to an epic.',
+        description: 'Create a new issue for a project. Creates a markdown file with severity and status tracking. Can optionally link to an epic.',
         inputSchema: {
           type: 'object',
           properties: {
-            repo: {
+            projectId: {
               type: 'string',
-              description: 'The repository name',
+              description: 'Optional project identifier. Uses default project if not specified.',
             },
             severity: {
               type: 'string',
@@ -440,7 +440,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Optional parent epic ID (e.g., "EPIC-0001")',
             },
           },
-          required: ['repo', 'severity', 'title', 'details'],
+          required: ['severity', 'title', 'details'],
         },
       },
       {
@@ -449,9 +449,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
-            repo: {
+            projectId: {
               type: 'string',
-              description: 'The repository name',
+              description: 'Optional project identifier. Uses default project if not specified.',
             },
             issue_id: {
               type: 'string',
@@ -467,18 +467,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'The closing status (default: closed)',
             },
           },
-          required: ['repo', 'issue_id'],
+          required: ['issue_id'],
         },
       },
       {
         name: 'sentinel_list_repo_issues',
-        description: 'List all issues for a specific repository, optionally filtered by status.',
+        description: 'List all issues for a specific project, optionally filtered by status.',
         inputSchema: {
           type: 'object',
           properties: {
-            repo: {
+            projectId: {
               type: 'string',
-              description: 'The repository name',
+              description: 'Optional project identifier. Uses default project if not specified.',
             },
             status: {
               type: 'string',
@@ -486,7 +486,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Optional status filter',
             },
           },
-          required: ['repo'],
         },
       },
 
@@ -497,6 +496,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
             title: {
               type: 'string',
               description: 'Epic title (e.g., "MCP Server: Sentinel Epic Support")',
@@ -549,6 +552,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
             status: {
               type: 'string',
               enum: ['planned', 'in_progress', 'shipped', 'on_hold', 'cancelled'],
@@ -573,6 +580,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
             epic_id: {
               type: 'string',
               description: 'Epic ID (e.g., "EPIC-0001")',
@@ -587,6 +598,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
             epic_id: {
               type: 'string',
               description: 'Epic ID (e.g., "EPIC-0001")',
@@ -601,6 +616,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
             query: {
               type: 'string',
               description: 'Search query (epic ID, title, or keywords)',
@@ -878,6 +897,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
             context: {
               type: 'string',
               description: 'Where the friction occurs (project name, repo, system, or workflow)',
@@ -920,6 +943,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
             context: {
               type: 'string',
               description: 'Filter by context (project, repo, system)',
@@ -947,6 +974,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
             friction_id: {
               type: 'string',
               description: 'The friction ID (filename or partial match)',
@@ -974,6 +1005,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
             friction_id: {
               type: 'string',
               description: 'The friction ID (filename or partial match)',
@@ -1796,14 +1831,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const rawArchInput = args as Record<string, unknown>;
         const input = normalizeParams<RecordArchDecisionInput>(
           rawArchInput,
-          ['system_id', 'systemId', 'change', 'rationale', 'impact', 'location']
+          ['projectId', 'project_id', 'change', 'rationale', 'impact']
         );
-        // Also support systemId as alias for system_id
-        if (!input.system_id && rawArchInput.systemId) {
-          input.system_id = rawArchInput.systemId as string;
+        // Support project_id as alias for projectId
+        if (!input.projectId && rawArchInput.project_id) {
+          input.projectId = rawArchInput.project_id as string;
         }
-        if (!input.system_id || !input.change || !input.rationale) {
-          throw new Error('Missing required fields: system_id, change, and rationale are required');
+        if (!input.change || !input.rationale) {
+          throw new Error('Missing required fields: change and rationale are required');
         }
         const result = await recordArchDecision(input);
         return {
@@ -1886,8 +1921,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Sentinel tools - Issues
       case 'sentinel_create_issue': {
         const input = args as unknown as CreateIssueInput;
-        if (!input.repo || !input.severity || !input.title || !input.details) {
-          throw new Error('Missing required fields: repo, severity, title, and details are required');
+        if (!input.severity || !input.title || !input.details) {
+          throw new Error('Missing required fields: severity, title, and details are required');
         }
         const validSeverities: Severity[] = ['low', 'med', 'high', 'critical'];
         if (!validSeverities.includes(input.severity)) {
@@ -1909,8 +1944,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'sentinel_close_issue': {
         const input = args as unknown as CloseIssueInput;
-        if (!input.repo || !input.issue_id) {
-          throw new Error('Missing required fields: repo and issue_id are required');
+        if (!input.issue_id) {
+          throw new Error('Missing required field: issue_id is required');
         }
         if (input.status) {
           const validStatuses: Array<'closed' | 'wontfix'> = ['closed', 'wontfix'];
@@ -1934,9 +1969,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'sentinel_list_repo_issues': {
         const input = args as unknown as ListRepoIssuesInput;
-        if (!input.repo) {
-          throw new Error('Missing required field: repo');
-        }
         if (input.status) {
           const validStatuses: IssueStatus[] = ['open', 'closed', 'wontfix'];
           if (!validStatuses.includes(input.status)) {

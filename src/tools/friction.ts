@@ -1,7 +1,27 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { log } from '../config.js';
-import { resolvePath, ensureDir } from '../dataRoot.js';
+import { ensureDir } from '../dataRoot.js';
+import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
+
+// ============================================================================
+// Project Resolution Error
+// ============================================================================
+
+export interface ProjectResolutionError {
+  error: 'project_resolution_failed';
+  message: string;
+  hint: string;
+}
+
+function makeProjectResolutionError(operation: string): ProjectResolutionError {
+  return {
+    error: 'project_resolution_failed',
+    message: `Cannot ${operation}: No project context available.`,
+    hint:
+      'Either specify projectId parameter, set DECIBEL_PROJECT_ROOT env var, or run from a directory containing .decibel/',
+  };
+}
 
 // ============================================================================
 // Types
@@ -13,6 +33,7 @@ export type FrictionImpact = 'low' | 'medium' | 'high' | 'blocking';
 export type FrictionStatus = 'open' | 'acknowledged' | 'solving' | 'resolved' | 'wontfix';
 
 export interface LogFrictionInput {
+  projectId?: string;  // optional project ID, uses default if not specified
   context: string;  // project, repo, or system where friction occurs
   description: string;
   frequency?: FrictionFrequency;
@@ -31,6 +52,7 @@ export interface LogFrictionOutput {
 }
 
 export interface ListFrictionInput {
+  projectId?: string;  // optional project ID, uses default if not specified
   context?: string;
   status?: FrictionStatus;
   min_impact?: FrictionImpact;
@@ -56,6 +78,7 @@ export interface ListFrictionOutput {
 }
 
 export interface ResolveFrictionInput {
+  projectId?: string;  // optional project ID, uses default if not specified
   friction_id: string;
   resolution: string;
   solution_ref?: string;  // optional link to issue, ADR, or commit that solved it
@@ -70,6 +93,7 @@ export interface ResolveFrictionOutput {
 }
 
 export interface BumpFrictionInput {
+  projectId?: string;  // optional project ID, uses default if not specified
   friction_id: string;
   source?: FrictionSource;
   note?: string;
@@ -150,13 +174,18 @@ async function parseFrictionFile(filePath: string): Promise<FrictionSummary | nu
   }
 }
 
-async function findFrictionFile(frictionId: string): Promise<string | null> {
-  // Friction is always global
-  const frictionDir = resolvePath('friction-global');
+async function findFrictionFile(frictionId: string, projectId?: string): Promise<string | null> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(projectId);
+  } catch {
+    return null;
+  }
+  const frictionDir = resolved.subPath('friction');
 
   try {
     const files = await fs.readdir(frictionDir);
-    
+
     // Exact match
     const exact = files.find(f => f === frictionId || f === `${frictionId}.md`);
     if (exact) return path.join(frictionDir, exact);
@@ -175,13 +204,19 @@ async function findFrictionFile(frictionId: string): Promise<string | null> {
 // Functions
 // ============================================================================
 
-export async function logFriction(input: LogFrictionInput): Promise<LogFrictionOutput> {
+export async function logFriction(input: LogFrictionInput): Promise<LogFrictionOutput | ProjectResolutionError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch (err) {
+    return makeProjectResolutionError('log friction');
+  }
+
   const now = new Date();
   const timestamp = now.toISOString();
   const fileTimestamp = formatTimestampForFilename(now);
 
-  // Friction is always global (cross-project by nature)
-  const frictionDir = resolvePath('friction-global');
+  const frictionDir = resolved.subPath('friction');
   ensureDir(frictionDir);
 
   const slug = slugify(input.description);
@@ -249,8 +284,9 @@ export async function logFriction(input: LogFrictionInput): Promise<LogFrictionO
 
   const content = `${frontmatter}\n\n${bodyLines.join('\n')}\n`;
 
+  validateWritePath(filePath, resolved);
   await fs.writeFile(filePath, content, 'utf-8');
-  log(`Friction: Logged friction at ${filePath} (global)`);
+  log(`Friction: Logged friction at ${filePath} (project: ${resolved.id})`);
 
   return {
     id: filename.replace('.md', ''),
@@ -261,8 +297,14 @@ export async function logFriction(input: LogFrictionInput): Promise<LogFrictionO
   };
 }
 
-export async function listFriction(input: ListFrictionInput): Promise<ListFrictionOutput> {
-  const frictionDir = resolvePath('friction-global');
+export async function listFriction(input: ListFrictionInput): Promise<ListFrictionOutput | ProjectResolutionError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch (err) {
+    return makeProjectResolutionError('list friction');
+  }
+  const frictionDir = resolved.subPath('friction');
   const limit = input.limit || 20;
 
   let frictionList: FrictionSummary[] = [];
@@ -313,9 +355,16 @@ export async function listFriction(input: ListFrictionInput): Promise<ListFricti
   };
 }
 
-export async function resolveFriction(input: ResolveFrictionInput): Promise<ResolveFrictionOutput | { error: string }> {
-  const filePath = await findFrictionFile(input.friction_id);
-  
+export async function resolveFriction(input: ResolveFrictionInput): Promise<ResolveFrictionOutput | ProjectResolutionError | { error: string }> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch (err) {
+    return makeProjectResolutionError('resolve friction');
+  }
+
+  const filePath = await findFrictionFile(input.friction_id, input.projectId);
+
   if (!filePath) {
     return { error: `Friction not found: ${input.friction_id}` };
   }
@@ -362,8 +411,9 @@ export async function resolveFriction(input: ResolveFrictionInput): Promise<Reso
     updatedContent = updatedContent.trimEnd() + '\n' + resolutionSection.join('\n') + '\n';
   }
 
+  validateWritePath(filePath, resolved);
   await fs.writeFile(filePath, updatedContent, 'utf-8');
-  log(`Friction: Resolved friction at ${filePath}`);
+  log(`Friction: Resolved friction at ${filePath} (project: ${resolved.id})`);
 
   return {
     id: path.basename(filePath, '.md'),
@@ -373,9 +423,16 @@ export async function resolveFriction(input: ResolveFrictionInput): Promise<Reso
   };
 }
 
-export async function bumpFriction(input: BumpFrictionInput): Promise<BumpFrictionOutput | { error: string }> {
-  const filePath = await findFrictionFile(input.friction_id);
-  
+export async function bumpFriction(input: BumpFrictionInput): Promise<BumpFrictionOutput | ProjectResolutionError | { error: string }> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch (err) {
+    return makeProjectResolutionError('bump friction');
+  }
+
+  const filePath = await findFrictionFile(input.friction_id, input.projectId);
+
   if (!filePath) {
     return { error: `Friction not found: ${input.friction_id}` };
   }
@@ -405,8 +462,9 @@ export async function bumpFriction(input: BumpFrictionInput): Promise<BumpFricti
     `$1$2\n${logEntry}$3`
   );
 
+  validateWritePath(filePath, resolved);
   await fs.writeFile(filePath, updatedContent, 'utf-8');
-  log(`Friction: Bumped friction at ${filePath} (signal: ${newCount})`);
+  log(`Friction: Bumped friction at ${filePath} (project: ${resolved.id}, signal: ${newCount})`);
 
   return {
     id: path.basename(filePath, '.md'),

@@ -81,14 +81,14 @@ Decision: PostgreSQL provides the best balance of flexibility and reliability.`,
 export const architectPayloads = {
   /** Minimal valid payload */
   minimal: {
-    system_id: 'main-backend',
+    projectId: 'main-backend',
     change: 'Add caching layer',
     rationale: 'Reduce database load during peak traffic',
   } satisfies RecordArchDecisionInput,
 
   /** Full ADR with impact */
   full: {
-    system_id: 'payment-system',
+    projectId: 'payment-system',
     change: 'Migrate from monolith to microservices',
     rationale: `Current challenges:
 1. Deployments require full system restart
@@ -105,7 +105,7 @@ Microservices allow independent deployment and scaling.`,
 
   /** Database migration ADR */
   databaseMigration: {
-    system_id: 'data-platform',
+    projectId: 'data-platform',
     change: 'Switch from MySQL to PostgreSQL',
     rationale: 'Need better JSON support and advanced indexing for analytics workloads.',
     impact: 'Requires data migration scripts and ORM updates. Estimated 2 weeks of work.',
@@ -113,7 +113,7 @@ Microservices allow independent deployment and scaling.`,
 
   /** Event-driven architecture ADR */
   eventDriven: {
-    system_id: 'order-service',
+    projectId: 'order-service',
     change: 'Implement event sourcing for order lifecycle',
     rationale: 'Need complete audit trail and ability to replay events for debugging.',
     impact: 'New event store required. Existing queries need CQRS read models.',
@@ -121,7 +121,7 @@ Microservices allow independent deployment and scaling.`,
 
   /** Security architecture ADR */
   securityArch: {
-    system_id: 'api-gateway',
+    projectId: 'api-gateway',
     change: 'Add rate limiting and circuit breaker patterns',
     rationale: 'Protect downstream services from traffic spikes and cascading failures.',
   } satisfies RecordArchDecisionInput,
@@ -134,7 +134,7 @@ Microservices allow independent deployment and scaling.`,
 export const sentinelPayloads = {
   /** Low severity issue */
   low: {
-    repo: 'frontend-app',
+    projectId: 'frontend-app',
     severity: 'low' as Severity,
     title: 'Typo in error message',
     details: 'Login error says "Invlaid password" instead of "Invalid password".',
@@ -142,7 +142,7 @@ export const sentinelPayloads = {
 
   /** Medium severity issue */
   med: {
-    repo: 'api-service',
+    projectId: 'api-service',
     severity: 'med' as Severity,
     title: 'Slow query on user search',
     details: 'User search endpoint takes >2s for queries with wildcards. Missing index suspected.',
@@ -150,7 +150,7 @@ export const sentinelPayloads = {
 
   /** High severity issue */
   high: {
-    repo: 'payment-service',
+    projectId: 'payment-service',
     severity: 'high' as Severity,
     title: 'Memory leak in transaction processor',
     details: `Memory usage grows from 256MB to 2GB over 24 hours.
@@ -160,7 +160,7 @@ Workaround: Daily restart via cron.`,
 
   /** Critical severity issue */
   critical: {
-    repo: 'auth-service',
+    projectId: 'auth-service',
     severity: 'critical' as Severity,
     title: 'SQL injection vulnerability in login endpoint',
     details: `CRITICAL: User input not sanitized in login query.
@@ -170,7 +170,7 @@ Immediate action required - consider taking endpoint offline.`,
 
   /** Security issue */
   securityIssue: {
-    repo: 'api-gateway',
+    projectId: 'api-gateway',
     severity: 'high' as Severity,
     title: 'Exposed API keys in error responses',
     details: 'Stack traces in 500 errors include environment variables with API keys.',
@@ -178,7 +178,7 @@ Immediate action required - consider taking endpoint offline.`,
 
   /** Performance issue */
   performanceIssue: {
-    repo: 'search-service',
+    projectId: 'search-service',
     severity: 'med' as Severity,
     title: 'Search latency increased 3x after deployment',
     details: 'P99 latency went from 200ms to 600ms after v2.3.0 deployment. Rollback pending.',
@@ -186,7 +186,7 @@ Immediate action required - consider taking endpoint offline.`,
 
   /** Issue linked to epic */
   withEpic: {
-    repo: 'ecommerce-platform',
+    projectId: 'ecommerce-platform',
     severity: 'med' as Severity,
     title: 'Payment timeout handling',
     details: 'Need to handle Stripe webhook timeouts gracefully.',
@@ -201,14 +201,14 @@ Immediate action required - consider taking endpoint offline.`,
 export const epicPayloads = {
   /** Minimal valid payload */
   minimal: {
-    repo: 'test-repo',
+    projectId: 'test-repo',
     title: 'Test Epic',
     summary: 'A test epic for validation',
   } satisfies LogEpicInput,
 
   /** Full payload with all fields */
   full: {
-    repo: 'ecommerce-platform',
+    projectId: 'ecommerce-platform',
     title: 'Checkout Flow Redesign',
     summary: 'Complete overhaul of the checkout experience to reduce abandonment.',
     priority: 'high' as Priority,
@@ -217,7 +217,7 @@ export const epicPayloads = {
 
   /** Feature epic */
   feature: {
-    repo: 'mobile-app',
+    projectId: 'mobile-app',
     title: 'Dark Mode Implementation',
     summary: 'Add dark mode theme support across all screens.',
     priority: 'med' as Priority,
@@ -226,7 +226,7 @@ export const epicPayloads = {
 
   /** Security epic */
   security: {
-    repo: 'auth-service',
+    projectId: 'auth-service',
     title: 'OAuth 2.0 Migration',
     summary: 'Migrate from custom auth to OAuth 2.0 with PKCE.',
     priority: 'critical' as Priority,
@@ -235,7 +235,7 @@ export const epicPayloads = {
 
   /** Performance epic */
   performance: {
-    repo: 'api-service',
+    projectId: 'api-service',
     title: 'Database Query Optimization',
     summary: 'Optimize slow queries identified in APM dashboard.',
     priority: 'high' as Priority,
@@ -244,7 +244,7 @@ export const epicPayloads = {
 
   /** Completed epic */
   shipped: {
-    repo: 'frontend-app',
+    projectId: 'frontend-app',
     title: 'Accessibility Improvements',
     summary: 'WCAG 2.1 AA compliance for all public pages.',
     priority: 'med' as Priority,
@@ -253,7 +253,7 @@ export const epicPayloads = {
 
   /** On-hold epic */
   onHold: {
-    repo: 'data-platform',
+    projectId: 'data-platform',
     title: 'Real-time Analytics Pipeline',
     summary: 'Stream processing for live dashboards.',
     priority: 'low' as Priority,
@@ -262,33 +262,33 @@ export const epicPayloads = {
 };
 
 export const listEpicsPayloads = {
-  /** List all epics for a repo */
+  /** List all epics for a project */
   all: {
-    repo: 'test-repo',
+    projectId: 'test-repo',
   } satisfies ListEpicsInput,
 
   /** List epics filtered by status */
   byStatus: {
-    repo: 'test-repo',
+    projectId: 'test-repo',
     status: 'in_progress' as EpicStatus,
   } satisfies ListEpicsInput,
 
-  /** List epics for empty repo */
+  /** List epics for empty project */
   emptyRepo: {
-    repo: 'non-existent-repo-12345',
+    projectId: 'non-existent-repo-12345',
   } satisfies ListEpicsInput,
 };
 
 export const getEpicPayloads = {
   /** Get a specific epic */
   valid: {
-    repo: 'test-repo',
+    projectId: 'test-repo',
     epic_id: 'EPIC-0001',
   } satisfies GetEpicInput,
 
   /** Get non-existent epic */
   nonExistent: {
-    repo: 'test-repo',
+    projectId: 'test-repo',
     epic_id: 'EPIC-9999',
   } satisfies GetEpicInput,
 };
@@ -296,13 +296,13 @@ export const getEpicPayloads = {
 export const getEpicIssuesPayloads = {
   /** Get issues for an epic */
   valid: {
-    repo: 'test-repo',
+    projectId: 'test-repo',
     epic_id: 'EPIC-0001',
   } satisfies GetEpicIssuesInput,
 
   /** Get issues for epic with no issues */
   empty: {
-    repo: 'test-repo',
+    projectId: 'test-repo',
     epic_id: 'EPIC-0002',
   } satisfies GetEpicIssuesInput,
 };
@@ -408,7 +408,7 @@ export const projectScenario = {
 
   archDecisions: [
     {
-      system_id: 'ecommerce-platform',
+      projectId: 'ecommerce-platform',
       change: 'Implement CQRS for order management',
       rationale: 'Separate read/write concerns for scalability.',
       impact: 'Requires event store and projection rebuilding.',
@@ -417,13 +417,13 @@ export const projectScenario = {
 
   issues: [
     {
-      repo: 'ecommerce-platform',
+      projectId: 'ecommerce-platform',
       severity: 'high' as Severity,
       title: 'Cart abandonment rate increased',
       details: 'Checkout flow has 40% abandonment. Investigate UX issues.',
     },
     {
-      repo: 'ecommerce-platform',
+      projectId: 'ecommerce-platform',
       severity: 'med' as Severity,
       title: 'Image CDN latency in Asia',
       details: 'Product images slow to load in APAC region.',
@@ -444,25 +444,25 @@ export const invalidPayloads = {
   },
 
   architect: {
-    missingSystemId: { change: 'Test', rationale: 'Test' },
-    missingChange: { system_id: 'test', rationale: 'Test' },
-    missingRationale: { system_id: 'test', change: 'Test' },
+    missingProjectId: { change: 'Test', rationale: 'Test' },
+    missingChange: { projectId: 'test', rationale: 'Test' },
+    missingRationale: { projectId: 'test', change: 'Test' },
   },
 
   sentinel: {
-    missingRepo: { severity: 'low', title: 'Test', details: 'Test' },
-    missingSeverity: { repo: 'test', title: 'Test', details: 'Test' },
-    missingTitle: { repo: 'test', severity: 'low', details: 'Test' },
-    missingDetails: { repo: 'test', severity: 'low', title: 'Test' },
-    invalidSeverity: { repo: 'test', severity: 'invalid', title: 'Test', details: 'Test' },
+    missingProjectId: { severity: 'low', title: 'Test', details: 'Test' },
+    missingSeverity: { projectId: 'test', title: 'Test', details: 'Test' },
+    missingTitle: { projectId: 'test', severity: 'low', details: 'Test' },
+    missingDetails: { projectId: 'test', severity: 'low', title: 'Test' },
+    invalidSeverity: { projectId: 'test', severity: 'invalid', title: 'Test', details: 'Test' },
   },
 
   epic: {
-    missingRepo: { title: 'Test', summary: 'Test' },
-    missingTitle: { repo: 'test', summary: 'Test' },
-    missingSummary: { repo: 'test', title: 'Test' },
-    invalidPriority: { repo: 'test', title: 'Test', summary: 'Test', priority: 'invalid' },
-    invalidStatus: { repo: 'test', title: 'Test', summary: 'Test', status: 'invalid' },
+    missingProjectId: { title: 'Test', summary: 'Test' },
+    missingTitle: { projectId: 'test', summary: 'Test' },
+    missingSummary: { projectId: 'test', title: 'Test' },
+    invalidPriority: { projectId: 'test', title: 'Test', summary: 'Test', priority: 'invalid' },
+    invalidStatus: { projectId: 'test', title: 'Test', summary: 'Test', status: 'invalid' },
   },
 
   oracle: {

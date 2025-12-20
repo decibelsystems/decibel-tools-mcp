@@ -84,7 +84,7 @@ describe('MCP Server Integration', () => {
   describe('Architect Tool via MCP', () => {
     it('should execute record_arch_decision successfully', async () => {
       const result = await client.callTool('architect.record_arch_decision', {
-        system_id: 'main-system',
+        projectId: 'main-system',
         change: 'Add caching',
         rationale: 'Improve performance',
       });
@@ -99,7 +99,7 @@ describe('MCP Server Integration', () => {
 
     it('should return error for missing required fields', async () => {
       const result = await client.callTool('architect.record_arch_decision', {
-        system_id: 'test',
+        projectId: 'test',
         change: 'Test change',
         // missing rationale
       });
@@ -111,7 +111,7 @@ describe('MCP Server Integration', () => {
   describe('Sentinel Tool via MCP', () => {
     it('should execute create_issue successfully', async () => {
       const result = await client.callTool('sentinel.create_issue', {
-        repo: 'test-repo',
+        projectId: 'test-repo',
         severity: 'high',
         title: 'Bug found',
         details: 'Description of bug',
@@ -128,7 +128,7 @@ describe('MCP Server Integration', () => {
 
     it('should return error for invalid severity', async () => {
       const result = await client.callTool('sentinel.create_issue', {
-        repo: 'test',
+        projectId: 'test',
         severity: 'invalid',
         title: 'Test',
         details: 'Test',
@@ -140,7 +140,7 @@ describe('MCP Server Integration', () => {
     it('should accept all valid severity levels', async () => {
       for (const severity of ['low', 'med', 'high', 'critical']) {
         const result = await client.callTool('sentinel.create_issue', {
-          repo: 'test',
+          projectId: 'test',
           severity,
           title: `Test ${severity}`,
           details: 'Test details',
@@ -184,7 +184,7 @@ describe('MCP Server Integration', () => {
     it('should support focus parameter', async () => {
       // Create sentinel issue
       await client.callTool('sentinel.create_issue', {
-        repo: 'proj',
+        projectId: 'proj',
         severity: 'low',
         title: 'Test issue',
         details: 'Details',
@@ -229,13 +229,13 @@ describe('MCP Server Integration', () => {
       });
 
       await client.callTool('architect.record_arch_decision', {
-        system_id: projectId,
+        projectId: projectId,
         change: 'Architecture change',
         rationale: 'Good reasons',
       });
 
       await client.callTool('sentinel.create_issue', {
-        repo: projectId,
+        projectId: projectId,
         severity: 'high',
         title: 'Important issue',
         details: 'Details here',

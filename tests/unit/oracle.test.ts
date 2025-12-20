@@ -51,7 +51,7 @@ describe('Oracle Tool', () => {
 
     it('should return actions from architect files', async () => {
       await recordArchDecision({
-        system_id: 'test-proj',
+        projectId: 'test-proj',
         change: 'Migrate to microservices',
         rationale: 'Better scalability',
       });
@@ -68,7 +68,7 @@ describe('Oracle Tool', () => {
 
     it('should return actions from sentinel files', async () => {
       await createIssue({
-        repo: 'test-proj',
+        projectId: 'test-proj',
         severity: 'high',
         title: 'Critical bug',
         details: 'Something is broken',
@@ -90,7 +90,7 @@ describe('Oracle Tool', () => {
       });
 
       await createIssue({
-        repo: 'proj',
+        projectId: 'proj',
         severity: 'critical',
         title: 'Critical issue',
         details: 'Very important',
@@ -107,7 +107,7 @@ describe('Oracle Tool', () => {
 
     it('should assign medium priority to med severity issues', async () => {
       await createIssue({
-        repo: 'proj',
+        projectId: 'proj',
         severity: 'med',
         title: 'Medium severity issue',
         details: 'Details',
@@ -132,13 +132,13 @@ describe('Oracle Tool', () => {
       });
 
       await recordArchDecision({
-        system_id: 'proj',
+        projectId: 'proj',
         change: 'Test change',
         rationale: 'Test rationale',
       });
 
       await createIssue({
-        repo: 'proj',
+        projectId: 'proj',
         severity: 'high',
         title: 'Test issue',
         details: 'Test details',
@@ -175,7 +175,7 @@ describe('Oracle Tool', () => {
       });
 
       await createIssue({
-        repo: 'proj',
+        projectId: 'proj',
         severity: 'low',
         title: 'Issue',
         details: 'Details',
@@ -215,13 +215,13 @@ describe('Oracle Tool', () => {
       });
 
       await recordArchDecision({
-        system_id: 'proj',
+        projectId: 'proj',
         change: 'Change A',
         rationale: 'Rationale A',
       });
 
       await createIssue({
-        repo: 'proj',
+        projectId: 'proj',
         severity: 'low',
         title: 'Issue A',
         details: 'Details A',
@@ -242,14 +242,14 @@ describe('Oracle Tool', () => {
       });
 
       await createIssue({
-        repo: 'proj',
+        projectId: 'proj',
         severity: 'critical',
         title: 'High priority issue',
         details: 'Critical bug',
       });
 
       await recordArchDecision({
-        system_id: 'proj',
+        projectId: 'proj',
         change: 'Medium priority arch',
         rationale: 'Needed change',
       });

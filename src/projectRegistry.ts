@@ -377,3 +377,66 @@ export function setDefaultProject(projectId: string): void {
   saveRegistry(registry);
   log(`ProjectRegistry: Set "${projectId}" as default project`);
 }
+
+// ============================================================================
+// Path Resolution Helpers (for use by tools)
+// ============================================================================
+
+export interface ResolvedProjectPaths {
+  /** Project ID */
+  id: string;
+  /** Absolute path to project root */
+  projectPath: string;
+  /** Absolute path to .decibel folder */
+  decibelPath: string;
+  /** Helper to get a subdirectory under .decibel */
+  subPath: (...segments: string[]) => string;
+}
+
+/**
+ * Resolve project and return useful paths.
+ * This is the primary helper for tools to get project paths.
+ *
+ * @param projectId - Project ID, alias, or path (optional, uses default if not provided)
+ * @returns Resolved project paths
+ * @throws Error if project cannot be resolved
+ */
+export function resolveProjectPaths(projectId?: string): ResolvedProjectPaths {
+  let project: ProjectEntry;
+
+  if (projectId) {
+    project = resolveProject(projectId);
+  } else {
+    const defaultProject = getDefaultProject();
+    if (!defaultProject) {
+      throw new Error(
+        'No project specified and no default project found. ' +
+        'Either specify projectId or register a project with the registry.'
+      );
+    }
+    project = defaultProject;
+  }
+
+  const decibelPath = path.join(project.path, '.decibel');
+
+  return {
+    id: project.id,
+    projectPath: project.path,
+    decibelPath,
+    subPath: (...segments: string[]) => path.join(decibelPath, ...segments),
+  };
+}
+
+/**
+ * Validate that a write path is within the project's .decibel folder.
+ * Call this before any file write to prevent escaping project boundaries.
+ */
+export function validateWritePath(targetPath: string, resolved: ResolvedProjectPaths): void {
+  const normalized = path.normalize(targetPath);
+  if (!normalized.startsWith(resolved.decibelPath)) {
+    throw new Error(
+      `SECURITY: Write path ${targetPath} is outside project .decibel folder. ` +
+      `Expected path under: ${resolved.decibelPath}`
+    );
+  }
+}

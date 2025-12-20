@@ -14,13 +14,24 @@ export interface TestContext {
 export async function createTestContext(): Promise<TestContext> {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'decibel-mcp-test-'));
 
-  // Set environment variable for tools to use
+  // Create .decibel folder so project resolution works
+  await fs.mkdir(path.join(rootDir, '.decibel'), { recursive: true });
+
+  // Set environment variables for tools to use
   process.env.DECIBEL_MCP_ROOT = rootDir;
+  process.env.DECIBEL_PROJECT_ROOT = rootDir;
   process.env.DECIBEL_ENV = 'test';
+
+  // Store the original cwd and change to test directory
+  // so project discovery from cwd works
+  const originalCwd = process.cwd();
+  process.chdir(rootDir);
 
   return {
     rootDir,
     cleanup: async () => {
+      // Restore cwd before cleanup
+      process.chdir(originalCwd);
       await fs.rm(rootDir, { recursive: true, force: true });
     },
   };
@@ -33,6 +44,7 @@ export async function cleanupTestContext(ctx: TestContext): Promise<void> {
   await ctx.cleanup();
   // Reset environment
   delete process.env.DECIBEL_MCP_ROOT;
+  delete process.env.DECIBEL_PROJECT_ROOT;
   delete process.env.DECIBEL_ENV;
 }
 

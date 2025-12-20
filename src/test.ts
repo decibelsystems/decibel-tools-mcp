@@ -30,7 +30,7 @@ async function testArchitect() {
   console.log('\n=== Testing Architect ===');
 
   const result = await recordArchDecision({
-    system_id: PROJECT_ID,
+    projectId: PROJECT_ID,
     change: 'Migrate from monolith to microservices',
     rationale: 'The current monolithic architecture is becoming hard to scale and deploy independently. Microservices will allow teams to deploy features independently and scale specific services based on demand.',
     impact: 'This will require significant refactoring over the next few sprints. Team will need to set up container orchestration (K8s) and service mesh (Istio).',
@@ -44,7 +44,7 @@ async function testSentinel() {
   console.log('\n=== Testing Sentinel ===');
 
   const result = await createIssue({
-    repo: PROJECT_ID,
+    projectId: PROJECT_ID,
     severity: 'high',
     title: 'Memory leak in auth service',
     details: 'The auth service shows increasing memory usage over time. After ~24 hours of uptime, memory usage grows from 256MB to 2GB. Suspected cause is unclosed database connections in the session handler.',
