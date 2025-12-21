@@ -3,7 +3,7 @@
 Guide for integrating and testing decibel-tools-mcp with Claude Desktop and other MCP clients.
 
 **Version:** 0.3.0
-**Last Updated:** 2025-12-16
+**Last Updated:** 2025-12-21
 
 ## Current State
 
@@ -12,10 +12,10 @@ Guide for integrating and testing decibel-tools-mcp with Claude Desktop and othe
 - All 17 MCP tools exposed via HTTP endpoints
 - Mother integration via HTTP (see MOTHER-INTEGRATION.md)
 - stdio MCP mode for direct MCP client connections
+- Native file operations for most tools (friction, sentinel, architect, etc.)
 
 ### What's Broken / Known Issues
-- **Claude Desktop PATH issues**: Claude Desktop runs in a sandboxed environment that doesn't inherit shell PATH. The `decibel` CLI must be accessible via absolute path or installed globally.
-- **CLI dependency**: All tools shell out to `decibel` CLI - if CLI isn't found, tools fail silently or with cryptic errors.
+- **dojo.ts CLI dependency**: The Dojo tools incorrectly shell out to a `decibel` CLI that doesn't exist. This is being converted to native file operations.
 
 ## Claude Desktop Configuration
 
@@ -28,7 +28,6 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
       "command": "node",
       "args": ["/absolute/path/to/decibel-tools-mcp/dist/server.js"],
       "env": {
-        "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin",
         "DECIBEL_HOME": "/path/to/.decibel"
       }
     }
@@ -38,12 +37,11 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 **Critical**:
 - Use absolute paths for everything
-- Include PATH with locations where `decibel` CLI is installed
 - Set DECIBEL_HOME if using non-default location
 
 ## Testing Checklist
 
-After building the CLI, verify MCP integration:
+Verify MCP integration:
 
 ### 1. Basic Connectivity
 ```bash
@@ -58,82 +56,48 @@ curl http://localhost:8787/health
 curl http://localhost:8787/tools | jq '.[] | .name'
 ```
 
-### 2. Dojo Tools
+### 2. Working Tools (Native)
 ```bash
-# List wishes (should work even if empty)
-curl -X POST http://localhost:8787/dojo/wishes \
-  -H "Content-Type: application/json" \
-  -d '{"project_id": "senken"}'
-
-# Add a test wish
-curl -X POST http://localhost:8787/dojo/wish \
+# Log friction (works - native implementation)
+curl -X POST http://localhost:8787/friction/log \
   -H "Content-Type: application/json" \
   -d '{
-    "project_id": "senken",
-    "capability": "Test capability",
-    "reason": "Testing MCP integration",
-    "inputs": ["test"],
-    "outputs": {"result": "test"}
+    "projectId": "decibel-tools-mcp",
+    "context": "testing",
+    "description": "Test friction"
+  }'
+
+# Create issue (works - native implementation)
+curl -X POST http://localhost:8787/sentinel/issue \
+  -H "Content-Type: application/json" \
+  -d '{
+    "projectId": "decibel-tools-mcp",
+    "title": "Test issue",
+    "description": "Testing"
   }'
 ```
 
-### 3. Context Pack Tools
+### 3. Dojo Tools (Currently Broken)
 ```bash
-# Pin a fact
-curl -X POST http://localhost:8787/context/pin \
-  -H "Content-Type: application/json" \
-  -d '{
-    "project_id": "senken",
-    "title": "Test fact",
-    "body": "Testing context pack",
-    "trust": "low"
-  }'
-
-# List facts
-curl -X POST http://localhost:8787/context/list \
+# These will fail with "spawn decibel ENOENT" until converted
+curl -X POST http://localhost:8787/dojo/wishes \
   -H "Content-Type: application/json" \
   -d '{"project_id": "senken"}'
-
-# Append event
-curl -X POST http://localhost:8787/event/append \
-  -H "Content-Type: application/json" \
-  -d '{
-    "project_id": "senken",
-    "title": "MCP test event",
-    "tags": ["test", "integration"]
-  }'
-
-# Search events
-curl -X POST http://localhost:8787/event/search \
-  -H "Content-Type: application/json" \
-  -d '{"project_id": "senken", "query": "test"}'
 ```
 
 ### 4. Claude Desktop Integration
 1. Update `claude_desktop_config.json` with absolute paths
 2. Restart Claude Desktop completely (quit and reopen)
 3. In Claude Desktop, check MCP server status (gear icon → MCP)
-4. Test with: "Use the decibel tools to list wishes for senken"
+4. Test with: "Use the decibel tools to log some friction"
 
 ## Common Issues
 
-### "decibel: command not found"
-The CLI isn't in PATH. Solutions:
-1. Add CLI location to PATH in claude_desktop_config.json
-2. Install CLI globally: `npm install -g decibel-cli` (when available)
-3. Use symlink: `ln -s /path/to/decibel /usr/local/bin/decibel`
+### "spawn decibel ENOENT"
+The Dojo tools are trying to shell out to a CLI that doesn't exist. This is a known bug being fixed. Other tools (friction, sentinel, architect) work correctly.
 
 ### "Project not found"
-The project_id doesn't match a registered project. Check:
-```bash
-decibel project list
-```
-
-### Tools return empty results
-The CLI commands may be failing silently. Check server logs:
-```bash
-DEBUG=true node dist/server.js --http --port 8787
-```
+The project_id doesn't match a registered project. Use `registry_list` tool to see available projects.
 
 ### Claude Desktop doesn't see the server
 1. Verify JSON syntax in config file
@@ -141,60 +105,48 @@ DEBUG=true node dist/server.js --http --port 8787
 3. Restart Claude Desktop (full quit, not just close window)
 4. Check Console.app for MCP-related errors
 
-## Future: decibel dojo Subcommands
-
-When the CLI matures, consider adding direct subcommands:
-
-```bash
-# Instead of MCP server, direct CLI access
-decibel dojo wish add --capability "..." --reason "..."
-decibel dojo propose --title "..." --problem "..."
-decibel dojo run DOJO-EXP-0001
-decibel dojo results DOJO-EXP-0001 --run-id 20251216-070615
-```
-
-This would allow:
-- Shell scripting without HTTP server
-- CI/CD integration
-- Direct human access without MCP
-
-The MCP server would remain for AI agent access with rate limiting and policy enforcement.
-
 ## Architecture Notes
 
-### Current: Shell to CLI
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────┐
-│  Claude Desktop │────▶│  MCP Server      │────▶│ decibel CLI │
-│  (MCP Client)   │     │  (stdio or HTTP) │     │  (spawn)    │
-└─────────────────┘     └──────────────────┘     └─────────────┘
-                                │
-┌─────────────────┐             │
-│  Mother AI      │─────────────┘
-│  (HTTP Client)  │     (HTTP mode only)
-└─────────────────┘
-```
+### CORRECT: Native File Operations
 
-### Preferred: Direct Import (when @decibel/cli published)
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Claude Desktop │────▶│  MCP Server      │────▶│ @decibel/cli    │
-│  Mother AI      │     │  (imports lib)   │     │ (lib/compiler)  │
+│  Claude Desktop │────▶│  MCP Server      │────▶│ .decibel/       │
+│  (MCP Client)   │     │  (native fs ops) │     │ (YAML files)    │
 └─────────────────┘     └──────────────────┘     └─────────────────┘
 ```
 
-```typescript
-// MCP tool can call CLI lib directly - no spawn needed
-import { compileContextPack } from '@decibel/cli/lib/compiler';
+The MCP server reads/writes directly to `.decibel/` folders using Node.js `fs` module.
+No external CLI dependencies. See `docs/TOOLS_ARCHITECTURE.md`.
 
-const pack = compileContextPack('/path/to/project');
+### WRONG: Shell to CLI (legacy bug in dojo.ts)
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────┐
+│  Claude Desktop │────▶│  MCP Server      │────▶│ decibel CLI │  ← DOESN'T EXIST
+│  (MCP Client)   │     │  (spawn)         │     │  (broken)   │
+└─────────────────┘     └──────────────────┘     └─────────────┘
 ```
 
-**Benefits of direct import:**
-- Eliminates PATH issues entirely
-- Faster - no spawn/exec overhead
-- Better errors - native JS errors instead of parsing stderr
-- Works in sandboxed environments (Claude Desktop)
+The `dojo.ts` file incorrectly shells out to a `decibel` CLI. This is being converted
+to native file operations to match other tools (friction.ts, sentinel.ts, etc.).
+
+### Project-Specific Extensions
+
+Project-specific CLIs (like senken's "mother") can build ON TOP of decibel-tools-mcp:
+
+```
+┌─────────────────┐
+│  mother CLI     │  ← senken-specific, CAN have its own dojo commands
+│  (senken only)  │
+└────────┬────────┘
+         │ imports/extends
+         ▼
+┌─────────────────┐
+│ decibel-tools   │  ← foundation layer, must be self-contained
+│ (MCP server)    │
+└─────────────────┘
+```
 
 - **stdio mode**: Direct MCP protocol, used by Claude Desktop
 - **HTTP mode**: REST endpoints, used by Mother and other HTTP clients

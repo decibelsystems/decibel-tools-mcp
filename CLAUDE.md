@@ -71,6 +71,47 @@ User asks "what should I work on?"
 
 ---
 
+## Tool Implementation Architecture
+
+**READ**: `docs/TOOLS_ARCHITECTURE.md` for full details.
+
+### Core Principle: Self-Contained MCP Server
+
+decibel-tools-mcp must be **self-contained**. All tools use **native file operations** (fs, YAML).
+
+```
+✅ CORRECT: Native file operations
+   import fs from 'fs/promises';
+   await fs.writeFile(wishPath, YAML.stringify(data));
+
+❌ WRONG: Shelling out to external CLI
+   spawn('decibel', ['dojo', 'wish', ...]);  // CLI doesn't exist!
+```
+
+### Reference Implementations
+
+Follow the pattern in these files:
+- `src/tools/friction.ts` - cleanest example
+- `src/tools/sentinel.ts` - epics and issues
+- `src/tools/architect.ts` - ADRs
+
+### Known Issue: dojo.ts
+
+`src/tools/dojo.ts` incorrectly shells out to a `decibel` CLI that doesn't exist. This needs conversion to native file operations. See `docs/TOOLS_ARCHITECTURE.md` for the conversion checklist.
+
+### Key Helpers
+
+```typescript
+import { resolveProjectPaths } from '../projectRegistry.js';
+import { ensureDir } from '../dataRoot.js';
+
+const resolved = resolveProjectPaths(projectId);  // Get .decibel path
+const wishDir = resolved.subPath('dojo/wishes');  // Build subpath
+ensureDir(wishDir);                                // Create if needed
+```
+
+---
+
 ## Debugging Protocol
 
 When investigating issues, bugs, or unexpected behavior:
