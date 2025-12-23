@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { log } from '../config.js';
 import { resolveProjectPaths, ResolvedProjectPaths } from '../projectRegistry.js';
 
@@ -426,9 +427,371 @@ export async function nextActions(
   const priorityOrder = { high: 0, med: 1, low: 2 };
   actions.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 
-  return { 
+  return {
     actions: actions.slice(0, 7),
     friction_summary: frictionSummary,
     data_locations: dataLocations,
   };
+}
+
+// ============================================================================
+// Roadmap Progress Types
+// ============================================================================
+
+export interface RoadmapInput {
+  projectId?: string;
+  dryRun?: boolean;
+  noSignals?: boolean;
+}
+
+export interface MilestoneProgress {
+  id: string;
+  label: string;
+  target_date: string;
+  epics_total: number;
+  epics_completed: number;
+  epics_in_progress: number;
+  epics_blocked: number;
+  progress_percent: number;
+  status: 'on_track' | 'at_risk' | 'behind' | 'completed';
+  days_remaining: number;
+}
+
+export interface ObjectiveProgress {
+  id: string;
+  title: string;
+  timeframe: string;
+  key_results: Array<{
+    metric: string;
+    target: string;
+    current?: string;
+    progress_percent?: number;
+  }>;
+  overall_progress: number;
+}
+
+export interface EpicStatus {
+  epic_id: string;
+  status: 'not_started' | 'in_progress' | 'completed' | 'blocked';
+  issue_count: number;
+  open_issues: number;
+  health_score?: number;
+  risk_flags?: string[];
+}
+
+export interface RoadmapOutput {
+  project_id: string;
+  evaluated_at: string;
+  milestones: MilestoneProgress[];
+  objectives: ObjectiveProgress[];
+  epics: EpicStatus[];
+  signals?: {
+    blocking_issues: number;
+    high_severity_issues: number;
+    friction_points: number;
+  };
+  summary: {
+    total_milestones: number;
+    on_track: number;
+    at_risk: number;
+    behind: number;
+    completed: number;
+  };
+  progress_file?: string;
+}
+
+// ============================================================================
+// Roadmap Progress Implementation
+// ============================================================================
+
+interface Roadmap {
+  objectives: Array<{
+    id: string;
+    title: string;
+    timeframe: string;
+    key_results?: Array<{
+      metric: string;
+      target: string;
+      current?: string;
+    }>;
+  }>;
+  themes: Array<{
+    id: string;
+    label: string;
+  }>;
+  milestones: Array<{
+    id: string;
+    label: string;
+    target_date: string;
+    epics?: string[];
+  }>;
+  epic_context: Record<string, {
+    epic_id: string;
+    theme?: string;
+    objectives?: string[];
+    milestone?: string;
+    work_type: string;
+  }>;
+}
+
+interface SentinelIssue {
+  id: string;
+  epic_id?: string;
+  status: string;
+  severity: string;
+}
+
+async function loadRoadmap(resolved: ResolvedProjectPaths): Promise<Roadmap | null> {
+  const roadmapPath = resolved.subPath('architect', 'roadmap', 'roadmap.yaml');
+
+  try {
+    const content = await fs.readFile(roadmapPath, 'utf-8');
+    return parseYaml(content) as Roadmap;
+  } catch {
+    return null;
+  }
+}
+
+async function loadSentinelIssues(resolved: ResolvedProjectPaths): Promise<SentinelIssue[]> {
+  const issuesDir = resolved.subPath('sentinel', 'issues');
+  const issues: SentinelIssue[] = [];
+
+  try {
+    const entries = await fs.readdir(issuesDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (entry.isFile() && (entry.name.endsWith('.yaml') || entry.name.endsWith('.yml'))) {
+        const filePath = path.join(issuesDir, entry.name);
+        const content = await fs.readFile(filePath, 'utf-8');
+        const data = parseYaml(content) as Record<string, unknown>;
+
+        issues.push({
+          id: (data.id as string) || entry.name.replace(/\.(yaml|yml)$/, ''),
+          epic_id: data.epic_id as string | undefined,
+          status: (data.status as string) || 'open',
+          severity: (data.severity as string) || 'medium',
+        });
+      }
+    }
+  } catch {
+    // Issues directory might not exist
+  }
+
+  return issues;
+}
+
+async function loadEpicStatuses(resolved: ResolvedProjectPaths): Promise<Map<string, string>> {
+  const epicsDir = resolved.subPath('sentinel', 'epics');
+  const statuses = new Map<string, string>();
+
+  try {
+    const entries = await fs.readdir(epicsDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (entry.isFile() && (entry.name.endsWith('.yaml') || entry.name.endsWith('.yml') || entry.name.endsWith('.md'))) {
+        const filePath = path.join(epicsDir, entry.name);
+        const content = await fs.readFile(filePath, 'utf-8');
+
+        // Try YAML first
+        if (entry.name.endsWith('.yaml') || entry.name.endsWith('.yml')) {
+          const data = parseYaml(content) as Record<string, unknown>;
+          const epicId = (data.id as string) || (data.epic_id as string) || entry.name.replace(/\.(yaml|yml)$/, '');
+          const status = (data.status as string) || 'not_started';
+          statuses.set(epicId, status);
+        } else {
+          // Try to parse frontmatter from markdown
+          const statusMatch = content.match(/^status:\s*(.+)$/m);
+          const idMatch = content.match(/^(?:id|epic_id):\s*(.+)$/m);
+          const epicId = idMatch?.[1] || entry.name.replace(/\.md$/, '');
+          const status = statusMatch?.[1] || 'not_started';
+          statuses.set(epicId, status);
+        }
+      }
+    }
+  } catch {
+    // Epics directory might not exist
+  }
+
+  return statuses;
+}
+
+function calculateMilestoneStatus(
+  milestone: { target_date: string },
+  epicsCompleted: number,
+  epicsTotal: number,
+  epicsBlocked: number
+): 'on_track' | 'at_risk' | 'behind' | 'completed' {
+  if (epicsTotal > 0 && epicsCompleted === epicsTotal) {
+    return 'completed';
+  }
+
+  const targetDate = new Date(milestone.target_date);
+  const now = new Date();
+  const daysRemaining = Math.ceil((targetDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (daysRemaining < 0) {
+    return 'behind';
+  }
+
+  const progressPercent = epicsTotal > 0 ? (epicsCompleted / epicsTotal) * 100 : 0;
+
+  // If we have blocked epics or low progress with little time, we're at risk
+  if (epicsBlocked > 0) {
+    return 'at_risk';
+  }
+
+  // Calculate expected progress based on time
+  const totalDays = 90; // Assume 90 day milestones as baseline
+  const expectedProgress = Math.min(100, ((totalDays - daysRemaining) / totalDays) * 100);
+
+  if (progressPercent < expectedProgress - 20) {
+    return 'behind';
+  }
+
+  if (progressPercent < expectedProgress - 10) {
+    return 'at_risk';
+  }
+
+  return 'on_track';
+}
+
+export async function roadmapProgress(
+  input: RoadmapInput
+): Promise<RoadmapOutput | OracleError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('evaluate roadmap progress');
+  }
+
+  log(`Oracle: Evaluating roadmap progress for project ${resolved.id}`);
+
+  // Load roadmap
+  const roadmap = await loadRoadmap(resolved);
+  if (!roadmap) {
+    return {
+      error: 'ROADMAP_NOT_FOUND',
+      message: 'No roadmap.yaml found in .decibel/architect/roadmap/',
+      hint: 'Initialize a roadmap with roadmap_init tool or create roadmap.yaml manually',
+    };
+  }
+
+  // Load epic statuses and issues
+  const epicStatuses = await loadEpicStatuses(resolved);
+  const issues = input.noSignals ? [] : await loadSentinelIssues(resolved);
+
+  // Build epic status list
+  const epics: EpicStatus[] = [];
+  for (const [epicId, context] of Object.entries(roadmap.epic_context)) {
+    const statusStr = epicStatuses.get(epicId) || 'not_started';
+    const epicIssues = issues.filter(i => i.epic_id === epicId);
+    const openIssues = epicIssues.filter(i => i.status === 'open' || i.status === 'in_progress');
+
+    let status: EpicStatus['status'] = 'not_started';
+    if (statusStr === 'completed' || statusStr === 'done') {
+      status = 'completed';
+    } else if (statusStr === 'blocked') {
+      status = 'blocked';
+    } else if (statusStr === 'in_progress' || statusStr === 'active') {
+      status = 'in_progress';
+    }
+
+    epics.push({
+      epic_id: epicId,
+      status,
+      issue_count: epicIssues.length,
+      open_issues: openIssues.length,
+    });
+  }
+
+  // Calculate milestone progress
+  const milestones: MilestoneProgress[] = roadmap.milestones.map(ms => {
+    const msEpics = ms.epics || [];
+    const epicStatusList = msEpics.map(eid => epics.find(e => e.epic_id === eid));
+
+    const total = msEpics.length;
+    const completed = epicStatusList.filter(e => e?.status === 'completed').length;
+    const inProgress = epicStatusList.filter(e => e?.status === 'in_progress').length;
+    const blocked = epicStatusList.filter(e => e?.status === 'blocked').length;
+
+    const targetDate = new Date(ms.target_date);
+    const now = new Date();
+    const daysRemaining = Math.ceil((targetDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+    return {
+      id: ms.id,
+      label: ms.label,
+      target_date: ms.target_date,
+      epics_total: total,
+      epics_completed: completed,
+      epics_in_progress: inProgress,
+      epics_blocked: blocked,
+      progress_percent: total > 0 ? Math.round((completed / total) * 100) : 0,
+      status: calculateMilestoneStatus(ms, completed, total, blocked),
+      days_remaining: daysRemaining,
+    };
+  });
+
+  // Calculate objective progress (simplified - just count linked epics)
+  const objectives: ObjectiveProgress[] = roadmap.objectives.map(obj => {
+    const linkedEpics = Object.values(roadmap.epic_context)
+      .filter(ec => ec.objectives?.includes(obj.id));
+    const completedEpics = linkedEpics.filter(ec =>
+      epics.find(e => e.epic_id === ec.epic_id)?.status === 'completed'
+    );
+
+    return {
+      id: obj.id,
+      title: obj.title,
+      timeframe: obj.timeframe,
+      key_results: obj.key_results || [],
+      overall_progress: linkedEpics.length > 0
+        ? Math.round((completedEpics.length / linkedEpics.length) * 100)
+        : 0,
+    };
+  });
+
+  // Build signals summary
+  const signals = input.noSignals ? undefined : {
+    blocking_issues: issues.filter(i => i.severity === 'critical' || i.severity === 'blocking').length,
+    high_severity_issues: issues.filter(i => i.severity === 'high').length,
+    friction_points: 0, // Would need to load friction files
+  };
+
+  // Summary
+  const summary = {
+    total_milestones: milestones.length,
+    on_track: milestones.filter(m => m.status === 'on_track').length,
+    at_risk: milestones.filter(m => m.status === 'at_risk').length,
+    behind: milestones.filter(m => m.status === 'behind').length,
+    completed: milestones.filter(m => m.status === 'completed').length,
+  };
+
+  const output: RoadmapOutput = {
+    project_id: resolved.id,
+    evaluated_at: new Date().toISOString(),
+    milestones,
+    objectives,
+    epics,
+    signals,
+    summary,
+  };
+
+  // Save progress file unless dry run
+  if (!input.dryRun) {
+    const progressDir = resolved.subPath('oracle');
+    const progressPath = path.join(progressDir, 'progress.yaml');
+
+    try {
+      await fs.mkdir(progressDir, { recursive: true });
+      await fs.writeFile(progressPath, stringifyYaml(output), 'utf-8');
+      output.progress_file = progressPath;
+      log(`Oracle: Saved progress to ${progressPath}`);
+    } catch (err) {
+      log(`Oracle: Could not save progress file:`, err);
+    }
+  }
+
+  return output;
 }

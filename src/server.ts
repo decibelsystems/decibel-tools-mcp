@@ -53,7 +53,7 @@ import {
   FlagCategory,
   formatScanOutput,
 } from './tools/data-inspector.js';
-import { nextActions, NextActionsInput } from './tools/oracle.js';
+import { nextActions, NextActionsInput, roadmapProgress, RoadmapInput, isOracleError } from './tools/oracle.js';
 import {
   appendLearning,
   AppendLearningInput,
@@ -858,6 +858,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['project_id'],
+        },
+      },
+      {
+        name: 'oracle_roadmap',
+        description: 'Evaluate roadmap progress against milestones and objectives. Reads roadmap from .decibel/architect/roadmap/roadmap.yaml, cross-references epic statuses from Sentinel, and optionally saves progress to .decibel/oracle/progress.yaml.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Project identifier (optional, auto-detects from cwd)',
+            },
+            dryRun: {
+              type: 'boolean',
+              description: 'If true, evaluate without saving progress.yaml',
+            },
+            noSignals: {
+              type: 'boolean',
+              description: 'Skip Sentinel signals integration',
+            },
+          },
         },
       },
 
@@ -2404,6 +2425,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await nextActions(input);
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'oracle_roadmap': {
+        const input = args as unknown as RoadmapInput;
+        const result = await roadmapProgress(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: isOracleError(result),
         };
       }
 
