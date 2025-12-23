@@ -265,7 +265,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // Designer tools
       {
         name: 'designer_record_design_decision',
-        description: 'Record a design decision for a project. Creates a markdown file with frontmatter containing the decision details.',
+        description: 'Record a design decision for a project. Automatically saves a markdown file to .decibel/designer/decisions/ with frontmatter. No separate file writing needed.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -293,7 +293,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // Architect tools
       {
         name: 'architect_record_arch_decision',
-        description: 'Record an architectural decision (ADR) for a project. Creates a markdown file with Change, Rationale, and Impact sections.',
+        description: 'Record an architectural decision (ADR) for a project. Automatically saves a markdown file to .decibel/architect/adrs/ with Change, Rationale, and Impact sections. No separate file writing needed.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -442,7 +442,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // Sentinel tools - Issues
       {
         name: 'sentinel_create_issue',
-        description: 'Create a new issue for a project. Creates a markdown file with severity and status tracking. Can optionally link to an epic.',
+        description: 'Create a new issue for a project. Automatically saves a markdown file to .decibel/sentinel/issues/ with severity and status tracking. Can optionally link to an epic. No separate file writing needed.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -520,7 +520,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // Sentinel tools - Epics
       {
         name: 'sentinel_log_epic',
-        description: 'Create a new Sentinel epic (large feature) record. Returns the epic_id and file path.',
+        description: 'Create a new Sentinel epic (large feature) record. Automatically saves to .decibel/sentinel/epics/. Returns the epic_id and file path. No separate file writing needed.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -1206,7 +1206,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // Dojo tools - AI Feature Incubator
       {
         name: 'dojo_create_proposal',
-        description: 'Create a new Dojo proposal for a feature or capability. AI can propose, but only humans can enable experiments.',
+        description: 'Create a new Dojo proposal for a feature or capability. Automatically saves to .decibel/dojo/proposals/. AI can propose, but only humans can enable experiments. No separate file writing needed.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -1282,7 +1282,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'dojo_scaffold_experiment',
-        description: 'Create an experiment skeleton from a proposal. This creates the experiment directory with manifest, entrypoint, and README.',
+        description: 'Create an experiment skeleton from a proposal. Automatically creates the experiment directory at .decibel/dojo/experiments/ with manifest, entrypoint, and README. No separate file writing needed.',
         inputSchema: {
           type: 'object',
           properties: {
