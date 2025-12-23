@@ -173,6 +173,31 @@ import {
   GraduatedTool,
 } from './tools/dojoGraduated.js';
 import { startHttpServer, parseHttpArgs } from './httpServer.js';
+import {
+  createPolicy,
+  CreatePolicyInput,
+  PolicySeverity,
+  listPolicies,
+  ListPoliciesInput,
+  getPolicy,
+  GetPolicyInput,
+  compileOversight,
+  CompileOversightInput,
+  isPolicyError,
+} from './tools/policy.js';
+import {
+  createTestSpec,
+  CreateTestSpecInput,
+  TestType,
+  TestPriority,
+  listTestSpecs,
+  ListTestSpecsInput,
+  compileTests,
+  CompileTestsInput,
+  auditPolicies,
+  AuditPoliciesInput,
+  isTestSpecError,
+} from './tools/testSpec.js';
 
 // ============================================================================
 // Helper: Normalize parameter keys to handle case variations
@@ -1957,6 +1982,289 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
 
+      // Oversight Pack - Architect Policy Tools (ADR-0004)
+      {
+        name: 'architect_createPolicy',
+        description: 'Create a new policy atom. Policies define rules and constraints for code, architecture, and processes.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
+            title: {
+              type: 'string',
+              description: 'Policy title (e.g., "No Direct Database Access")',
+            },
+            rationale: {
+              type: 'string',
+              description: 'Why this policy exists',
+            },
+            scope: {
+              type: 'string',
+              description: 'Where this policy applies (e.g., "api/*", "global")',
+            },
+            rules: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  key: { type: 'string', description: 'Unique rule identifier' },
+                  description: { type: 'string', description: 'What this rule enforces' },
+                  check: { type: 'string', description: 'Optional automated check command' },
+                },
+                required: ['key', 'description'],
+              },
+              description: 'List of rules this policy enforces',
+            },
+            severity: {
+              type: 'string',
+              enum: ['critical', 'high', 'medium', 'low'],
+              description: 'How severe violations are',
+            },
+            enforcement_hooks: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Hooks that enforce this policy (e.g., "pre-commit", "ci")',
+            },
+            exceptions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  reason: { type: 'string' },
+                  scope: { type: 'string' },
+                  expires: { type: 'string' },
+                  approved_by: { type: 'string' },
+                },
+                required: ['reason'],
+              },
+              description: 'Known exceptions to this policy',
+            },
+            examples: {
+              type: 'object',
+              properties: {
+                compliant: { type: 'array', items: { type: 'string' } },
+                violation: { type: 'array', items: { type: 'string' } },
+              },
+              description: 'Examples of compliant and violating code/behavior',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Tags for categorization',
+            },
+          },
+          required: ['title', 'rationale', 'scope', 'rules', 'severity'],
+        },
+      },
+      {
+        name: 'architect_listPolicies',
+        description: 'List all policies for a project, optionally filtered by severity or tags.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
+            severity: {
+              type: 'string',
+              enum: ['critical', 'high', 'medium', 'low'],
+              description: 'Filter by severity',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Filter by tags (matches any)',
+            },
+          },
+        },
+      },
+      {
+        name: 'architect_getPolicy',
+        description: 'Get details of a specific policy by ID.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
+            policy_id: {
+              type: 'string',
+              description: 'Policy ID (e.g., "POL-0001")',
+            },
+          },
+          required: ['policy_id'],
+        },
+      },
+      {
+        name: 'architect_compileOversight',
+        description: 'Compile all policies into documentation (policies.md and/or compiled.json).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
+            output_format: {
+              type: 'string',
+              enum: ['markdown', 'json', 'both'],
+              description: 'Output format (default: markdown)',
+            },
+            include_inherited: {
+              type: 'boolean',
+              description: 'Include policies from extended profiles',
+            },
+          },
+        },
+      },
+
+      // Oversight Pack - Sentinel Test Spec Tools (ADR-0004)
+      {
+        name: 'sentinel_createTestSpec',
+        description: 'Create a new test specification atom. Test specs define test cases and requirements.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
+            title: {
+              type: 'string',
+              description: 'Test spec title (e.g., "User Authentication Flow")',
+            },
+            description: {
+              type: 'string',
+              description: 'What this test spec covers',
+            },
+            type: {
+              type: 'string',
+              enum: ['unit', 'integration', 'e2e', 'contract', 'property', 'manual'],
+              description: 'Type of test',
+            },
+            priority: {
+              type: 'string',
+              enum: ['critical', 'high', 'medium', 'low'],
+              description: 'Test priority (default: medium)',
+            },
+            policy_refs: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Policy IDs this test verifies (e.g., ["POL-0001"])',
+            },
+            test_cases: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string', description: 'Test case name' },
+                  description: { type: 'string' },
+                  steps: { type: 'array', items: { type: 'string' } },
+                  expected: { type: 'string', description: 'Expected outcome' },
+                  tags: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['name', 'expected'],
+              },
+              description: 'Test cases in this spec',
+            },
+            setup: {
+              type: 'string',
+              description: 'Setup instructions for the tests',
+            },
+            teardown: {
+              type: 'string',
+              description: 'Teardown instructions for the tests',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Tags for categorization',
+            },
+          },
+          required: ['title', 'description', 'type', 'test_cases'],
+        },
+      },
+      {
+        name: 'sentinel_listTestSpecs',
+        description: 'List all test specifications for a project.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
+            type: {
+              type: 'string',
+              enum: ['unit', 'integration', 'e2e', 'contract', 'property', 'manual'],
+              description: 'Filter by test type',
+            },
+            priority: {
+              type: 'string',
+              enum: ['critical', 'high', 'medium', 'low'],
+              description: 'Filter by priority',
+            },
+            policy_ref: {
+              type: 'string',
+              description: 'Filter by policy reference',
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Filter by tags (matches any)',
+            },
+          },
+        },
+      },
+      {
+        name: 'sentinel_compileTests',
+        description: 'Compile all test specifications into documentation (manifest.md and/or manifest.json).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
+            output_format: {
+              type: 'string',
+              enum: ['markdown', 'json', 'both'],
+              description: 'Output format (default: markdown)',
+            },
+            include_deprecated: {
+              type: 'boolean',
+              description: 'Include deprecated test specs',
+            },
+          },
+        },
+      },
+      {
+        name: 'sentinel_auditPolicies',
+        description: 'Audit policy compliance. Checks documentation freshness and runs enforcement checks.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
+            check_freshness: {
+              type: 'boolean',
+              description: 'Check if compiled docs are stale (default: true)',
+            },
+            run_enforcement: {
+              type: 'boolean',
+              description: 'Run enforcement checks (future feature)',
+            },
+          },
+        },
+      },
+
       // Dynamically add graduated Dojo tools
       ...graduatedToolsToMcpDefinitions(graduatedTools),
     ],
@@ -3127,6 +3435,89 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
           isError: result.status === 'error',
+        };
+      }
+
+      // Oversight Pack - Policy Tools (ADR-0004)
+      case 'architect_createPolicy': {
+        const input = args as unknown as CreatePolicyInput;
+        if (!input.title || !input.rationale || !input.scope || !input.rules || !input.severity) {
+          throw new Error('Missing required fields: title, rationale, scope, rules, and severity are required');
+        }
+        const result = await createPolicy(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: isPolicyError(result),
+        };
+      }
+
+      case 'architect_listPolicies': {
+        const input = args as unknown as ListPoliciesInput;
+        const result = await listPolicies(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: isPolicyError(result),
+        };
+      }
+
+      case 'architect_getPolicy': {
+        const input = args as unknown as GetPolicyInput;
+        if (!input.policy_id) {
+          throw new Error('Missing required field: policy_id');
+        }
+        const result = await getPolicy(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: isPolicyError(result),
+        };
+      }
+
+      case 'architect_compileOversight': {
+        const input = args as unknown as CompileOversightInput;
+        const result = await compileOversight(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: isPolicyError(result),
+        };
+      }
+
+      // Oversight Pack - Test Spec Tools (ADR-0004)
+      case 'sentinel_createTestSpec': {
+        const input = args as unknown as CreateTestSpecInput;
+        if (!input.title || !input.description || !input.type || !input.test_cases) {
+          throw new Error('Missing required fields: title, description, type, and test_cases are required');
+        }
+        const result = await createTestSpec(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: isTestSpecError(result),
+        };
+      }
+
+      case 'sentinel_listTestSpecs': {
+        const input = args as unknown as ListTestSpecsInput;
+        const result = await listTestSpecs(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: isTestSpecError(result),
+        };
+      }
+
+      case 'sentinel_compileTests': {
+        const input = args as unknown as CompileTestsInput;
+        const result = await compileTests(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: isTestSpecError(result),
+        };
+      }
+
+      case 'sentinel_auditPolicies': {
+        const input = args as unknown as AuditPoliciesInput;
+        const result = await auditPolicies(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: isTestSpecError(result),
         };
       }
 

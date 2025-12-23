@@ -85,6 +85,28 @@ import {
   ArtifactReadInput,
   isContextError,
 } from './tools/context.js';
+import {
+  createPolicy,
+  CreatePolicyInput,
+  listPolicies,
+  ListPoliciesInput,
+  getPolicy,
+  GetPolicyInput,
+  compileOversight,
+  CompileOversightInput,
+  isPolicyError,
+} from './tools/policy.js';
+import {
+  createTestSpec,
+  CreateTestSpecInput,
+  listTestSpecs,
+  ListTestSpecsInput,
+  compileTests,
+  CompileTestsInput,
+  auditPolicies,
+  AuditPoliciesInput,
+  isTestSpecError,
+} from './tools/testSpec.js';
 
 // ============================================================================
 // Version Info
@@ -242,6 +264,32 @@ async function executeDojoTool(
       case 'decibel_artifact_read':
         result = await artifactRead(args as unknown as ArtifactReadInput);
         break;
+      // Architect Policy tools (ADR-004 Oversight Pack)
+      case 'architect_createPolicy':
+        result = await createPolicy(args as unknown as CreatePolicyInput);
+        break;
+      case 'architect_listPolicies':
+        result = await listPolicies(args as unknown as ListPoliciesInput);
+        break;
+      case 'architect_getPolicy':
+        result = await getPolicy(args as unknown as GetPolicyInput);
+        break;
+      case 'architect_compileOversight':
+        result = await compileOversight(args as unknown as CompileOversightInput);
+        break;
+      // Sentinel Test tools (ADR-004 Oversight Pack)
+      case 'sentinel_createTestSpec':
+        result = await createTestSpec(args as unknown as CreateTestSpecInput);
+        break;
+      case 'sentinel_listTestSpecs':
+        result = await listTestSpecs(args as unknown as ListTestSpecsInput);
+        break;
+      case 'sentinel_compileTests':
+        result = await compileTests(args as unknown as CompileTestsInput);
+        break;
+      case 'sentinel_auditPolicies':
+        result = await auditPolicies(args as unknown as AuditPoliciesInput);
+        break;
       default:
         return wrapError(`Unknown tool: ${tool}`, 'UNKNOWN_TOOL');
     }
@@ -265,6 +313,14 @@ async function executeDojoTool(
     // Check for Context error response
     if (isContextError(result)) {
       return wrapError(result.error, 'CONTEXT_ERROR');
+    }
+    // Check for Policy error response
+    if (isPolicyError(result)) {
+      return wrapError(result.message, result.error);
+    }
+    // Check for TestSpec error response
+    if (isTestSpecError(result)) {
+      return wrapError(result.message, result.error);
     }
 
     return wrapSuccess(result as Record<string, unknown>);
@@ -310,6 +366,16 @@ function getAvailableTools(): { name: string; description: string }[] {
     { name: 'decibel_event_search', description: 'Search events' },
     { name: 'decibel_artifact_list', description: 'List artifacts for a run' },
     { name: 'decibel_artifact_read', description: 'Read artifact by run_id and name' },
+    // Architect Policy tools (ADR-004 Oversight Pack)
+    { name: 'architect_createPolicy', description: 'Create a policy atom' },
+    { name: 'architect_listPolicies', description: 'List policies (filter by severity/tags)' },
+    { name: 'architect_getPolicy', description: 'Get a specific policy by ID' },
+    { name: 'architect_compileOversight', description: 'Compile policies into documentation' },
+    // Sentinel Test tools (ADR-004 Oversight Pack)
+    { name: 'sentinel_createTestSpec', description: 'Create a test specification' },
+    { name: 'sentinel_listTestSpecs', description: 'List test specifications' },
+    { name: 'sentinel_compileTests', description: 'Compile test manifest' },
+    { name: 'sentinel_auditPolicies', description: 'Audit policy compliance' },
   ];
 }
 

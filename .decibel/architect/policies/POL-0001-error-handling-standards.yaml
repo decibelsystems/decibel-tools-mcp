@@ -1,0 +1,12 @@
+id: POL-0001
+title: Error Handling Standards
+rationale: Ensure consistent error handling across the codebase
+scope: src/**/*.ts
+rules:
+  - key: catch-rethrow
+    description: All caught exceptions must be logged before rethrow
+severity: high
+created_at: 2025-12-21T16:27:45.806Z
+project_id: decibel-tools-mcp
+tags:
+  - code-quality

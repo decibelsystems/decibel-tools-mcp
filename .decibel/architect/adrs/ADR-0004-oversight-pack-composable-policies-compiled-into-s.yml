@@ -1,0 +1,32 @@
+id: ADR-0004
+scope: project
+project: decibel-tools
+title: "Oversight Pack: Composable Policies Compiled into Single Agent Entrypoint"
+status: accepted
+created_at: 2025-12-21T16:01:33.436Z
+updated_at: 2025-12-21T16:01:33.436Z
+context: 'In Senken, the workflow "follow the policies in /docs/oversight" is effective because it provides a single canonical location that agents can reliably read and execute. As Decibel expands across many projects, we need: reusable policy atoms that can be shared, project-specific applicability (not every repo needs Senken-level rigor), a stable single pointer that humans and agents can reference consistently, and a path to automation and enforcement without making policy authoring painful. Risk if we only modularize: agents may read a subset of policy files and miss critical rules, and projects may drift in how policies are referenced.'
+decision: |-
+  Introduce an Oversight Pack mechanism with four components:
+
+  1) POLICY ATOMS (source of truth) - Store as structured atoms under /.decibel/architect/policies/POL-####-slug.yml. Each includes: title, rationale, scope, rules, severity (critical|high|medium|low), enforcement hooks (Sentinel check IDs), exceptions with expiry dates, and compliant/violation examples.
+
+  2) PROFILES (composition layer) - Store in /.decibel/architect/policy_profiles.yml. Support inheritance chains (minimal → service-python → trading-system). Child profiles can only ADD or TIGHTEN parent rules; relaxation requires explicit override_requires_rationale flag. Cross-project inheritance via extends pointing to decibel-tools policies.
+
+  3) COMPILED AGENT SURFACE (single pointer) - Always compile effective policies into /docs/oversight/policies.md. README.md remains the stable pointer. "Follow /docs/oversight" continues to work across all repos.
+
+  4) COMPILER - Architect-supported compile step generating policies.md (authoritative) and optional compiled.json (Sentinel-ingestible). Validates duplicate/conflicting rule keys and fails loudly.
+
+  TESTING PARALLEL: Testing becomes first-class citizen following same pattern - Architect owns test_specs as structured atoms (/.decibel/sentinel/test_specs/TEST-####-slug.yml), Sentinel owns execution and enforcement. Compiled to /docs/testing/manifest.md with same single-pointer UX.
+
+  DECIBEL-WIDE POLICIES: Stored in decibel-tools repo under /.decibel/architect/policies/. Projects reference via extends in their policy_profiles.yml.
+consequences: |-
+  POSITIVE: Maintains existing single-pointer workflow. Enables reuse across Decibel ecosystem. Clear separation: Architect defines (policies, test specs), Sentinel enforces (audits, test runs), Dojo proposes additions, Oracle summarizes drift. Improves agent reliability by reducing multi-file ambiguity. Severity levels give Sentinel scoring targets. Exception expiry prevents permanent waivers.
+
+  TRADEOFFS: Requires compile step (manual initially, later CI). Requires discipline—policy changes must recompile. Adds schema/versioning responsibility.
+
+  IMPLEMENTATION PHASES: Phase 1 (MVP) - Create atom directory, profiles file, active profile setting, deterministic compiler. Phase 2 - Sentinel enforcement (audit freshness, run checks, compliance report). Phase 3 - Dojo policy proposal loop on recurring failures, Oracle drift summaries.
+
+  REQUIRED PATHS: /.decibel/architect/policies/, /.decibel/architect/policy_profiles.yml, /docs/oversight/README.md, /docs/oversight/policies.md. For testing: /.decibel/sentinel/test_specs/, /docs/testing/README.md, /docs/testing/manifest.md.
+related_epics:
+  - EPIC-0001

@@ -20,9 +20,11 @@ import fs from 'fs/promises';
 import path from 'path';
 import YAML from 'yaml';
 import { log } from '../config.js';
+import { ensureDir } from '../dataRoot.js';
 import { resolveProjectRoot } from '../projectPaths.js';
 import { getDefaultProject, listProjects, ProjectEntry } from '../projectRegistry.js';
 import { CallerRole, enforceToolAccess, getSandboxPolicy, expandSandboxPaths } from './dojoPolicy.js';
+import { emitCreateProvenance } from './provenance.js';
 import { checkRateLimit, recordRequestStart, recordRequestEnd } from './rateLimiter.js';
 
 // ============================================================================
@@ -212,10 +214,35 @@ export interface DojoError {
 }
 
 // ============================================================================
-// Constants
+// ID Generation Helpers (for native file operations)
 // ============================================================================
 
-const DECIBEL_COMMAND = 'decibel';
+/**
+ * Get the next sequential ID for a given prefix by scanning directory
+ * @param dir Directory to scan
+ * @param prefix ID prefix (e.g., 'WISH', 'DOJO-PROP', 'DOJO-EXP')
+ * @param extension File extension (default: '.yaml')
+ */
+async function getNextSequentialId(
+  dir: string,
+  prefix: string,
+  extension: string = '.yaml'
+): Promise<string> {
+  try {
+    const files = await fs.readdir(dir);
+    const pattern = new RegExp(`^${prefix}-(\\d+)${extension.replace('.', '\\.')}$`);
+    const ids = files
+      .map(f => {
+        const match = f.match(pattern);
+        return match ? parseInt(match[1], 10) : NaN;
+      })
+      .filter(n => !isNaN(n));
+    const maxId = ids.length > 0 ? Math.max(...ids) : 0;
+    return `${prefix}-${String(maxId + 1).padStart(4, '0')}`;
+  } catch {
+    return `${prefix}-0001`;
+  }
+}
 
 // ============================================================================
 // Helper: Resolve project Dojo root
@@ -309,176 +336,11 @@ export function finishDojoRequest(callerRole: CallerRole = 'human'): void {
 }
 
 // ============================================================================
-// Helper: Execute decibel CLI command
-// ============================================================================
-
-async function execDecibel(
-  args: string[],
-  cwd?: string
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  log(`dojo: Running ${DECIBEL_COMMAND} ${args.join(' ')}${cwd ? ` (cwd: ${cwd})` : ''}`);
-
-  return new Promise((resolve) => {
-    const proc = spawn(DECIBEL_COMMAND, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env },
-      cwd: cwd || process.cwd(),
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    proc.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    proc.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString();
-    });
-
-    proc.on('error', (err) => {
-      log(`dojo: Process error: ${err.message}`);
-      resolve({
-        stdout: '',
-        stderr: err.message,
-        exitCode: -1,
-      });
-    });
-
-    proc.on('close', (code) => {
-      resolve({
-        stdout,
-        stderr,
-        exitCode: code ?? -1,
-      });
-    });
-  });
-}
-
-/**
- * Strip ANSI escape codes from string
- */
-function stripAnsi(str: string): string {
-  return str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
-}
-
-/**
- * Parse text output into a structured response
- * Returns the raw text if JSON parsing fails
- */
-function parseTextOutput<T>(
-  stdout: string,
-  stderr: string,
-  exitCode: number,
-  fallbackParser?: (text: string) => Partial<T>
-): T | DojoError {
-  if (exitCode !== 0) {
-    return {
-      error: `Command exited with code ${exitCode}`,
-      exitCode,
-      stderr: stripAnsi(stderr).slice(0, 500),
-    };
-  }
-
-  const cleanOutput = stripAnsi(stdout);
-
-  // Try JSON first (in case CLI adds --json support later)
-  try {
-    return JSON.parse(cleanOutput) as T;
-  } catch {
-    // Use custom parser if provided
-    if (fallbackParser) {
-      try {
-        return fallbackParser(cleanOutput) as T;
-      } catch {
-        // Fall through to raw text
-      }
-    }
-
-    // Return raw text wrapped in a response object
-    return {
-      raw_output: cleanOutput,
-      success: true,
-    } as unknown as T;
-  }
-}
-
-// ============================================================================
-// Text Parsers for CLI output
-// ============================================================================
-
-function parseProposalOutput(text: string): Partial<CreateProposalOutput> {
-  const idMatch = text.match(/ID:\s*(DOJO-PROP-\d+)/);
-  const fileMatch = text.match(/File:\s*(\S+)/);
-  return {
-    proposal_id: idMatch?.[1] || 'unknown',
-    filepath: fileMatch?.[1] || 'unknown',
-    title: 'Created',
-  };
-}
-
-function parseScaffoldOutput(text: string): Partial<ScaffoldExperimentOutput> {
-  const idMatch = text.match(/ID:\s*(DOJO-EXP-\d+)/);
-  const proposalMatch = text.match(/Proposal:\s*(DOJO-PROP-\d+)/);
-  const dirMatch = text.match(/Dir:\s*(\S+)/);
-  return {
-    experiment_id: idMatch?.[1] || 'unknown',
-    proposal_id: proposalMatch?.[1] || 'unknown',
-    directory: dirMatch?.[1] || 'unknown',
-    entrypoint: 'run.py',
-    files_created: ['manifest.yaml', 'run.py', 'README.md'],
-  };
-}
-
-function parseWishOutput(text: string): Partial<AddWishOutput> {
-  const idMatch = text.match(/(WISH-\d+)/);
-  return {
-    wish_id: idMatch?.[1] || 'unknown',
-    capability: 'Added',
-    timestamp: new Date().toISOString(),
-  };
-}
-
-function parseListOutput(text: string): Partial<ListDojoOutput> {
-  // Count items from text output
-  const proposalMatches = text.match(/DOJO-PROP-\d+/g) || [];
-  const experimentMatches = text.match(/DOJO-EXP-\d+/g) || [];
-  const wishMatches = text.match(/WISH-\d+/g) || [];
-
-  return {
-    proposals: proposalMatches.map((id) => ({
-      id,
-      title: 'See raw_output',
-      owner: 'ai' as const,
-      state: 'draft' as const,
-    })),
-    experiments: experimentMatches.map((id) => ({
-      id,
-      proposal_id: 'unknown',
-      title: 'See raw_output',
-      type: 'script',
-      enabled: false,
-    })),
-    wishes: wishMatches.map((id) => ({
-      id,
-      capability: 'See raw_output',
-      reason: 'See raw_output',
-    })),
-    summary: {
-      total_proposals: proposalMatches.length,
-      total_experiments: experimentMatches.length,
-      total_wishes: wishMatches.length,
-      enabled_count: (text.match(/● enabled/g) || []).length,
-    },
-  };
-}
-
-// ============================================================================
 // Tool Implementations
 // ============================================================================
 
 /**
- * Create a new Dojo proposal
+ * Create a new Dojo proposal (native file operations)
  */
 export async function createProposal(
   input: CreateProposalInput
@@ -494,44 +356,90 @@ export async function createProposal(
   );
 
   try {
-    const args = [
-      'dojo',
-      'propose',
-      '--title',
-      input.title,
-      '--problem',
-      input.problem,
-      '--hypothesis',
-      input.hypothesis,
-      '--owner',
-      input.owner || 'ai',
-    ];
+    const timestamp = new Date().toISOString();
+    const proposalDir = path.join(ctx.dojoRoot, 'proposals');
+    ensureDir(proposalDir);
 
+    // Generate next sequential proposal ID
+    const proposalId = await getNextSequentialId(proposalDir, 'DOJO-PROP');
+    const proposalPath = path.join(proposalDir, `${proposalId}.yaml`);
+
+    // Build proposal data structure
+    const proposalData: Record<string, unknown> = {
+      id: proposalId,
+      title: input.title,
+      problem: input.problem,
+      hypothesis: input.hypothesis,
+      owner: input.owner || 'ai',
+      state: 'draft',
+      created_at: timestamp,
+      project_id: ctx.projectId,
+    };
+
+    // Optional fields
     if (input.target_module) {
-      args.push('--module', input.target_module);
+      proposalData.target_module = input.target_module;
     }
-
+    if (input.scope_in && input.scope_in.length > 0) {
+      proposalData.scope_in = input.scope_in;
+    }
+    if (input.scope_out && input.scope_out.length > 0) {
+      proposalData.scope_out = input.scope_out;
+    }
+    if (input.acceptance && input.acceptance.length > 0) {
+      proposalData.acceptance = input.acceptance;
+    }
+    if (input.risks && input.risks.length > 0) {
+      proposalData.risks = input.risks;
+    }
     if (input.follows) {
-      args.push('--follows', input.follows);
+      proposalData.follows = input.follows;
     }
-
     if (input.insight) {
-      args.push('--insight', input.insight);
+      proposalData.insight = input.insight;
     }
-
     if (input.wish_id) {
-      args.push('--wish', input.wish_id);
+      proposalData.wish_id = input.wish_id;
+      // Mark wish as resolved if it exists
+      const wishPath = path.join(ctx.dojoRoot, 'wishes', `${input.wish_id}.yaml`);
+      try {
+        const wishContent = await fs.readFile(wishPath, 'utf-8');
+        const wishData = YAML.parse(wishContent);
+        wishData.status = 'resolved';
+        wishData.resolved_by = proposalId;
+        wishData.resolved_at = timestamp;
+        await fs.writeFile(wishPath, YAML.stringify(wishData), 'utf-8');
+        log(`dojo: Marked wish ${input.wish_id} as resolved by ${proposalId}`);
+      } catch {
+        // Wish doesn't exist or can't be updated - continue anyway
+        log(`dojo: Could not update wish ${input.wish_id}`);
+      }
     }
 
-    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
-    return parseTextOutput<CreateProposalOutput>(stdout, stderr, exitCode, parseProposalOutput);
+    // Write YAML file
+    await fs.writeFile(proposalPath, YAML.stringify(proposalData), 'utf-8');
+    log(`dojo: Created proposal ${proposalId} at ${proposalPath}`);
+
+    // Emit provenance
+    await emitCreateProvenance(
+      `dojo:proposal:${proposalId}`,
+      YAML.stringify(proposalData),
+      `Created proposal: ${input.title}`,
+      ctx.projectId
+    );
+
+    return {
+      proposal_id: proposalId,
+      filepath: proposalPath,
+      title: input.title,
+    };
   } finally {
     finishDojoRequest(callerRole);
   }
 }
 
 /**
- * Scaffold an experiment from a proposal
+ * Scaffold an experiment from a proposal (native file operations)
  */
 export async function scaffoldExperiment(
   input: ScaffoldExperimentInput
@@ -547,25 +455,137 @@ export async function scaffoldExperiment(
   );
 
   try {
-    const args = ['dojo', 'scaffold', input.proposal_id];
+    const timestamp = new Date().toISOString();
+    const scriptType = input.script_type || 'py';
+    const experimentType = input.experiment_type || 'script';
 
-    if (input.script_type) {
-      args.push('--script-type', input.script_type);
+    // Read proposal to get info
+    const proposalPath = path.join(ctx.dojoRoot, 'proposals', `${input.proposal_id}.yaml`);
+    let proposalData: Record<string, unknown>;
+    try {
+      const proposalContent = await fs.readFile(proposalPath, 'utf-8');
+      proposalData = YAML.parse(proposalContent);
+    } catch {
+      return {
+        error: `Proposal not found: ${input.proposal_id}`,
+        exitCode: 1,
+        stderr: `Could not read proposal file: ${proposalPath}`,
+      };
     }
 
-    if (input.experiment_type) {
-      args.push('--type', input.experiment_type);
-    }
+    // Generate experiment directory
+    const experimentsDir = path.join(ctx.dojoRoot, 'experiments');
+    const experimentId = await getNextSequentialId(experimentsDir, 'DOJO-EXP', '');
+    const experimentDir = path.join(experimentsDir, experimentId);
+    ensureDir(experimentDir);
 
-    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
-    return parseTextOutput<ScaffoldExperimentOutput>(stdout, stderr, exitCode, parseScaffoldOutput);
+    // Create manifest.yaml
+    const manifestData = {
+      id: experimentId,
+      proposal_id: input.proposal_id,
+      title: proposalData.title || 'Untitled Experiment',
+      type: experimentType,
+      script_type: scriptType,
+      enabled: false,
+      created_at: timestamp,
+      project_id: ctx.projectId,
+    };
+    const manifestPath = path.join(experimentDir, 'manifest.yaml');
+    await fs.writeFile(manifestPath, YAML.stringify(manifestData), 'utf-8');
+
+    // Create run script
+    const entrypoint = scriptType === 'ts' ? 'run.ts' : 'run.py';
+    const scriptPath = path.join(experimentDir, entrypoint);
+    const scriptContent = scriptType === 'ts'
+      ? `#!/usr/bin/env npx ts-node
+/**
+ * Experiment: ${experimentId}
+ * Proposal: ${input.proposal_id}
+ * Title: ${proposalData.title || 'Untitled'}
+ */
+
+async function main() {
+  console.log('Running experiment ${experimentId}...');
+
+  // TODO: Implement experiment logic
+
+  console.log('Experiment complete.');
+}
+
+main().catch(console.error);
+`
+      : `#!/usr/bin/env python3
+"""
+Experiment: ${experimentId}
+Proposal: ${input.proposal_id}
+Title: ${proposalData.title || 'Untitled'}
+"""
+
+def main():
+    print(f"Running experiment ${experimentId}...")
+
+    # TODO: Implement experiment logic
+
+    print("Experiment complete.")
+
+if __name__ == "__main__":
+    main()
+`;
+    await fs.writeFile(scriptPath, scriptContent, 'utf-8');
+
+    // Create README.md
+    const readmePath = path.join(experimentDir, 'README.md');
+    const readmeContent = `# ${experimentId}: ${proposalData.title || 'Untitled'}
+
+## Proposal
+${input.proposal_id}
+
+## Problem
+${proposalData.problem || 'N/A'}
+
+## Hypothesis
+${proposalData.hypothesis || 'N/A'}
+
+## Running
+\`\`\`bash
+${scriptType === 'ts' ? 'npx ts-node run.ts' : 'python3 run.py'}
+\`\`\`
+
+## Results
+Results will be written to \`.decibel/dojo/results/${experimentId}/\`
+`;
+    await fs.writeFile(readmePath, readmeContent, 'utf-8');
+
+    // Update proposal state
+    proposalData.state = 'has_experiment';
+    proposalData.experiment_id = experimentId;
+    await fs.writeFile(proposalPath, YAML.stringify(proposalData), 'utf-8');
+
+    const filesCreated = ['manifest.yaml', entrypoint, 'README.md'];
+    log(`dojo: Scaffolded experiment ${experimentId} at ${experimentDir}`);
+
+    // Emit provenance
+    await emitCreateProvenance(
+      `dojo:experiment:${experimentId}`,
+      YAML.stringify(manifestData),
+      `Scaffolded experiment from ${input.proposal_id}`,
+      ctx.projectId
+    );
+
+    return {
+      experiment_id: experimentId,
+      proposal_id: input.proposal_id,
+      directory: experimentDir,
+      entrypoint,
+      files_created: filesCreated,
+    };
   } finally {
     finishDojoRequest(callerRole);
   }
 }
 
 /**
- * List proposals, experiments, and wishes
+ * List proposals, experiments, and wishes (native file operations)
  */
 export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | DojoError> {
   const callerRole = input.caller_role || 'human';
@@ -579,20 +599,109 @@ export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | D
   );
 
   try {
-    const args = ['dojo', 'list'];
+    const filter = input.filter || 'all';
+    const proposals: ProposalSummary[] = [];
+    const experiments: ExperimentSummary[] = [];
+    const wishes: WishSummary[] = [];
+    let enabledCount = 0;
 
-    // Note: --filter may not be supported, but we'll try
-    // The CLI will ignore unknown args or error gracefully
+    // Read proposals
+    if (filter === 'all' || filter === 'proposals') {
+      const proposalDir = path.join(ctx.dojoRoot, 'proposals');
+      try {
+        const files = await fs.readdir(proposalDir);
+        for (const file of files) {
+          if (!file.endsWith('.yaml')) continue;
+          try {
+            const content = await fs.readFile(path.join(proposalDir, file), 'utf-8');
+            const data = YAML.parse(content);
+            proposals.push({
+              id: data.id || file.replace('.yaml', ''),
+              title: data.title || 'Untitled',
+              owner: data.owner || 'ai',
+              state: data.state || 'draft',
+            });
+          } catch {
+            // Skip malformed files
+          }
+        }
+      } catch {
+        // Directory doesn't exist
+      }
+    }
 
-    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
-    return parseTextOutput<ListDojoOutput>(stdout, stderr, exitCode, parseListOutput);
+    // Read experiments
+    if (filter === 'all' || filter === 'experiments') {
+      const experimentsDir = path.join(ctx.dojoRoot, 'experiments');
+      try {
+        const dirs = await fs.readdir(experimentsDir);
+        for (const dir of dirs) {
+          const manifestPath = path.join(experimentsDir, dir, 'manifest.yaml');
+          try {
+            const content = await fs.readFile(manifestPath, 'utf-8');
+            const data = YAML.parse(content);
+            const isEnabled = data.enabled === true;
+            if (isEnabled) enabledCount++;
+            experiments.push({
+              id: data.id || dir,
+              proposal_id: data.proposal_id || 'unknown',
+              title: data.title || 'Untitled',
+              type: data.type || 'script',
+              enabled: isEnabled,
+            });
+          } catch {
+            // Skip directories without manifest
+          }
+        }
+      } catch {
+        // Directory doesn't exist
+      }
+    }
+
+    // Read wishes
+    if (filter === 'all' || filter === 'wishes') {
+      const wishDir = path.join(ctx.dojoRoot, 'wishes');
+      try {
+        const files = await fs.readdir(wishDir);
+        for (const file of files) {
+          if (!file.endsWith('.yaml')) continue;
+          try {
+            const content = await fs.readFile(path.join(wishDir, file), 'utf-8');
+            const data = YAML.parse(content);
+            wishes.push({
+              id: data.id || file.replace('.yaml', ''),
+              capability: data.capability || 'Unknown',
+              reason: data.reason || 'Unknown',
+              resolved_by: data.resolved_by,
+            });
+          } catch {
+            // Skip malformed files
+          }
+        }
+      } catch {
+        // Directory doesn't exist
+      }
+    }
+
+    return {
+      proposals,
+      experiments,
+      wishes,
+      summary: {
+        total_proposals: proposals.length,
+        total_experiments: experiments.length,
+        total_wishes: wishes.length,
+        enabled_count: enabledCount,
+      },
+    };
   } finally {
     finishDojoRequest(callerRole);
   }
 }
 
 /**
- * Run an experiment in sandbox mode (NEVER in enabled mode)
+ * Run an experiment in sandbox mode (native file operations)
+ * Note: This still uses spawn() to run the experiment script, but not the CLI
  */
 export async function runExperiment(
   input: RunExperimentInput
@@ -612,41 +721,126 @@ export async function runExperiment(
     const sandbox = getSandboxPolicy(ctx.callerRole);
     expandSandboxPaths(sandbox, ctx.dojoRoot);
 
-    // SAFETY: Always use --sandbox, never expose --enabled
-    const args = ['dojo', 'run', input.experiment_id, '--sandbox'];
+    // Read experiment manifest
+    const experimentDir = path.join(ctx.dojoRoot, 'experiments', input.experiment_id);
+    const manifestPath = path.join(experimentDir, 'manifest.yaml');
+    let manifestData: Record<string, unknown>;
+    try {
+      const content = await fs.readFile(manifestPath, 'utf-8');
+      manifestData = YAML.parse(content);
+    } catch {
+      return {
+        error: `Experiment not found: ${input.experiment_id}`,
+        exitCode: 1,
+        stderr: `Could not read manifest: ${manifestPath}`,
+      };
+    }
 
-    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
+    // Determine entrypoint and runner
+    const scriptType = manifestData.script_type || 'py';
+    const entrypoint = scriptType === 'ts' ? 'run.ts' : 'run.py';
+    const scriptPath = path.join(experimentDir, entrypoint);
 
-    // Parse the output
-    const cleanOutput = stripAnsi(stdout);
+    // Check script exists
+    try {
+      await fs.access(scriptPath);
+    } catch {
+      return {
+        error: `Experiment script not found: ${entrypoint}`,
+        exitCode: 1,
+        stderr: `Script does not exist: ${scriptPath}`,
+      };
+    }
 
-    // Try to extract key information
-    const durationMatch = cleanOutput.match(/Duration:\s*([\d.]+)s/);
-    const successMatch = cleanOutput.match(/✓|completed successfully/i);
+    // Generate run ID
+    const now = new Date();
+    const runId = now.toISOString().replace(/[-:]/g, '').slice(0, 15).replace('T', '-');
 
-    // Extract run_id from output (format: YYYYMMDD-HHMMSS)
-    const runIdMatch = cleanOutput.match(/(\d{8}-\d{6})/);
-    const runId = runIdMatch?.[1] || new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15).replace(/(\d{8})(\d{6})/, '$1-$2');
+    // Create results directory
+    const resultsDir = path.join(ctx.dojoRoot, 'results', input.experiment_id, runId);
+    ensureDir(resultsDir);
+
+    const startTime = Date.now();
+
+    // Run the experiment script
+    const runner = scriptType === 'ts' ? 'npx' : 'python3';
+    const runnerArgs = scriptType === 'ts' ? ['ts-node', entrypoint] : [entrypoint];
+
+    const { stdout, exitCode } = await new Promise<{ stdout: string; exitCode: number }>((resolve) => {
+      const proc = spawn(runner, runnerArgs, {
+        cwd: experimentDir,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          DOJO_RESULTS_DIR: resultsDir,
+          DOJO_EXPERIMENT_ID: input.experiment_id,
+          DOJO_RUN_ID: runId,
+        },
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      proc.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      proc.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      proc.on('error', (err) => {
+        log(`dojo: Experiment run error: ${err.message}`);
+        resolve({ stdout: stderr || err.message, exitCode: -1 });
+      });
+
+      proc.on('close', (code) => {
+        resolve({ stdout: stdout + stderr, exitCode: code ?? -1 });
+      });
+    });
+
+    const endTime = Date.now();
+    const durationSeconds = (endTime - startTime) / 1000;
+
+    // Write result metadata
+    const resultMeta = {
+      experiment_id: input.experiment_id,
+      run_id: runId,
+      exit_code: exitCode,
+      duration_seconds: durationSeconds,
+      timestamp: now.toISOString(),
+      status: exitCode === 0 ? 'success' : 'failure',
+    };
+    await fs.writeFile(
+      path.join(resultsDir, 'result.yaml'),
+      YAML.stringify(resultMeta),
+      'utf-8'
+    );
+
+    // Save stdout
+    if (stdout) {
+      await fs.writeFile(path.join(resultsDir, 'stdout.log'), stdout, 'utf-8');
+    }
 
     // Scan results directory for artifacts
-    const resultsDir = path.join(ctx.dojoRoot, 'results', input.experiment_id, runId);
     let artifacts: string[] = [];
     try {
       const files = await fs.readdir(resultsDir);
       artifacts = files.filter(f => !f.startsWith('.'));
     } catch {
-      // Results dir may not exist yet
       log(`dojo: Could not read results dir: ${resultsDir}`);
     }
+
+    log(`dojo: Experiment ${input.experiment_id} run ${runId} completed with exit code ${exitCode}`);
 
     return {
       experiment_id: input.experiment_id,
       run_id: runId,
-      status: exitCode === 0 && successMatch ? 'success' : 'failure',
+      status: exitCode === 0 ? 'success' : 'failure',
       exit_code: exitCode,
-      duration_seconds: durationMatch ? parseFloat(durationMatch[1]) : 0,
+      duration_seconds: durationSeconds,
       artifacts,
-      stdout: cleanOutput,
+      stdout,
     };
   } finally {
     finishDojoRequest(callerRole);
@@ -654,7 +848,7 @@ export async function runExperiment(
 }
 
 /**
- * Get results from a previous experiment run
+ * Get results from a previous experiment run (native file operations)
  */
 export async function getExperimentResults(
   input: GetResultsInput
@@ -670,29 +864,61 @@ export async function getExperimentResults(
   );
 
   try {
-    const args = ['dojo', 'results', input.experiment_id];
+    const experimentResultsDir = path.join(ctx.dojoRoot, 'results', input.experiment_id);
 
-    if (input.run_id) {
-      args.push('--run', input.run_id);
+    // Get run ID - either specified, or find latest
+    let runId = input.run_id;
+    if (!runId) {
+      // Find the latest run by listing directories and sorting
+      try {
+        const runs = await fs.readdir(experimentResultsDir);
+        const sortedRuns = runs.filter(r => !r.startsWith('.')).sort().reverse();
+        if (sortedRuns.length === 0) {
+          return {
+            error: `No runs found for experiment: ${input.experiment_id}`,
+            exitCode: 1,
+            stderr: 'No result directories found',
+          };
+        }
+        runId = sortedRuns[0];
+      } catch {
+        return {
+          error: `No results found for experiment: ${input.experiment_id}`,
+          exitCode: 1,
+          stderr: `Results directory does not exist: ${experimentResultsDir}`,
+        };
+      }
     }
 
-    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
-    const cleanOutput = stripAnsi(stdout);
+    const resultsDir = path.join(experimentResultsDir, runId);
 
-    if (exitCode !== 0) {
-      return {
-        error: `Command exited with code ${exitCode}`,
-        exitCode,
-        stderr: stripAnsi(stderr).slice(0, 500),
-      };
+    // Read result metadata
+    let resultMeta: Record<string, unknown> = {};
+    let stdout = '';
+    let stderr = '';
+    try {
+      const resultPath = path.join(resultsDir, 'result.yaml');
+      const content = await fs.readFile(resultPath, 'utf-8');
+      resultMeta = YAML.parse(content);
+    } catch {
+      // No result.yaml, try to infer from files
     }
 
-    // Parse run info from output
-    const runMatch = cleanOutput.match(/(\d{8}-\d{6})/);
-    const runId = input.run_id || runMatch?.[1] || 'latest';
+    // Try to read stdout log
+    try {
+      stdout = await fs.readFile(path.join(resultsDir, 'stdout.log'), 'utf-8');
+    } catch {
+      // No stdout log
+    }
+
+    // Try to read stderr log
+    try {
+      stderr = await fs.readFile(path.join(resultsDir, 'stderr.log'), 'utf-8');
+    } catch {
+      // No stderr log
+    }
 
     // Scan results directory for artifacts
-    const resultsDir = path.join(ctx.dojoRoot, 'results', input.experiment_id, runId);
     let artifacts: string[] = [];
     try {
       const files = await fs.readdir(resultsDir);
@@ -704,10 +930,11 @@ export async function getExperimentResults(
     return {
       experiment_id: input.experiment_id,
       run_id: runId,
-      timestamp: new Date().toISOString(),
-      exit_code: 0,
+      timestamp: (resultMeta.timestamp as string) || new Date().toISOString(),
+      exit_code: (resultMeta.exit_code as number) ?? 0,
       artifacts,
-      stdout: cleanOutput,
+      stdout: stdout || undefined,
+      stderr: stderr || undefined,
     };
   } finally {
     finishDojoRequest(callerRole);
@@ -715,7 +942,7 @@ export async function getExperimentResults(
 }
 
 /**
- * Add a wish to the wishlist
+ * Add a wish to the wishlist (native file operations)
  */
 export async function addWish(input: AddWishInput): Promise<AddWishOutput | DojoError> {
   const callerRole = input.caller_role || 'human';
@@ -729,55 +956,70 @@ export async function addWish(input: AddWishInput): Promise<AddWishOutput | Dojo
   );
 
   try {
-    const args = ['dojo', 'wish', input.capability, '--reason', input.reason];
+    const timestamp = new Date().toISOString();
+    const wishDir = path.join(ctx.dojoRoot, 'wishes');
+    ensureDir(wishDir);
 
-    // Required fields: inputs and outputs
-    if (input.inputs && input.inputs.length > 0) {
-      args.push('--inputs', JSON.stringify(input.inputs));
-    }
+    // Generate next sequential wish ID
+    const wishId = await getNextSequentialId(wishDir, 'WISH');
+    const wishPath = path.join(wishDir, `${wishId}.yaml`);
 
-    if (input.outputs) {
-      const outputsStr = typeof input.outputs === 'string'
-        ? input.outputs
-        : JSON.stringify(input.outputs);
-      args.push('--outputs', outputsStr);
-    }
+    // Build wish data structure
+    const wishData: Record<string, unknown> = {
+      id: wishId,
+      capability: input.capability,
+      reason: input.reason,
+      inputs: input.inputs || [],
+      outputs: input.outputs || {},
+      created_at: timestamp,
+      status: 'open',
+      project_id: ctx.projectId,
+    };
 
-    // Optional fields (filled in as wish progresses)
+    // Optional fields
     if (input.integration_point) {
-      args.push('--integration-point', input.integration_point);
+      wishData.integration_point = input.integration_point;
     }
-
     if (input.success_metric) {
-      args.push('--success-metric', input.success_metric);
+      wishData.success_metric = input.success_metric;
     }
-
     if (input.risks && input.risks.length > 0) {
-      args.push('--risks', JSON.stringify(input.risks));
+      wishData.risks = input.risks;
     }
-
     if (input.mvp) {
-      args.push('--mvp', input.mvp);
+      wishData.mvp = input.mvp;
     }
-
     if (input.algorithm_outline) {
-      args.push('--algorithm', input.algorithm_outline);
+      wishData.algorithm_outline = input.algorithm_outline;
     }
-
-    // Legacy context field
     if (input.context) {
-      args.push('--context', JSON.stringify(input.context));
+      wishData.context = input.context;
     }
 
-    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
-    return parseTextOutput<AddWishOutput>(stdout, stderr, exitCode, parseWishOutput);
+    // Write YAML file
+    await fs.writeFile(wishPath, YAML.stringify(wishData), 'utf-8');
+    log(`dojo: Created wish ${wishId} at ${wishPath}`);
+
+    // Emit provenance
+    await emitCreateProvenance(
+      `dojo:wish:${wishId}`,
+      YAML.stringify(wishData),
+      `Created wish: ${input.capability}`,
+      ctx.projectId
+    );
+
+    return {
+      wish_id: wishId,
+      capability: input.capability,
+      timestamp,
+    };
   } finally {
     finishDojoRequest(callerRole);
   }
 }
 
 /**
- * List wishes
+ * List wishes (native file operations)
  */
 export async function listWishes(input: ListWishesInput): Promise<ListWishesOutput | DojoError> {
   const callerRole = input.caller_role || 'human';
@@ -791,34 +1033,46 @@ export async function listWishes(input: ListWishesInput): Promise<ListWishesOutp
   );
 
   try {
-    const args = ['dojo', 'wishes'];
+    const wishDir = path.join(ctx.dojoRoot, 'wishes');
+    const wishes: WishSummary[] = [];
+    let unresolvedCount = 0;
 
-    if (input.unresolved_only) {
-      args.push('--unresolved');
+    try {
+      const files = await fs.readdir(wishDir);
+      for (const file of files) {
+        if (!file.endsWith('.yaml')) continue;
+
+        const wishPath = path.join(wishDir, file);
+        try {
+          const content = await fs.readFile(wishPath, 'utf-8');
+          const data = YAML.parse(content);
+
+          const isResolved = data.status === 'resolved' || !!data.resolved_by;
+
+          // Apply filter
+          if (input.unresolved_only && isResolved) continue;
+
+          if (!isResolved) unresolvedCount++;
+
+          wishes.push({
+            id: data.id || file.replace('.yaml', ''),
+            capability: data.capability || 'Unknown',
+            reason: data.reason || 'Unknown',
+            resolved_by: data.resolved_by,
+          });
+        } catch {
+          // Skip malformed files
+          log(`dojo: Could not parse wish file: ${wishPath}`);
+        }
+      }
+    } catch {
+      // Directory doesn't exist yet - return empty
     }
-
-    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
-    const cleanOutput = stripAnsi(stdout);
-
-    if (exitCode !== 0) {
-      return {
-        error: `Command exited with code ${exitCode}`,
-        exitCode,
-        stderr: stripAnsi(stderr).slice(0, 500),
-      };
-    }
-
-    // Parse wishes from output
-    const wishMatches = cleanOutput.match(/WISH-\d+/g) || [];
 
     return {
-      wishes: wishMatches.map((id) => ({
-        id,
-        capability: 'See raw output',
-        reason: 'See raw output',
-      })),
-      total: wishMatches.length,
-      unresolved: wishMatches.length,
+      wishes,
+      total: wishes.length,
+      unresolved: unresolvedCount,
     };
   } finally {
     finishDojoRequest(callerRole);
@@ -842,34 +1096,57 @@ export async function canGraduate(
   );
 
   try {
-    // Use 'status' command since 'can-graduate' doesn't exist
-    const args = ['dojo', 'status', input.experiment_id];
-
-    const { stdout, stderr, exitCode } = await execDecibel(args, ctx.projectRoot);
-    const cleanOutput = stripAnsi(stdout);
-
-    if (exitCode !== 0) {
-      // If status fails, the experiment might not exist
+    // Read experiment manifest to check graduation eligibility
+    const manifestPath = path.join(ctx.dojoRoot, 'experiments', input.experiment_id, 'manifest.yaml');
+    let manifestData: Record<string, unknown>;
+    try {
+      const content = await fs.readFile(manifestPath, 'utf-8');
+      manifestData = YAML.parse(content);
+    } catch {
       return {
-        error: `Could not check graduation status: ${stripAnsi(stderr).slice(0, 200)}`,
-        exitCode,
-        stderr: stripAnsi(stderr).slice(0, 500),
+        error: `Experiment not found: ${input.experiment_id}`,
+        exitCode: 1,
+        stderr: `Could not read manifest: ${manifestPath}`,
       };
     }
 
-    // Parse status to determine graduation eligibility
-    const isEnabled = cleanOutput.includes('● enabled');
-    const hasToolDef = cleanOutput.includes('type: tool') || cleanOutput.includes('[tool]');
+    // Check graduation criteria
+    const isEnabled = manifestData.enabled === true;
+    const hasToolDef = manifestData.type === 'tool';
+
+    // Check if there are successful runs
+    let hasSuccessfulRun = false;
+    const resultsDir = path.join(ctx.dojoRoot, 'results', input.experiment_id);
+    try {
+      const runs = await fs.readdir(resultsDir);
+      for (const run of runs) {
+        const resultPath = path.join(resultsDir, run, 'result.yaml');
+        try {
+          const resultContent = await fs.readFile(resultPath, 'utf-8');
+          const resultData = YAML.parse(resultContent);
+          if (resultData.exit_code === 0 || resultData.status === 'success') {
+            hasSuccessfulRun = true;
+            break;
+          }
+        } catch {
+          // Skip runs without result files
+        }
+      }
+    } catch {
+      // No results directory
+    }
+
+    const reasons: string[] = [];
+    reasons.push(isEnabled ? 'Experiment is enabled' : 'Experiment not enabled yet');
+    reasons.push(hasToolDef ? 'Has tool definition' : 'No tool definition (type != tool)');
+    reasons.push(hasSuccessfulRun ? 'Has at least one successful run' : 'No successful runs yet');
 
     return {
       experiment_id: input.experiment_id,
-      can_graduate: isEnabled && hasToolDef,
+      can_graduate: isEnabled && hasToolDef && hasSuccessfulRun,
       has_tool_definition: hasToolDef,
       is_enabled: isEnabled,
-      reasons: [
-        isEnabled ? 'Experiment is enabled' : 'Experiment not enabled yet',
-        hasToolDef ? 'Has tool definition' : 'No tool definition (type != tool)',
-      ],
+      reasons,
     };
   } finally {
     finishDojoRequest(callerRole);
