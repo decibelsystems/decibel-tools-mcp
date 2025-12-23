@@ -71,12 +71,12 @@ export async function createTestMcpClient(): Promise<TestMcpClient> {
         inputSchema: {
           type: 'object',
           properties: {
-            system_id: { type: 'string' },
+            projectId: { type: 'string' },
             change: { type: 'string' },
             rationale: { type: 'string' },
             impact: { type: 'string' },
           },
-          required: ['system_id', 'change', 'rationale'],
+          required: ['change', 'rationale'],
         },
       },
       {
@@ -85,12 +85,12 @@ export async function createTestMcpClient(): Promise<TestMcpClient> {
         inputSchema: {
           type: 'object',
           properties: {
-            repo: { type: 'string' },
+            projectId: { type: 'string' },
             severity: { type: 'string', enum: ['low', 'med', 'high', 'critical'] },
             title: { type: 'string' },
             details: { type: 'string' },
           },
-          required: ['repo', 'severity', 'title', 'details'],
+          required: ['severity', 'title', 'details'],
         },
       },
       {
@@ -186,7 +186,7 @@ export async function createTestMcpClient(): Promise<TestMcpClient> {
         }
         case 'architect.record_arch_decision': {
           const input = args as unknown as RecordArchDecisionInput;
-          if (!input.system_id || !input.change || !input.rationale) {
+          if (!input.change || !input.rationale) {
             throw new Error('Missing required fields');
           }
           const result = await recordArchDecision(input);
@@ -194,7 +194,7 @@ export async function createTestMcpClient(): Promise<TestMcpClient> {
         }
         case 'sentinel.create_issue': {
           const input = args as unknown as CreateIssueInput;
-          if (!input.repo || !input.severity || !input.title || !input.details) {
+          if (!input.severity || !input.title || !input.details) {
             throw new Error('Missing required fields');
           }
           const validSeverities: Severity[] = ['low', 'med', 'high', 'critical'];
@@ -206,15 +206,13 @@ export async function createTestMcpClient(): Promise<TestMcpClient> {
         }
         case 'oracle.next_actions': {
           const input = args as unknown as NextActionsInput;
-          if (!input.project_id) {
-            throw new Error('Missing required field: project_id');
-          }
+          // projectId is now optional, uses default project if not specified
           const result = await nextActions(input);
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         }
         case 'sentinel.log_epic': {
           const input = args as unknown as LogEpicInput;
-          if (!input.repo || !input.title || !input.summary) {
+          if (!input.title || !input.summary) {
             throw new Error('Missing required fields');
           }
           if (input.priority) {
@@ -234,24 +232,22 @@ export async function createTestMcpClient(): Promise<TestMcpClient> {
         }
         case 'sentinel.list_epics': {
           const input = args as unknown as ListEpicsInput;
-          if (!input.repo) {
-            throw new Error('Missing required field: repo');
-          }
+          // projectId is now optional, uses default project if not specified
           const result = await listEpics(input);
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         }
         case 'sentinel.get_epic': {
           const input = args as unknown as GetEpicInput;
-          if (!input.repo || !input.epic_id) {
-            throw new Error('Missing required fields');
+          if (!input.epic_id) {
+            throw new Error('Missing required field: epic_id');
           }
           const result = await getEpic(input);
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         }
         case 'sentinel.get_epic_issues': {
           const input = args as unknown as GetEpicIssuesInput;
-          if (!input.repo || !input.epic_id) {
-            throw new Error('Missing required fields');
+          if (!input.epic_id) {
+            throw new Error('Missing required field: epic_id');
           }
           const result = await getEpicIssues(input);
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };

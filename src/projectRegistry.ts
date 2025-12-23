@@ -194,6 +194,13 @@ export function resolveProject(projectId: string): ProjectEntry {
     return { id: projectId, path: discoveredRoot };
   }
 
+  // Strategy 6: If DECIBEL_PROJECT_ROOT is set and has .decibel, use it as fallback
+  // This allows tests and scripts to set a project root and use any projectId as a label
+  if (envRoot && hasDecibelFolder(envRoot)) {
+    log(`ProjectRegistry: Resolved "${projectId}" via DECIBEL_PROJECT_ROOT fallback (treating as label)`);
+    return { id: projectId, path: envRoot };
+  }
+
   // Build helpful error message
   const registeredIds = registry.projects.map((p) => p.id);
   const allAliases = registry.projects.flatMap((p) => p.aliases || []);
@@ -376,6 +383,19 @@ export function setDefaultProject(projectId: string): void {
   project.default = true;
   saveRegistry(registry);
   log(`ProjectRegistry: Set "${projectId}" as default project`);
+}
+
+// ============================================================================
+// Input Normalization Helpers
+// ============================================================================
+
+/**
+ * Normalize projectId from various input formats.
+ * Handles both camelCase (projectId) and snake_case (project_id).
+ * This allows tools to accept inputs from Claude regardless of which format it uses.
+ */
+export function normalizeProjectId(input: Record<string, unknown>): string | undefined {
+  return (input.projectId as string | undefined) || (input.project_id as string | undefined);
 }
 
 // ============================================================================

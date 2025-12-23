@@ -16,7 +16,7 @@ async function testDesigner() {
   console.log('\n=== Testing Designer ===');
 
   const result = await recordDesignDecision({
-    project_id: PROJECT_ID,
+    projectId: PROJECT_ID,
     area: 'API',
     summary: 'Use REST for public API endpoints',
     details: 'We decided to use REST instead of GraphQL for the public API because:\n1. Simpler learning curve for API consumers\n2. Better caching support\n3. More predictable rate limiting',
@@ -59,14 +59,14 @@ async function testOracle() {
 
   // First without focus
   const result1 = await nextActions({
-    project_id: PROJECT_ID,
+    projectId: PROJECT_ID,
   });
 
   console.log('Oracle result (no focus):', JSON.stringify(result1, null, 2));
 
   // Then with focus
   const result2 = await nextActions({
-    project_id: PROJECT_ID,
+    projectId: PROJECT_ID,
     focus: 'sentinel',
   });
 

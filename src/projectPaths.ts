@@ -7,7 +7,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { resolveProject, ProjectEntry } from './projectRegistry.js';
+import { resolveProject, ProjectEntry, listProjects } from './projectRegistry.js';
 
 // ============================================================================
 // Types
@@ -87,10 +87,8 @@ export async function resolveProjectRoot(
  * @returns Array of discovered project IDs
  */
 export function listProjectIds(): string[] {
-  // Import dynamically to avoid circular dependency at module load
-  const { listProjects } = require('./projectRegistry.js');
-  const registeredProjects = listProjects() as ProjectEntry[];
-  const ids = registeredProjects.map((p) => p.id);
+  const registeredProjects = listProjects();
+  const ids = registeredProjects.map((p: ProjectEntry) => p.id);
 
   // Also check cwd for a local project not in registry
   const currentProjectRoot = process.env.DECIBEL_PROJECT_ROOT || process.cwd();

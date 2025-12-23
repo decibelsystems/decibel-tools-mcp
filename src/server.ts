@@ -86,6 +86,16 @@ import {
   ListProvenanceInput,
 } from './tools/provenance.js';
 import {
+  compilePack,
+  renderPayload,
+  lintOutput,
+  runGolden,
+  CompilePackInput,
+  RenderInput,
+  LintInput,
+  GoldenInput,
+} from './agentic/index.js';
+import {
   listProjects,
   registerProject,
   unregisterProject,
@@ -170,7 +180,8 @@ import { startHttpServer, parseHttpArgs } from './httpServer.js';
 
 /**
  * Normalize object keys to match expected schema.
- * Handles case-insensitive matching and strips common suffixes like "(summary)".
+ * Handles case-insensitive matching, snake_case to camelCase conversion,
+ * and strips common suffixes like "(summary)".
  */
 function normalizeParams<T>(
   args: Record<string, unknown>,
@@ -178,6 +189,14 @@ function normalizeParams<T>(
 ): T {
   const result: Record<string, unknown> = {};
   const keyMap = new Map<string, string>();
+
+  // Common snake_case -> camelCase mappings for projectId
+  const snakeToCamel: Record<string, string> = {
+    'project_id': 'projectId',
+    'epic_id': 'epicId',
+    'issue_id': 'issueId',
+    'friction_id': 'frictionId',
+  };
 
   // Build a lowercase -> expected key map
   for (const key of expectedKeys) {
@@ -190,6 +209,11 @@ function normalizeParams<T>(
     let cleanKey = inputKey
       .replace(/\s*\([^)]*\)\s*/g, '') // Remove (summary), (optional), etc.
       .trim();
+
+    // Apply snake_case -> camelCase transformation if applicable
+    if (snakeToCamel[cleanKey]) {
+      cleanKey = snakeToCamel[cleanKey];
+    }
 
     // Try exact match first
     if (expectedKeys.includes(cleanKey)) {
@@ -245,9 +269,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {
-            project_id: {
+            projectId: {
               type: 'string',
-              description: 'The project identifier',
+              description: 'Optional project identifier. Uses default project if not specified.',
             },
             area: {
               type: 'string',
@@ -262,7 +286,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Optional detailed explanation of the design decision',
             },
           },
-          required: ['project_id', 'area', 'summary'],
+          required: ['area', 'summary'],
         },
       },
 
@@ -1821,6 +1845,97 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
 
+      // Agentic Pack Engine tools
+      {
+        name: 'agentic_compile_pack',
+        description: 'Compile agentic configuration files into a versioned, hashed pack. Reads from .decibel/architect/agentic/ and outputs compiled_agentic_pack.json',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier. Uses default project if not specified.',
+            },
+          },
+          required: [],
+        },
+      },
+      {
+        name: 'agentic_render',
+        description: 'Transform a canonical payload into rendered text using a specified renderer. Pure function - no side effects.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier.',
+            },
+            payload: {
+              type: 'object',
+              description: 'The canonical payload to render (role, status, load, summary, evidence, missing_data, metadata)',
+            },
+            renderer_id: {
+              type: 'string',
+              description: 'ID of the renderer to use',
+            },
+            target: {
+              type: 'string',
+              enum: ['plain', 'markdown', 'ansi'],
+              description: 'Output target format (default: plain)',
+            },
+          },
+          required: ['payload', 'renderer_id'],
+        },
+      },
+      {
+        name: 'agentic_lint',
+        description: 'Validate rendered output against renderer constraints. Checks emoji count, banned words, line limits, and other dialect rules.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier.',
+            },
+            rendered: {
+              type: 'string',
+              description: 'The rendered text to lint',
+            },
+            renderer_id: {
+              type: 'string',
+              description: 'ID of the renderer whose constraints to check',
+            },
+            payload: {
+              type: 'object',
+              description: 'Original payload for consistency checks (optional)',
+            },
+          },
+          required: ['rendered', 'renderer_id'],
+        },
+      },
+      {
+        name: 'agentic_golden_eval',
+        description: 'Run golden eval regression tests. Compares rendered outputs against known-good baseline files.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectId: {
+              type: 'string',
+              description: 'Optional project identifier.',
+            },
+            case_name: {
+              type: 'string',
+              description: 'Run only this specific test case',
+            },
+            strict: {
+              type: 'boolean',
+              description: 'Also run lint checks on all outputs',
+            },
+          },
+          required: [],
+        },
+      },
+
       // Dynamically add graduated Dojo tools
       ...graduatedToolsToMcpDefinitions(graduatedTools),
     ],
@@ -1844,12 +1959,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           rawInput,
           ['project_id', 'projectId', 'area', 'summary', 'rationale', 'implementation_note', 'implementationNote', 'location']
         );
-        // Also support projectId as alias for project_id
-        if (!input.project_id && rawInput.projectId) {
-          input.project_id = rawInput.projectId as string;
+        // Support project_id as alias for projectId (now projectId is the canonical name)
+        if (!input.projectId && rawInput.project_id) {
+          input.projectId = rawInput.project_id as string;
         }
-        if (!input.project_id || !input.area || !input.summary) {
-          throw new Error('Missing required fields: project_id, area, and summary are required');
+        if (!input.area || !input.summary) {
+          throw new Error('Missing required fields: area and summary are required');
         }
         const result = await recordDesignDecision(input);
         return {
@@ -2279,10 +2394,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       // Oracle tools
       case 'oracle_next_actions': {
-        const input = args as unknown as NextActionsInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
+        const rawInput = args as Record<string, unknown>;
+        // Support project_id as alias for projectId
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
         }
+        const input = rawInput as unknown as NextActionsInput;
+        // projectId is now optional - project resolution will handle it
         const result = await nextActions(input);
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
@@ -2291,9 +2409,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       // Learnings tools
       case 'learnings_append': {
-        const input = args as unknown as AppendLearningInput;
-        if (!input.project_id || !input.category || !input.title || !input.content) {
-          throw new Error('Missing required fields: project_id, category, title, and content are required');
+        const rawInput = args as Record<string, unknown>;
+        // Support project_id as alias for projectId
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
+        }
+        const input = rawInput as unknown as AppendLearningInput;
+        if (!input.category || !input.title || !input.content) {
+          throw new Error('Missing required fields: category, title, and content are required');
         }
         const validCategories: LearningCategory[] = ['debug', 'integration', 'architecture', 'tooling', 'process', 'other'];
         if (!validCategories.includes(input.category)) {
@@ -2306,10 +2429,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'learnings_list': {
-        const input = args as unknown as ListLearningsInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
+        const rawInput = args as Record<string, unknown>;
+        // Support project_id as alias for projectId
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
         }
+        const input = rawInput as unknown as ListLearningsInput;
         if (input.category) {
           const validCategories: LearningCategory[] = ['debug', 'integration', 'architecture', 'tooling', 'process', 'other'];
           if (!validCategories.includes(input.category)) {
@@ -2402,9 +2527,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       // Crit tools
       case 'designer_crit': {
-        const input = args as unknown as LogCritInput;
-        if (!input.project_id || !input.area || !input.observation) {
-          throw new Error('Missing required fields: project_id, area, and observation are required');
+        const rawInput = args as Record<string, unknown>;
+        // Support project_id as alias for projectId
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
+        }
+        const input = rawInput as unknown as LogCritInput;
+        if (!input.area || !input.observation) {
+          throw new Error('Missing required fields: area and observation are required');
         }
         if (input.sentiment) {
           const valid: CritSentiment[] = ['positive', 'negative', 'neutral', 'question'];
@@ -2419,10 +2549,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'designer_list_crits': {
-        const input = args as unknown as ListCritsInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
+        const rawInput = args as Record<string, unknown>;
+        // Support project_id as alias for projectId
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
         }
+        const input = rawInput as unknown as ListCritsInput;
+        // projectId is now optional - project resolution will handle it
         if (input.sentiment) {
           const valid: CritSentiment[] = ['positive', 'negative', 'neutral', 'question'];
           if (!valid.includes(input.sentiment)) {
@@ -2745,10 +2878,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Context Pack Tools (ADR-002)
       // ========================================================================
       case 'decibel_context_refresh': {
-        const input = args as unknown as ContextRefreshInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
+        const rawInput = args as Record<string, unknown>;
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
         }
+        const input = rawInput as unknown as ContextRefreshInput;
         const result = await contextRefresh(input);
         if (isContextError(result)) {
           return {
@@ -2762,10 +2896,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'decibel_context_pin': {
-        const input = args as unknown as ContextPinInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
+        const rawInput = args as Record<string, unknown>;
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
         }
+        const input = rawInput as unknown as ContextPinInput;
         if (!input.title) {
           throw new Error('Missing required field: title');
         }
@@ -2782,10 +2917,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'decibel_context_unpin': {
-        const input = args as unknown as ContextUnpinInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
+        const rawInput = args as Record<string, unknown>;
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
         }
+        const input = rawInput as unknown as ContextUnpinInput;
         if (!input.id) {
           throw new Error('Missing required field: id');
         }
@@ -2802,10 +2938,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'decibel_context_list': {
-        const input = args as unknown as ContextListInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
+        const rawInput = args as Record<string, unknown>;
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
         }
+        const input = rawInput as unknown as ContextListInput;
         const result = await contextList(input);
         if (isContextError(result)) {
           return {
@@ -2819,10 +2956,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'decibel_event_append': {
-        const input = args as unknown as EventAppendInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
+        const rawInput = args as Record<string, unknown>;
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
         }
+        const input = rawInput as unknown as EventAppendInput;
         if (!input.title) {
           throw new Error('Missing required field: title');
         }
@@ -2839,10 +2977,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'decibel_event_search': {
-        const input = args as unknown as EventSearchInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
+        const rawInput = args as Record<string, unknown>;
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
         }
+        const input = rawInput as unknown as EventSearchInput;
         if (!input.query) {
           throw new Error('Missing required field: query');
         }
@@ -2859,10 +2998,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'decibel_artifact_list': {
-        const input = args as unknown as ArtifactListInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
+        const rawInput = args as Record<string, unknown>;
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
         }
+        const input = rawInput as unknown as ArtifactListInput;
         if (!input.run_id) {
           throw new Error('Missing required field: run_id');
         }
@@ -2879,10 +3019,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'decibel_artifact_read': {
-        const input = args as unknown as ArtifactReadInput;
-        if (!input.project_id) {
-          throw new Error('Missing required field: project_id');
+        const rawInput = args as Record<string, unknown>;
+        if (!rawInput.projectId && rawInput.project_id) {
+          rawInput.projectId = rawInput.project_id;
         }
+        const input = rawInput as unknown as ArtifactReadInput;
         if (!input.run_id) {
           throw new Error('Missing required field: run_id');
         }
@@ -2913,6 +3054,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // Agentic Pack Engine tools
+      case 'agentic_compile_pack': {
+        const input = args as unknown as CompilePackInput;
+        const result = await compilePack(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: result.status === 'error',
+        };
+      }
+
+      case 'agentic_render': {
+        const input = args as unknown as RenderInput;
+        if (!input.payload || !input.renderer_id) {
+          throw new Error('Missing required fields: payload and renderer_id are required');
+        }
+        const result = await renderPayload(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: result.status === 'error',
+        };
+      }
+
+      case 'agentic_lint': {
+        const input = args as unknown as LintInput;
+        if (!input.rendered || !input.renderer_id) {
+          throw new Error('Missing required fields: rendered and renderer_id are required');
+        }
+        const result = await lintOutput(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: result.status === 'error',
+        };
+      }
+
+      case 'agentic_golden_eval': {
+        const input = args as unknown as GoldenInput;
+        const result = await runGolden(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: result.status === 'error',
         };
       }
 

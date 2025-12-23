@@ -24,7 +24,7 @@ describe('Oracle Tool', () => {
   describe('nextActions', () => {
     it('should return empty project message when no files exist', async () => {
       const result = await nextActions({
-        project_id: 'empty-project',
+        projectId: 'empty-project',
       });
 
       expect(result.actions).toHaveLength(1);
@@ -34,13 +34,13 @@ describe('Oracle Tool', () => {
 
     it('should return actions from designer files', async () => {
       await recordDesignDecision({
-        project_id: 'test-proj',
+        projectId: 'test-proj',
         area: 'API',
         summary: 'Use REST endpoints',
       });
 
       const result = await nextActions({
-        project_id: 'test-proj',
+        projectId: 'test-proj',
       });
 
       expect(result.actions.length).toBeGreaterThan(0);
@@ -57,7 +57,7 @@ describe('Oracle Tool', () => {
       });
 
       const result = await nextActions({
-        project_id: 'test-proj',
+        projectId: 'test-proj',
       });
 
       expect(result.actions.length).toBeGreaterThan(0);
@@ -75,7 +75,7 @@ describe('Oracle Tool', () => {
       });
 
       const result = await nextActions({
-        project_id: 'test-proj',
+        projectId: 'test-proj',
       });
 
       expect(result.actions.length).toBeGreaterThan(0);
@@ -84,7 +84,7 @@ describe('Oracle Tool', () => {
 
     it('should prioritize high severity issues', async () => {
       await recordDesignDecision({
-        project_id: 'proj',
+        projectId: 'proj',
         area: 'UI',
         summary: 'Design decision',
       });
@@ -97,7 +97,7 @@ describe('Oracle Tool', () => {
       });
 
       const result = await nextActions({
-        project_id: 'proj',
+        projectId: 'proj',
       });
 
       // First action should be the critical issue
@@ -114,7 +114,7 @@ describe('Oracle Tool', () => {
       });
 
       const result = await nextActions({
-        project_id: 'proj',
+        projectId: 'proj',
       });
 
       const medIssue = result.actions.find((a) =>
@@ -126,7 +126,7 @@ describe('Oracle Tool', () => {
 
     it('should return valid priorities for all actions', async () => {
       await recordDesignDecision({
-        project_id: 'proj',
+        projectId: 'proj',
         area: 'Test',
         summary: 'Test decision',
       });
@@ -145,7 +145,7 @@ describe('Oracle Tool', () => {
       });
 
       const result = await nextActions({
-        project_id: 'proj',
+        projectId: 'proj',
       });
 
       for (const action of result.actions) {
@@ -155,13 +155,13 @@ describe('Oracle Tool', () => {
 
     it('should include source paths in actions', async () => {
       const designResult = await recordDesignDecision({
-        project_id: 'proj',
+        projectId: 'proj',
         area: 'Test',
         summary: 'Test decision',
       });
 
       const result = await nextActions({
-        project_id: 'proj',
+        projectId: 'proj',
       });
 
       expect(result.actions.some((a) => a.source === designResult.path)).toBe(true);
@@ -169,7 +169,7 @@ describe('Oracle Tool', () => {
 
     it('should filter by focus when provided', async () => {
       await recordDesignDecision({
-        project_id: 'proj',
+        projectId: 'proj',
         area: 'UI',
         summary: 'Design decision',
       });
@@ -182,7 +182,7 @@ describe('Oracle Tool', () => {
       });
 
       const result = await nextActions({
-        project_id: 'proj',
+        projectId: 'proj',
         focus: 'sentinel',
       });
 
@@ -194,14 +194,14 @@ describe('Oracle Tool', () => {
       // Create many items
       for (let i = 0; i < 10; i++) {
         await recordDesignDecision({
-          project_id: 'proj',
+          projectId: 'proj',
           area: `Area ${i}`,
           summary: `Decision ${i}`,
         });
       }
 
       const result = await nextActions({
-        project_id: 'proj',
+        projectId: 'proj',
       });
 
       expect(result.actions.length).toBeLessThanOrEqual(7);
@@ -209,7 +209,7 @@ describe('Oracle Tool', () => {
 
     it('should return at least 3 actions when data exists', async () => {
       await recordDesignDecision({
-        project_id: 'proj',
+        projectId: 'proj',
         area: 'A',
         summary: 'Decision A',
       });
@@ -228,7 +228,7 @@ describe('Oracle Tool', () => {
       });
 
       const result = await nextActions({
-        project_id: 'proj',
+        projectId: 'proj',
       });
 
       expect(result.actions.length).toBeGreaterThanOrEqual(3);
@@ -236,7 +236,7 @@ describe('Oracle Tool', () => {
 
     it('should sort actions by priority', async () => {
       await recordDesignDecision({
-        project_id: 'proj',
+        projectId: 'proj',
         area: 'UI',
         summary: 'Low priority design',
       });
@@ -255,7 +255,7 @@ describe('Oracle Tool', () => {
       });
 
       const result = await nextActions({
-        project_id: 'proj',
+        projectId: 'proj',
       });
 
       // Verify sorted by priority (high -> med -> low)
@@ -270,13 +270,13 @@ describe('Oracle Tool', () => {
 
     it('should handle focus filter with no matches gracefully', async () => {
       await recordDesignDecision({
-        project_id: 'proj',
+        projectId: 'proj',
         area: 'UI',
         summary: 'Only design decision',
       });
 
       const result = await nextActions({
-        project_id: 'proj',
+        projectId: 'proj',
         focus: 'nonexistent-keyword',
       });
 

@@ -1,12 +1,39 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { getConfig, log } from '../config.js';
-import { resolvePath, hasProjectLocal } from '../dataRoot.js';
+import { log } from '../config.js';
+import { resolveProjectPaths, ResolvedProjectPaths } from '../projectRegistry.js';
+
+// ============================================================================
+// Project Resolution Error
+// ============================================================================
+
+export interface OracleError {
+  error: string;
+  message: string;
+  hint?: string;
+}
+
+function makeProjectError(operation: string): OracleError {
+  return {
+    error: 'PROJECT_NOT_FOUND',
+    message: `Cannot ${operation}: No project context available.`,
+    hint: 'Specify project_id parameter, set DECIBEL_PROJECT_ROOT env var, or run from a directory with .decibel/',
+  };
+}
+
+export function isOracleError(result: unknown): result is OracleError {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    'error' in result &&
+    'message' in result
+  );
+}
 
 export type Priority = 'low' | 'med' | 'high';
 
 export interface NextActionsInput {
-  project_id: string;
+  projectId?: string;  // optional, uses project resolution
   focus?: string;
 }
 
@@ -55,7 +82,8 @@ interface FrictionInfo {
 async function getFilesFromDir(
   dirPath: string,
   type: FileInfo['type'],
-  location: 'project' | 'global'
+  location: 'project' | 'global',
+  recursive: boolean = false
 ): Promise<FileInfo[]> {
   const files: FileInfo[] = [];
 
@@ -63,8 +91,17 @@ async function getFilesFromDir(
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
     for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+
+      // Recursively scan subdirectories if enabled
+      if (entry.isDirectory() && recursive) {
+        const subFiles = await getFilesFromDir(fullPath, type, location, true);
+        files.push(...subFiles);
+        continue;
+      }
+
       if (entry.isFile() && entry.name.endsWith('.md')) {
-        const filePath = path.join(dirPath, entry.name);
+        const filePath = fullPath;
         const content = await fs.readFile(filePath, 'utf-8');
 
         // Parse timestamp from filename (YYYY-MM-DDTHH-mm-ssZ-slug.md)
@@ -114,9 +151,9 @@ async function getFilesFromDir(
   return files;
 }
 
-async function getFrictionFiles(): Promise<FrictionInfo[]> {
-  // Friction is always global
-  const frictionDir = resolvePath('friction-global');
+async function getFrictionFiles(resolved: ResolvedProjectPaths): Promise<FrictionInfo[]> {
+  // Friction is in project .decibel/friction/
+  const frictionDir = resolved.subPath('friction');
   const frictionList: FrictionInfo[] = [];
 
   try {
@@ -162,48 +199,24 @@ async function getFrictionFiles(): Promise<FrictionInfo[]> {
 }
 
 async function collectRecentFiles(
-  projectId: string
+  resolved: ResolvedProjectPaths
 ): Promise<FileInfo[]> {
-  const config = getConfig();
   const allFiles: FileInfo[] = [];
-  const hasProject = hasProjectLocal();
 
-  // Project-local sources (if decibel/ exists)
-  if (hasProject) {
-    // Sentinel issues from project
-    const projectIssuesDir = resolvePath('sentinel-issues');
-    const projectIssues = await getFilesFromDir(projectIssuesDir, 'sentinel', 'project');
-    allFiles.push(...projectIssues);
+  // Sentinel issues from project .decibel/sentinel/issues/
+  const projectIssuesDir = resolved.subPath('sentinel', 'issues');
+  const projectIssues = await getFilesFromDir(projectIssuesDir, 'sentinel', 'project');
+  allFiles.push(...projectIssues);
 
-    // Architect ADRs from project
-    const projectArchitectDir = resolvePath('architect-project');
-    const projectArchitect = await getFilesFromDir(projectArchitectDir, 'architect', 'project');
-    allFiles.push(...projectArchitect);
+  // Architect ADRs from project .decibel/architect/adrs/
+  const projectArchitectDir = resolved.subPath('architect', 'adrs');
+  const projectArchitect = await getFilesFromDir(projectArchitectDir, 'architect', 'project');
+  allFiles.push(...projectArchitect);
 
-    // Designer from project
-    const projectDesignerDir = resolvePath('designer-project');
-    const projectDesigner = await getFilesFromDir(projectDesignerDir, 'designer', 'project');
-    allFiles.push(...projectDesigner);
-  }
-
-  // Global sources (fallback or additional)
-  // Global architect ADRs (tooling/MCP level)
-  const globalArchitectDir = resolvePath('architect-global');
-  const globalArchitect = await getFilesFromDir(globalArchitectDir, 'architect', 'global');
-  allFiles.push(...globalArchitect);
-
-  // If no project-local, check global for project-specific data
-  if (!hasProject) {
-    // Legacy: check global sentinel/{projectId}/issues
-    const legacyIssuesDir = path.join(config.rootDir, 'sentinel', projectId, 'issues');
-    const legacyIssues = await getFilesFromDir(legacyIssuesDir, 'sentinel', 'global');
-    allFiles.push(...legacyIssues);
-
-    // Legacy: check global architect/{projectId}
-    const legacyArchitectDir = path.join(config.rootDir, 'architect', projectId);
-    const legacyArchitect = await getFilesFromDir(legacyArchitectDir, 'architect', 'global');
-    allFiles.push(...legacyArchitect);
-  }
+  // Designer from project .decibel/designer/ (recursively scan area subdirectories)
+  const projectDesignerDir = resolved.subPath('designer');
+  const projectDesigner = await getFilesFromDir(projectDesignerDir, 'designer', 'project', true);
+  allFiles.push(...projectDesigner);
 
   // Sort by timestamp descending and take last 10
   allFiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
@@ -263,24 +276,30 @@ function generateActionDescription(file: FileInfo): string {
 
 export async function nextActions(
   input: NextActionsInput
-): Promise<NextActionsOutput> {
-  log(`Oracle: Getting next actions for project ${input.project_id}`);
+): Promise<NextActionsOutput | OracleError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('get next actions');
+  }
 
-  const hasProject = hasProjectLocal();
-  const recentFiles = await collectRecentFiles(input.project_id);
-  const allFriction = await getFrictionFiles();
-  
+  log(`Oracle: Getting next actions for project ${resolved.id}`);
+
+  const recentFiles = await collectRecentFiles(resolved);
+  const allFriction = await getFrictionFiles(resolved);
+
   // Filter friction by project context (or include all if no specific match)
   const projectFriction = allFriction.filter(
-    f => f.context === input.project_id || 
-         f.context.toLowerCase().includes(input.project_id.toLowerCase())
+    f => f.context === resolved.id ||
+         f.context.toLowerCase().includes(resolved.id.toLowerCase())
   );
-  
+
   // Also get high-signal friction from any context
   const highSignalFriction = allFriction.filter(
     f => f.signal_count >= 3 || f.impact === 'blocking'
   );
-  
+
   // Combine and dedupe
   const relevantFriction = Array.from(
     new Map([...projectFriction, ...highSignalFriction].map(f => [f.filename, f])).values()
@@ -294,14 +313,14 @@ export async function nextActions(
   };
 
   const dataLocations = {
-    project_local: hasProject,
-    global: true,
+    project_local: true,
+    global: false,
   };
 
   if (recentFiles.length === 0 && relevantFriction.length === 0) {
     return {
       actions: [{
-        description: `No recent activity found for project ${input.project_id}. Start by recording design decisions or architecture changes.`,
+        description: `No recent activity found for project ${resolved.id}. Start by recording design decisions or architecture changes.`,
         source: 'oracle',
         priority: 'low',
       }],
@@ -345,7 +364,7 @@ export async function nextActions(
       source: friction.path,
       priority: inferFrictionPriority(friction),
       domain: 'friction',
-      location: 'global',
+      location: 'project',
     });
   }
 

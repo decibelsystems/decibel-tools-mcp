@@ -200,10 +200,13 @@ describe('MCP Server Integration', () => {
       expect(response.actions).toBeDefined();
     });
 
-    it('should return error for missing project_id', async () => {
+    it('should use default project when project_id is not provided', async () => {
       const result = await client.callTool('oracle.next_actions', {});
 
-      expect(result.isError).toBe(true);
+      // projectId is now optional - uses default project resolution
+      expect(result.isError).toBeFalsy();
+      const response = JSON.parse(result.content[0].text);
+      expect(response.actions).toBeDefined();
     });
   });
 

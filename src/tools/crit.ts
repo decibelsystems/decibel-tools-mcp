@@ -1,7 +1,35 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { log } from '../config.js';
-import { resolvePath, ensureDir } from '../dataRoot.js';
+import { ensureDir } from '../dataRoot.js';
+import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
+
+// ============================================================================
+// Project Resolution Error
+// ============================================================================
+
+export interface CritError {
+  error: string;
+  message: string;
+  hint?: string;
+}
+
+function makeProjectError(operation: string): CritError {
+  return {
+    error: 'PROJECT_NOT_FOUND',
+    message: `Cannot ${operation}: No project context available.`,
+    hint: 'Specify projectId parameter, set DECIBEL_PROJECT_ROOT env var, or run from a directory with .decibel/',
+  };
+}
+
+export function isCritError(result: unknown): result is CritError {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    'error' in result &&
+    'message' in result
+  );
+}
 
 /**
  * Crit - Early creative feedback before decisions crystallize
@@ -21,7 +49,7 @@ import { resolvePath, ensureDir } from '../dataRoot.js';
 export type CritSentiment = 'positive' | 'negative' | 'neutral' | 'question';
 
 export interface LogCritInput {
-  project_id: string;
+  projectId?: string;     // optional, uses project resolution
   area: string;           // e.g., "3D", "motion", "layout", "ux"
   observation: string;    // The crit itself
   sentiment?: CritSentiment;
@@ -37,7 +65,7 @@ export interface LogCritOutput {
 }
 
 export interface ListCritsInput {
-  project_id: string;
+  projectId?: string;    // optional, uses project resolution
   area?: string;
   sentiment?: CritSentiment;
   limit?: number;
@@ -78,17 +106,23 @@ function sentimentEmoji(sentiment: CritSentiment): string {
 /**
  * Log a crit observation
  */
-export async function logCrit(input: LogCritInput): Promise<LogCritOutput> {
+export async function logCrit(input: LogCritInput): Promise<LogCritOutput | CritError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('log crit');
+  }
+
   const now = new Date();
   const timestamp = now.toISOString();
   const sentiment = input.sentiment || 'neutral';
 
-  // Store crits in a single markdown file per project (like learnings)
-  const baseDir = resolvePath('designer-global');
-  const dirPath = path.join(baseDir, 'crits');
+  // Store crits in .decibel/designer/crits/crits.md
+  const dirPath = resolved.subPath('designer', 'crits');
   ensureDir(dirPath);
 
-  const filePath = path.join(dirPath, `${input.project_id}.md`);
+  const filePath = path.join(dirPath, 'crits.md');
   const id = `${slugify(input.area)}-${Date.now()}`;
 
   // Build the entry
@@ -107,19 +141,21 @@ ${input.observation}${contextStr}
   // Append to file (create if doesn't exist)
   try {
     await fs.access(filePath);
+    validateWritePath(filePath, resolved);
     await fs.appendFile(filePath, entry, 'utf-8');
   } catch {
     // File doesn't exist, create with header
-    const header = `# Crits: ${input.project_id}
+    const header = `# Crits: ${resolved.id}
 
 Early observations, gut reactions, and questions before decisions crystallize.
 
 ---
 `;
+    validateWritePath(filePath, resolved);
     await fs.writeFile(filePath, header + entry, 'utf-8');
   }
 
-  log(`Crit: Logged observation to ${filePath}`);
+  log(`Crit: Logged observation to ${filePath} (project: ${resolved.id})`);
 
   return {
     id,
@@ -132,9 +168,15 @@ Early observations, gut reactions, and questions before decisions crystallize.
 /**
  * List crits for a project
  */
-export async function listCrits(input: ListCritsInput): Promise<ListCritsOutput> {
-  const baseDir = resolvePath('designer-global');
-  const filePath = path.join(baseDir, 'crits', `${input.project_id}.md`);
+export async function listCrits(input: ListCritsInput): Promise<ListCritsOutput | CritError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('list crits');
+  }
+
+  const filePath = path.join(resolved.subPath('designer', 'crits'), 'crits.md');
 
   try {
     await fs.access(filePath);

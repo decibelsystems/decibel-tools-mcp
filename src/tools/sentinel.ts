@@ -224,7 +224,7 @@ function slugify(text: string): string {
 
 function formatTimestampForFilename(date: Date): string {
   const iso = date.toISOString();
-  return iso.replace(/:/g, '-').replace(/\.\\d{3}Z$/, 'Z');
+  return iso.replace(/:/g, '-').replace(/\.\d{3}Z$/, 'Z');
 }
 
 async function getNextEpicNumber(epicsDir: string): Promise<number> {

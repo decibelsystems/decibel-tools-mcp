@@ -44,6 +44,7 @@ describe('MCP Server E2E (stdio)', () => {
         env: {
           ...process.env,
           DECIBEL_MCP_ROOT: ctx.rootDir,
+          DECIBEL_PROJECT_ROOT: ctx.rootDir,
           DECIBEL_ENV: 'test',
         },
         stdio: ['pipe', 'pipe', 'pipe'],

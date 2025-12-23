@@ -8,34 +8,22 @@
  * - List/read artifacts (experiment outputs)
  *
  * Based on ADR-002: Context Pack
- *
- * Uses direct imports from @decibel/cli for reliability
- * (no PATH issues in sandboxed environments like Claude Desktop)
  */
 
+import fs from 'fs/promises';
+import path from 'path';
 import { log } from '../config.js';
-import { resolveProjectRoot } from '../projectPaths.js';
+import { resolveProjectPaths, ResolvedProjectPaths } from '../projectRegistry.js';
+import { ensureDir } from '../dataRoot.js';
 import { CallerRole, enforceToolAccess } from './dojoPolicy.js';
 import { checkRateLimit, recordRequestStart, recordRequestEnd } from './rateLimiter.js';
-
-// Direct imports from @decibel/cli
-import {
-  compileContextPack,
-  pinFact,
-  unpinFact,
-  listPinnedFacts,
-  appendEvent,
-  searchEvents,
-  listArtifacts,
-  readArtifact,
-} from '@decibel/cli/lib/compiler';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export interface ContextBaseInput {
-  project_id: string;
+  projectId?: string;
   caller_role?: CallerRole;
   agent_id?: string;
 }
@@ -156,15 +144,40 @@ export interface ContextError {
 }
 
 // ============================================================================
-// Helper: Build context with policy enforcement
+// Internal Types
 // ============================================================================
 
+interface StoredFact {
+  id: string;
+  title: string;
+  body?: string;
+  trust: 'high' | 'medium' | 'low';
+  refs?: string[];
+  ts: string;
+}
+
+interface StoredEvent {
+  id: string;
+  title: string;
+  body?: string;
+  tags?: string[];
+  ts: string;
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+}
+
 async function buildContext(
-  projectId: string,
+  projectId: string | undefined,
   callerRole: CallerRole = 'human',
   toolName: string,
   agentId?: string
-): Promise<{ projectRoot: string }> {
+): Promise<{ resolved: ResolvedProjectPaths }> {
   // Check rate limits
   const rateLimitResult = checkRateLimit(callerRole);
   if (!rateLimitResult.allowed) {
@@ -178,18 +191,138 @@ async function buildContext(
   recordRequestStart(callerRole);
 
   // Resolve paths
-  const project = await resolveProjectRoot(projectId);
+  const resolved = resolveProjectPaths(projectId);
 
   // Audit log for AI callers
   if (callerRole !== 'human') {
-    log(`context-audit: [${new Date().toISOString()}] agent=${agentId || 'unknown'} role=${callerRole} tool=${toolName} project=${projectId}`);
+    log(`context-audit: [${new Date().toISOString()}] agent=${agentId || 'unknown'} role=${callerRole} tool=${toolName} project=${resolved.id}`);
   }
 
-  return { projectRoot: project.root };
+  return { resolved };
 }
 
 // ============================================================================
-// Tool Implementations - Direct imports from @decibel/cli
+// Facts Storage
+// ============================================================================
+
+async function getFactsPath(resolved: ResolvedProjectPaths): Promise<string> {
+  const dir = resolved.subPath('context', 'facts');
+  ensureDir(dir);
+  return path.join(dir, 'facts.json');
+}
+
+async function loadFacts(resolved: ResolvedProjectPaths): Promise<StoredFact[]> {
+  const factsPath = await getFactsPath(resolved);
+  try {
+    const content = await fs.readFile(factsPath, 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return [];
+  }
+}
+
+async function saveFacts(resolved: ResolvedProjectPaths, facts: StoredFact[]): Promise<void> {
+  const factsPath = await getFactsPath(resolved);
+  await fs.writeFile(factsPath, JSON.stringify(facts, null, 2), 'utf-8');
+}
+
+// ============================================================================
+// Events Storage
+// ============================================================================
+
+async function getEventsPath(resolved: ResolvedProjectPaths): Promise<string> {
+  const dir = resolved.subPath('context', 'events');
+  ensureDir(dir);
+  return path.join(dir, 'events.json');
+}
+
+async function loadEvents(resolved: ResolvedProjectPaths): Promise<StoredEvent[]> {
+  const eventsPath = await getEventsPath(resolved);
+  try {
+    const content = await fs.readFile(eventsPath, 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return [];
+  }
+}
+
+async function saveEvents(resolved: ResolvedProjectPaths, events: StoredEvent[]): Promise<void> {
+  const eventsPath = await getEventsPath(resolved);
+  await fs.writeFile(eventsPath, JSON.stringify(events, null, 2), 'utf-8');
+}
+
+// ============================================================================
+// Context Pack Compilation
+// ============================================================================
+
+async function compileContextPack(
+  resolved: ResolvedProjectPaths,
+  sections?: string[]
+): Promise<Record<string, unknown>> {
+  const pack: Record<string, unknown> = {
+    project_id: resolved.id,
+    compiled_at: new Date().toISOString(),
+  };
+
+  const includeSections = sections || ['facts', 'events', 'decisions', 'issues'];
+
+  // Load facts
+  if (includeSections.includes('facts')) {
+    pack.facts = await loadFacts(resolved);
+  }
+
+  // Load events (last 50)
+  if (includeSections.includes('events')) {
+    const events = await loadEvents(resolved);
+    pack.events = events.slice(-50);
+  }
+
+  // Load recent design decisions
+  if (includeSections.includes('decisions')) {
+    const designerDir = resolved.subPath('designer');
+    const decisions: Array<{ area: string; file: string; summary?: string }> = [];
+    try {
+      const areas = await fs.readdir(designerDir);
+      for (const area of areas.slice(0, 5)) {
+        const areaPath = path.join(designerDir, area);
+        const stat = await fs.stat(areaPath);
+        if (stat.isDirectory()) {
+          const files = await fs.readdir(areaPath);
+          for (const file of files.slice(-3)) {
+            if (file.endsWith('.md')) {
+              decisions.push({ area, file });
+            }
+          }
+        }
+      }
+    } catch {
+      // Directory doesn't exist yet
+    }
+    pack.decisions = decisions;
+  }
+
+  // Load open issues
+  if (includeSections.includes('issues')) {
+    const issuesDir = resolved.subPath('sentinel', 'issues');
+    const issues: Array<{ file: string; severity?: string }> = [];
+    try {
+      const files = await fs.readdir(issuesDir);
+      for (const file of files.slice(-10)) {
+        if (file.endsWith('.md')) {
+          issues.push({ file });
+        }
+      }
+    } catch {
+      // Directory doesn't exist yet
+    }
+    pack.issues = issues;
+  }
+
+  return pack;
+}
+
+// ============================================================================
+// Tool Implementations
 // ============================================================================
 
 /**
@@ -201,19 +334,19 @@ export async function contextRefresh(
   const callerRole = input.caller_role || 'human';
 
   try {
-    const { projectRoot } = await buildContext(
-      input.project_id,
+    const { resolved } = await buildContext(
+      input.projectId,
       callerRole,
       'decibel_context_refresh',
       input.agent_id
     );
 
-    log(`context: Compiling context pack for ${projectRoot}`);
-    const contextPack = compileContextPack(projectRoot, input.sections);
+    log(`context: Compiling context pack for ${resolved.id}`);
+    const contextPack = await compileContextPack(resolved, input.sections);
 
     return {
       status: 'executed',
-      context_pack: contextPack as unknown as Record<string, unknown>,
+      context_pack: contextPack,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -237,19 +370,30 @@ export async function contextPin(
   const callerRole = input.caller_role || 'human';
 
   try {
-    const { projectRoot } = await buildContext(
-      input.project_id,
+    const { resolved } = await buildContext(
+      input.projectId,
       callerRole,
       'decibel_context_pin',
       input.agent_id
     );
 
-    log(`context: Pinning fact "${input.title}" to ${projectRoot}`);
-    const fact = pinFact(projectRoot, input.title, input.body, input.trust, input.refs);
+    log(`context: Pinning fact "${input.title}" to ${resolved.id}`);
+
+    const facts = await loadFacts(resolved);
+    const newFact: StoredFact = {
+      id: generateId(),
+      title: input.title,
+      body: input.body,
+      trust: input.trust || 'medium',
+      refs: input.refs,
+      ts: new Date().toISOString(),
+    };
+    facts.push(newFact);
+    await saveFacts(resolved, facts);
 
     return {
       status: 'pinned',
-      id: fact.id,
+      id: newFact.id,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -273,23 +417,28 @@ export async function contextUnpin(
   const callerRole = input.caller_role || 'human';
 
   try {
-    const { projectRoot } = await buildContext(
-      input.project_id,
+    const { resolved } = await buildContext(
+      input.projectId,
       callerRole,
       'decibel_context_unpin',
       input.agent_id
     );
 
-    log(`context: Unpinning fact ${input.id} from ${projectRoot}`);
-    const success = unpinFact(projectRoot, input.id);
+    log(`context: Unpinning fact ${input.id} from ${resolved.id}`);
 
-    if (!success) {
+    const facts = await loadFacts(resolved);
+    const index = facts.findIndex(f => f.id === input.id);
+
+    if (index === -1) {
       return {
         status: 'error',
         error: `Fact ${input.id} not found`,
         exitCode: 1,
       };
     }
+
+    facts.splice(index, 1);
+    await saveFacts(resolved, facts);
 
     return { status: 'unpinned' };
   } catch (err) {
@@ -314,15 +463,15 @@ export async function contextList(
   const callerRole = input.caller_role || 'human';
 
   try {
-    const { projectRoot } = await buildContext(
-      input.project_id,
+    const { resolved } = await buildContext(
+      input.projectId,
       callerRole,
       'decibel_context_list',
       input.agent_id
     );
 
-    log(`context: Listing pinned facts from ${projectRoot}`);
-    const facts = listPinnedFacts(projectRoot);
+    log(`context: Listing pinned facts from ${resolved.id}`);
+    const facts = await loadFacts(resolved);
 
     // Map to output format
     const mappedFacts: PinnedFact[] = facts.map(f => ({
@@ -360,19 +509,29 @@ export async function eventAppend(
   const callerRole = input.caller_role || 'human';
 
   try {
-    const { projectRoot } = await buildContext(
-      input.project_id,
+    const { resolved } = await buildContext(
+      input.projectId,
       callerRole,
       'decibel_event_append',
       input.agent_id
     );
 
-    log(`context: Appending event "${input.title}" to ${projectRoot}`);
-    const event = appendEvent(projectRoot, input.title, input.body, input.tags);
+    log(`context: Appending event "${input.title}" to ${resolved.id}`);
+
+    const events = await loadEvents(resolved);
+    const newEvent: StoredEvent = {
+      id: generateId(),
+      title: input.title,
+      body: input.body,
+      tags: input.tags,
+      ts: new Date().toISOString(),
+    };
+    events.push(newEvent);
+    await saveEvents(resolved, events);
 
     return {
       status: 'appended',
-      event_id: event.id,
+      event_id: newEvent.id,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -396,18 +555,34 @@ export async function eventSearch(
   const callerRole = input.caller_role || 'human';
 
   try {
-    const { projectRoot } = await buildContext(
-      input.project_id,
+    const { resolved } = await buildContext(
+      input.projectId,
       callerRole,
       'decibel_event_search',
       input.agent_id
     );
 
-    log(`context: Searching events for "${input.query}" in ${projectRoot}`);
-    const events = searchEvents(projectRoot, input.query, input.limit);
+    log(`context: Searching events for "${input.query}" in ${resolved.id}`);
+
+    const events = await loadEvents(resolved);
+    const queryLower = input.query.toLowerCase();
+
+    // Simple text search across title, body, and tags
+    let results = events.filter(e => {
+      const titleMatch = e.title.toLowerCase().includes(queryLower);
+      const bodyMatch = e.body?.toLowerCase().includes(queryLower);
+      const tagMatch = e.tags?.some(t => t.toLowerCase().includes(queryLower));
+      return titleMatch || bodyMatch || tagMatch;
+    });
+
+    // Most recent first, apply limit
+    results = results.reverse();
+    if (input.limit && input.limit > 0) {
+      results = results.slice(0, input.limit);
+    }
 
     // Map to output format
-    const results: EventRecord[] = events.map(e => ({
+    const mappedResults: EventRecord[] = results.map(e => ({
       id: e.id,
       title: e.title,
       body: e.body,
@@ -417,7 +592,7 @@ export async function eventSearch(
 
     return {
       status: 'executed',
-      results,
+      results: mappedResults,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -441,17 +616,32 @@ export async function artifactList(
   const callerRole = input.caller_role || 'human';
 
   try {
-    const { projectRoot } = await buildContext(
-      input.project_id,
+    const { resolved } = await buildContext(
+      input.projectId,
       callerRole,
       'decibel_artifact_list',
       input.agent_id
     );
 
-    log(`context: Listing artifacts for run ${input.run_id} in ${projectRoot}`);
-    const result = listArtifacts(projectRoot, input.run_id);
+    log(`context: Listing artifacts for run ${input.run_id} in ${resolved.id}`);
 
-    if (!result) {
+    const runDir = resolved.subPath('context', 'artifacts', input.run_id);
+    const artifacts: ArtifactInfo[] = [];
+
+    try {
+      const files = await fs.readdir(runDir);
+      for (const file of files) {
+        const filePath = path.join(runDir, file);
+        const stat = await fs.stat(filePath);
+        if (stat.isFile()) {
+          artifacts.push({
+            name: file,
+            size: stat.size,
+            ref: filePath,
+          });
+        }
+      }
+    } catch {
       return {
         status: 'error',
         error: `Run ${input.run_id} not found`,
@@ -461,8 +651,8 @@ export async function artifactList(
 
     return {
       status: 'executed',
-      run_id: result.run_id,
-      artifacts: result.artifacts,
+      run_id: input.run_id,
+      artifacts,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -486,31 +676,48 @@ export async function artifactRead(
   const callerRole = input.caller_role || 'human';
 
   try {
-    const { projectRoot } = await buildContext(
-      input.project_id,
+    const { resolved } = await buildContext(
+      input.projectId,
       callerRole,
       'decibel_artifact_read',
       input.agent_id
     );
 
-    log(`context: Reading artifact ${input.name} from run ${input.run_id} in ${projectRoot}`);
-    const result = readArtifact(projectRoot, input.run_id, input.name);
+    log(`context: Reading artifact ${input.name} from run ${input.run_id} in ${resolved.id}`);
 
-    if (!result) {
+    const artifactPath = resolved.subPath('context', 'artifacts', input.run_id, input.name);
+
+    try {
+      const content = await fs.readFile(artifactPath, 'utf-8');
+
+      // Determine mime type from extension
+      const ext = path.extname(input.name).toLowerCase();
+      const mimeTypes: Record<string, string> = {
+        '.json': 'application/json',
+        '.txt': 'text/plain',
+        '.md': 'text/markdown',
+        '.html': 'text/html',
+        '.csv': 'text/csv',
+        '.xml': 'application/xml',
+        '.yaml': 'application/yaml',
+        '.yml': 'application/yaml',
+      };
+      const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+      return {
+        status: 'executed',
+        run_id: input.run_id,
+        name: input.name,
+        content,
+        mime_type: mimeType,
+      };
+    } catch {
       return {
         status: 'error',
         error: `Artifact ${input.name} not found in run ${input.run_id}`,
         exitCode: 1,
       };
     }
-
-    return {
-      status: 'executed',
-      run_id: result.run_id,
-      name: result.name,
-      content: result.content,
-      mime_type: result.mime_type,
-    };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log(`context: Error reading artifact: ${message}`);

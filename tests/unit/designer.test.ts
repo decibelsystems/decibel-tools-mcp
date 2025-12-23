@@ -24,7 +24,7 @@ describe('Designer Tool', () => {
   describe('recordDesignDecision', () => {
     it('should create a markdown file with correct structure', async () => {
       const result = await recordDesignDecision({
-        project_id: 'test-project',
+        projectId: 'test-project',
         area: 'API',
         summary: 'Use REST endpoints',
         details: 'REST is simpler than GraphQL for our use case',
@@ -32,13 +32,14 @@ describe('Designer Tool', () => {
 
       expect(result.id).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-.*\.md$/);
       expect(result.timestamp).toBeValidTimestamp();
-      expect(result.path).toContain('designer/test-project');
+      // Path should be in .decibel/designer/{area}/
+      expect(result.path).toContain('.decibel/designer/API');
       await expect(result.path).toBeMarkdownFile();
     });
 
     it('should include correct frontmatter', async () => {
       const result = await recordDesignDecision({
-        project_id: 'my-project',
+        projectId: 'my-project',
         area: 'Database',
         summary: 'Use PostgreSQL',
       });
@@ -46,7 +47,7 @@ describe('Designer Tool', () => {
       const { frontmatter } = await readFileWithFrontmatter(result.path);
 
       expect(frontmatter).toMatchFrontmatter({
-        project_id: 'my-project',
+        project_id: 'my-project',  // frontmatter uses snake_case
         area: 'Database',
         summary: 'Use PostgreSQL',
       });
@@ -55,7 +56,7 @@ describe('Designer Tool', () => {
 
     it('should use summary as body when details is missing', async () => {
       const result = await recordDesignDecision({
-        project_id: 'proj',
+        projectId: 'proj',
         area: 'UI',
         summary: 'Use dark mode by default',
       });
@@ -67,7 +68,7 @@ describe('Designer Tool', () => {
     it('should use details as body when provided', async () => {
       const details = 'This is the detailed explanation of our decision.';
       const result = await recordDesignDecision({
-        project_id: 'proj',
+        projectId: 'proj',
         area: 'UI',
         summary: 'Short summary',
         details,
@@ -79,7 +80,7 @@ describe('Designer Tool', () => {
 
     it('should generate safe slugs from summaries', async () => {
       const result = await recordDesignDecision({
-        project_id: 'proj',
+        projectId: 'proj',
         area: 'Test',
         summary: 'Use Special Characters!!! & Stuff @#$%',
       });
@@ -96,7 +97,7 @@ describe('Designer Tool', () => {
         'because it exceeds the maximum length allowed for slugs in filenames';
 
       const result = await recordDesignDecision({
-        project_id: 'proj',
+        projectId: 'proj',
         area: 'Test',
         summary: longSummary,
       });
@@ -106,37 +107,40 @@ describe('Designer Tool', () => {
       expect(slug.length).toBeLessThanOrEqual(50);
     });
 
-    it('should create nested directories if they do not exist', async () => {
+    it('should create nested area directories if they do not exist', async () => {
       const result = await recordDesignDecision({
-        project_id: 'new-project/sub-area',
-        area: 'Test',
-        summary: 'Test nested',
+        projectId: 'test-project',
+        area: 'Frontend/Components',  // Nested area
+        summary: 'Test nested area',
       });
 
-      expect(result.path).toContain('new-project/sub-area');
+      // Path should contain the nested area under .decibel/designer/
+      expect(result.path).toContain('.decibel/designer/Frontend/Components');
       await expect(result.path).toBeMarkdownFile();
     });
 
-    it('should handle special characters in project_id', async () => {
+    it('should store in project-local .decibel folder', async () => {
       const result = await recordDesignDecision({
-        project_id: 'project-with-dashes_and_underscores',
+        projectId: 'any-project-id',
         area: 'Test',
-        summary: 'Test special chars',
+        summary: 'Test project-local storage',
       });
 
-      expect(result.path).toContain('project-with-dashes_and_underscores');
+      // Path should be within the test context's rootDir/.decibel/
+      expect(result.path).toContain(ctx.rootDir);
+      expect(result.path).toContain('.decibel/designer');
       await expect(result.path).toBeMarkdownFile();
     });
 
     it('should create unique files for consecutive calls', async () => {
       const results = await Promise.all([
         recordDesignDecision({
-          project_id: 'proj',
+          projectId: 'proj',
           area: 'A',
           summary: 'First decision',
         }),
         recordDesignDecision({
-          project_id: 'proj',
+          projectId: 'proj',
           area: 'B',
           summary: 'Second decision',
         }),

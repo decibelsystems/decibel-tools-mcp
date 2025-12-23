@@ -1,13 +1,41 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { log } from '../config.js';
-import { resolvePath, ensureDir, hasProjectLocal } from '../dataRoot.js';
+import { ensureDir } from '../dataRoot.js';
+import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
 import { emitCreateProvenance } from './provenance.js';
+
+// ============================================================================
+// Project Resolution Error
+// ============================================================================
+
+export interface LearningsError {
+  error: string;
+  message: string;
+  hint?: string;
+}
+
+function makeProjectError(operation: string): LearningsError {
+  return {
+    error: 'PROJECT_NOT_FOUND',
+    message: `Cannot ${operation}: No project context available.`,
+    hint: 'Specify projectId parameter, set DECIBEL_PROJECT_ROOT env var, or run from a directory with .decibel/',
+  };
+}
+
+export function isLearningsError(result: unknown): result is LearningsError {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    'error' in result &&
+    'message' in result
+  );
+}
 
 export type LearningCategory = 'debug' | 'integration' | 'architecture' | 'tooling' | 'process' | 'other';
 
 export interface AppendLearningInput {
-  project_id: string;
+  projectId?: string;  // optional, uses project resolution
   category: LearningCategory;
   title: string;
   content: string;
@@ -22,7 +50,7 @@ export interface AppendLearningOutput {
 }
 
 export interface ListLearningsInput {
-  project_id: string;
+  projectId?: string;  // optional, uses project resolution
   category?: LearningCategory;
   limit?: number;
 }
@@ -71,42 +99,24 @@ function parseEntry(block: string): LearningEntry | null {
   return { timestamp, category, title, content, tags };
 }
 
-// Known global project IDs (learnings about the tooling itself)
-const GLOBAL_PROJECTS = [
-  'decibel-tools-mcp',
-  'decibel-tools',
-  'decibel-ecosystem',
-  'mcp',
-];
-
 export async function appendLearning(
   input: AppendLearningInput
-): Promise<AppendLearningOutput> {
+): Promise<AppendLearningOutput | LearningsError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('append learning');
+  }
+
   const now = new Date();
   const timestamp = now.toISOString();
 
-  // Determine if this is global (tooling) or project-specific
-  const isGlobalProject = GLOBAL_PROJECTS.includes(input.project_id.toLowerCase());
-
-  let dirPath: string;
-  let location: 'project' | 'global';
-
-  if (isGlobalProject) {
-    // Always use global for tooling learnings
-    dirPath = resolvePath('learnings-global');
-    location = 'global';
-  } else if (hasProjectLocal()) {
-    // Use project-local for project-specific learnings
-    dirPath = resolvePath('learnings-project');
-    location = 'project';
-  } else {
-    // Fallback to global
-    dirPath = resolvePath('learnings-global');
-    location = 'global';
-  }
-
-  const filePath = path.join(dirPath, `${input.project_id}.md`);
+  // Store in .decibel/oracle/learnings/
+  const dirPath = resolved.subPath('oracle', 'learnings');
   ensureDir(dirPath);
+
+  const filePath = path.join(dirPath, 'learnings.md');
 
   // Check if file exists, create with header if not
   let existingContent = '';
@@ -118,7 +128,7 @@ export async function appendLearning(
     entryCount = matches ? matches.length : 0;
   } catch {
     // File doesn't exist, create with header
-    existingContent = `# Technical Learnings: ${input.project_id}\n\n> A living document of lessons learned, gotchas, and insights.\n\n---\n\n`;
+    existingContent = `# Technical Learnings: ${resolved.id}\n\n> A living document of lessons learned, gotchas, and insights.\n\n---\n\n`;
   }
 
   // Format the new entry
@@ -140,48 +150,40 @@ export async function appendLearning(
 
   // Append to file
   const newContent = existingContent + entry;
+  validateWritePath(filePath, resolved);
   await fs.writeFile(filePath, newContent, 'utf-8');
 
   entryCount++;
-  log(`Learnings: Appended entry to ${filePath} (${location})`);
+  log(`Learnings: Appended entry to ${filePath} (project: ${resolved.id})`);
 
   // Emit provenance event for this creation
   await emitCreateProvenance(
-    `learnings:entry:${input.project_id}:${entryCount}`,
+    `learnings:entry:${resolved.id}:${entryCount}`,
     entry,
     `Appended learning: ${input.title}`,
-    input.project_id
+    input.projectId
   );
 
   return {
     timestamp,
     path: filePath,
     entry_count: entryCount,
-    location,
+    location: 'project',
   };
 }
 
 export async function listLearnings(
   input: ListLearningsInput
-): Promise<ListLearningsOutput> {
-  // Determine location based on project_id
-  const isGlobalProject = GLOBAL_PROJECTS.includes(input.project_id.toLowerCase());
-
-  let dirPath: string;
-  let location: 'project' | 'global';
-
-  if (isGlobalProject) {
-    dirPath = resolvePath('learnings-global');
-    location = 'global';
-  } else if (hasProjectLocal()) {
-    dirPath = resolvePath('learnings-project');
-    location = 'project';
-  } else {
-    dirPath = resolvePath('learnings-global');
-    location = 'global';
+): Promise<ListLearningsOutput | LearningsError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('list learnings');
   }
 
-  const filePath = path.join(dirPath, `${input.project_id}.md`);
+  const dirPath = resolved.subPath('oracle', 'learnings');
+  const filePath = path.join(dirPath, 'learnings.md');
 
   try {
     const content = await fs.readFile(filePath, 'utf-8');
@@ -215,7 +217,7 @@ export async function listLearnings(
       path: filePath,
       entries,
       total_count: totalCount,
-      location,
+      location: 'project',
     };
   } catch {
     // File doesn't exist
@@ -223,7 +225,7 @@ export async function listLearnings(
       path: filePath,
       entries: [],
       total_count: 0,
-      location,
+      location: 'project',
     };
   }
 }
