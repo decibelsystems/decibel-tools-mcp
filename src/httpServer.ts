@@ -448,6 +448,28 @@ export async function startHttpServer(
       return;
     }
 
+    // Serve OpenAPI spec for ChatGPT Actions (handle GET and POST)
+    if ((path === '/openapi.yaml' || path === '/openapi.json') && (req.method === 'GET' || req.method === 'POST')) {
+      try {
+        const specPath = join(__dirname, '..', 'openapi.yaml');
+        const spec = readFileSync(specPath, 'utf-8');
+        if (path === '/openapi.json') {
+          // Convert YAML to JSON if requested
+          const yaml = await import('yaml');
+          const parsed = yaml.parse(spec);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(parsed, null, 2));
+        } else {
+          res.writeHead(200, { 'Content-Type': 'text/yaml' });
+          res.end(spec);
+        }
+      } catch (error) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'OpenAPI spec not found' }));
+      }
+      return;
+    }
+
     // (d) OAuth discovery routes - return 404 (not 400) to keep connector wizard happy
     if (path === '/.well-known/oauth-authorization-server' ||
         path === '/.well-known/openid-configuration' ||
@@ -835,7 +857,8 @@ export async function startHttpServer(
     // ========================================================================
 
     // (b) MCP endpoint - supports GET, POST, DELETE via StreamableHTTPServerTransport
-    if (path === '/mcp') {
+    // Handle at /mcp, /sse, /sse/ (ChatGPT uses trailing slash), and root / for compatibility
+    if (path === '/mcp' || path === '/sse' || path === '/sse/' || (path === '/' && (req.method === 'POST' || req.method === 'DELETE'))) {
       try {
         await transport.handleRequest(req, res);
       } catch (error) {

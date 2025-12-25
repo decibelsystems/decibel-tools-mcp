@@ -1,0 +1,14 @@
+id: ISS-0017
+title: "Learnings entries need unique IDs"
+status: open
+priority: low
+created: 2025-12-25
+tags:
+  - learnings
+  - enhancement
+
+description: |
+  Learnings entries are currently appended to a markdown file without unique IDs.
+  Should have IDs like LRN-0001 for referencing and deduplication.
+
+  Current format in learnings.md lacks identifiers for individual entries.

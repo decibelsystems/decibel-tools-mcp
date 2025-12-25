@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: decibel-mcp
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server.js --http --port $PORT
+    envVars:
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /health

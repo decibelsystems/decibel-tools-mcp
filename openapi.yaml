@@ -1,0 +1,260 @@
+openapi: 3.1.0
+info:
+  title: Decibel Tools API
+  version: 0.3.3
+  description: MCP tools for project intelligence - Dojo experiments, context, policies, and more
+servers:
+  - url: https://noncorroboratory-degreeless-james.ngrok-free.dev
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Check server health
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  version:
+                    type: string
+  /tools:
+    get:
+      operationId: listTools
+      summary: List all available tools
+      responses:
+        '200':
+          description: List of tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  tools:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        description:
+                          type: string
+  /call:
+    post:
+      operationId: callTool
+      summary: Execute any Decibel tool
+      description: Universal tool executor. Pass the tool name and arguments.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tool
+              properties:
+                tool:
+                  type: string
+                  description: "Tool name (e.g., dojo_list, dojo_add_wish, decibel_context_refresh)"
+                  enum:
+                    - dojo_add_wish
+                    - dojo_create_proposal
+                    - dojo_scaffold_experiment
+                    - dojo_run_experiment
+                    - dojo_get_results
+                    - dojo_list
+                    - dojo_list_wishes
+                    - dojo_can_graduate
+                    - dojo_read_artifact
+                    - dojo_bench
+                    - decibel_bench
+                    - decibel_bench_compare
+                    - decibel_context_refresh
+                    - decibel_context_pin
+                    - decibel_context_unpin
+                    - decibel_context_list
+                    - decibel_event_append
+                    - decibel_event_search
+                    - decibel_artifact_list
+                    - decibel_artifact_read
+                    - architect_createPolicy
+                    - architect_listPolicies
+                    - architect_getPolicy
+                    - architect_compileOversight
+                    - sentinel_createTestSpec
+                    - sentinel_listTestSpecs
+                    - sentinel_compileTests
+                    - sentinel_auditPolicies
+                arguments:
+                  type: object
+                  description: Tool-specific arguments (varies by tool)
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Tool executed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [executed, error]
+                additionalProperties: true
+        '400':
+          description: Tool execution failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [error]
+                  error:
+                    type: string
+                  code:
+                    type: string
+  /dojo/list:
+    get:
+      operationId: dojoList
+      summary: List Dojo proposals, experiments, and wishes
+      parameters:
+        - name: project_id
+          in: query
+          description: Project ID (e.g., decibel-tools-mcp)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dojo items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  proposals:
+                    type: array
+                  experiments:
+                    type: array
+                  wishes:
+                    type: array
+  /dojo/wishes:
+    get:
+      operationId: dojoListWishes
+      summary: List all wishes
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Wishes list
+          content:
+            application/json:
+              schema:
+                type: object
+  /dojo/wish:
+    post:
+      operationId: dojoAddWish
+      summary: Add a new capability wish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - capability
+              properties:
+                project_id:
+                  type: string
+                  description: Project ID
+                capability:
+                  type: string
+                  description: What capability you wish existed
+                reason:
+                  type: string
+                  description: Why this capability would be valuable
+      responses:
+        '200':
+          description: Wish added
+          content:
+            application/json:
+              schema:
+                type: object
+  /dojo/propose:
+    post:
+      operationId: dojoCreateProposal
+      summary: Create a proposal for a new capability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - description
+              properties:
+                project_id:
+                  type: string
+                title:
+                  type: string
+                description:
+                  type: string
+                wish_id:
+                  type: string
+                  description: Optional wish ID to link
+      responses:
+        '200':
+          description: Proposal created
+          content:
+            application/json:
+              schema:
+                type: object
+  /context/refresh:
+    post:
+      operationId: contextRefresh
+      summary: Compile full context pack for a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id:
+                  type: string
+      responses:
+        '200':
+          description: Context compiled
+          content:
+            application/json:
+              schema:
+                type: object
+  /context/list:
+    get:
+      operationId: contextList
+      summary: List pinned facts
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pinned facts
+          content:
+            application/json:
+              schema:
+                type: object

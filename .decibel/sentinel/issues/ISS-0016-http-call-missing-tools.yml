@@ -1,0 +1,34 @@
+id: ISS-0016
+title: "HTTP /call endpoint missing most tools"
+status: open
+priority: medium
+created: 2025-12-25
+tags:
+  - httpServer
+  - tech-debt
+  - parity
+
+description: |
+  The HTTP `/call` endpoint in httpServer.ts only exposes 26 tools via a manual
+  switch statement, while the MCP protocol (via /sse/) exposes 50+ tools.
+
+  Missing from HTTP /call:
+  - sentinel_log_epic, sentinel_list_epics, sentinel_get_epic, etc.
+  - sentinel_create_issue, sentinel_list_repo_issues, sentinel_close_issue
+  - architect_createAdr, architect_record_arch_decision
+  - oracle_next_actions, oracle_roadmap
+  - friction_log, friction_list, friction_resolve, friction_bump
+  - learnings_append, learnings_list
+  - designer_crit, designer_list_crits, designer_record_design_decision
+  - registry_list, registry_add, registry_remove, registry_alias, registry_resolve
+  - roadmap_* tools
+
+  This creates confusion and inconsistency between HTTP and MCP access patterns.
+
+fix_options:
+  - "Add all missing tools to executeDojoTool() switch (manual, error-prone)"
+  - "Refactor to use MCP server tool registry for HTTP /call (cleaner, more work)"
+  - "Deprecate /call in favor of MCP-only access via /sse/"
+
+related:
+  - EPIC-0022 (cloud persistence may change this anyway)

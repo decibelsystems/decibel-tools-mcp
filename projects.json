@@ -25,6 +25,15 @@
       "id": "decibel-studio",
       "name": "Decibel Studio",
       "path": "/Volumes/Ashitaka/Documents/GitHub/decibel-studio"
+    },
+    {
+      "id": "deck",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/deck",
+      "name": "Deck - MTG Scanner",
+      "aliases": [
+        "mtg",
+        "cards"
+      ]
     }
   ]
 }
