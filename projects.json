@@ -34,6 +34,15 @@
         "mtg",
         "cards"
       ]
+    },
+    {
+      "id": "fuligin",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/fuligin",
+      "name": "Fuligin Guardian",
+      "aliases": [
+        "guardian",
+        "fuligin-guardian"
+      ]
     }
   ]
 }
