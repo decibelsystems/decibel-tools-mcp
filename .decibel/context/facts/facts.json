@@ -1,0 +1,13 @@
+[
+  {
+    "id": "1766597584011-jmzz60",
+    "title": "Deck OCR Learning System - Design Provenance",
+    "body": "Design provenance chain for deck Learning System:\n1. Human observes vintage OCR failures (\"grear defender\" etc)\n2. Claude proposes shadow confusion matrix + vintage detection (Issue #3)\n3. Human connects to learning system concept\n4. Claude drafts learning architecture (Issue #4)\n5. G refines with: n-gram confusions, granular frame metadata, undo window, edit-budget gating, ranking diagnostics, simple storage\n6. Human approves, requests full implementation\n7. Claude implements with all refinements",
+    "trust": "high",
+    "refs": [
+      "deck#3",
+      "deck#4"
+    ],
+    "ts": "2025-12-24T17:33:04.013Z"
+  }
+]

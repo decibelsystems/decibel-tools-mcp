@@ -1,0 +1,35 @@
+id: WISH-0002
+capability: Vintage Magic frame detection with shadow-aware OCR correction
+reason: White text with black drop shadow on vintage cards (pre-8th Edition)
+  causes consistent OCR errors. Detecting frame style and applying shadow-aware
+  fuzzy matching would dramatically improve recognition accuracy.
+inputs:
+  - cvPixelBuffer (card image)
+  - ocrText (raw OCR result)
+  - frameAnalysis (existing frame detection)
+outputs:
+  isVintageFrame: bool
+  correctedName: String?
+  candidates: "[{name: String, confidence: Double}]"
+  shadowConfusions: "{original: String, likely: String}[]"
+created_at: 2025-12-24T17:17:06.776Z
+status: open
+project_id: decibel
+algorithm_outline: "1. Detect vintage frame: Check for specific color signature
+  in title bar region (gold/brown frame with black shadow on white text)\\n2. If
+  vintage, apply shadow confusion matrix before Levenshtein: common
+  substitutions like a↔r, e↔u, G↔s, n↔r\\n3. Constrain search to cards printed
+  before 8th Edition (~7,500 unique names vs 30,000+)\\n4. Use multiple OCR
+  candidates weighted by shadow-confusion likelihood"
+context:
+  project: deck
+  observed_errors:
+    - grear defender
+    - grear dzfender
+    - greur defender
+    - srzar defender
+    - gruar defender
+    - srar defnder
+    - sreear defender
+    - tanne
+  correct_name: Great Defender
