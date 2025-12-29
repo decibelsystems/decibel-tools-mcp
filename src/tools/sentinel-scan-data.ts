@@ -6,7 +6,7 @@ import { log } from '../config.js';
 // Types
 // ============================================================================
 
-export type ScanDataFlag = 'orphans' | 'stale' | 'invalid';
+export type ScanDataFlag = 'orphans' | 'stale' | 'invalid' | 'packages';
 
 export interface ScanDataInput {
   projectId: string;
@@ -15,12 +15,40 @@ export interface ScanDataInput {
   days?: number;
 }
 
+export interface PackageInfo {
+  name: string;
+  current_version?: string;
+  latest_version?: string;
+  ecosystem: string;
+  is_outdated: boolean;
+  is_deprecated: boolean;
+  has_vulnerability: boolean;
+  vulnerability_info?: string;
+}
+
+export interface PackageManifest {
+  file_path: string;
+  ecosystem: string;
+  packages: PackageInfo[];
+  parse_errors: string[];
+}
+
+export interface PackageHealthSummary {
+  manifests_scanned: number;
+  total_packages: number;
+  outdated_count: number;
+  deprecated_count: number;
+  vulnerable_count: number;
+  packages_by_ecosystem: Record<string, number>;
+}
+
 export interface SentinelDataScanResult {
   summary: string;
   counts: {
     issues: { total: number; open: number; in_progress: number; done: number; blocked: number };
     epics: { total: number; open: number; in_progress: number; done: number; blocked: number };
     adrs: { total: number };
+    packages?: PackageHealthSummary;
   };
   orphans?: {
     epics: string[];
@@ -31,6 +59,7 @@ export interface SentinelDataScanResult {
     epics: string[];
   };
   validationWarnings?: { id?: string; message: string }[];
+  package_manifests?: PackageManifest[];
 }
 
 export interface ScanDataError {

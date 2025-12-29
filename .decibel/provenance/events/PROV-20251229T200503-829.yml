@@ -1,0 +1,11 @@
+event_id: PROV-20251229T200503-829
+timestamp: 2025-12-29T20:05:03.830Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:wish:WISH-0003
+reason_code: initial_creation
+summary: "Created wish: Dependency & API health scanner for sentinel_scan"
+fingerprint_before: null
+fingerprint_after: sha256:182677c5e8e83da9

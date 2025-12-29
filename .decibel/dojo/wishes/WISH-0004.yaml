@@ -1,0 +1,18 @@
+id: WISH-0004
+capability: Package health scanning in sentinel scan
+reason: Detect outdated, vulnerable, or problematic dependencies as part of
+  project health checks
+inputs:
+  - package.json
+  - requirements.txt
+  - pyproject.toml
+  - Cargo.toml
+  - go.mod
+outputs:
+  outdated_packages: []
+  vulnerabilities: []
+  deprecated_packages: []
+  health_score: 0
+created_at: 2025-12-29T20:05:47.220Z
+status: open
+project_id: decibel-tools

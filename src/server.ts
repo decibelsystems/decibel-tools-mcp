@@ -713,9 +713,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'array',
               items: {
                 type: 'string',
-                enum: ['orphans', 'stale', 'invalid'],
+                enum: ['orphans', 'stale', 'invalid', 'packages'],
               },
-              description: 'Categories to flag in output: orphans (broken references), stale (old items), invalid (schema errors)',
+              description: 'Categories to flag in output: orphans (broken references), stale (old items), invalid (schema errors), packages (package health)',
             },
             days: {
               type: 'integer',
@@ -747,10 +747,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'array',
               items: {
                 type: 'string',
-                enum: ['orphans', 'stale', 'invalid'],
+                enum: ['orphans', 'stale', 'invalid', 'packages'],
               },
               default: [],
-              description: 'Categories to flag: orphans (broken references), stale (old items), invalid (schema errors)',
+              description: 'Categories to flag: orphans (broken references), stale (old items), invalid (schema errors), packages (package health)',
             },
             days: {
               type: 'integer',
@@ -2600,7 +2600,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // Validate flag categories if provided
         if (input.flags && input.flags.length > 0) {
-          const validFlags: ScanDataFlag[] = ['orphans', 'stale', 'invalid'];
+          const validFlags: ScanDataFlag[] = ['orphans', 'stale', 'invalid', 'packages'];
           const invalidFlags = input.flags.filter((f) => !validFlags.includes(f));
           if (invalidFlags.length > 0) {
             throw new Error(`Invalid flags: ${invalidFlags.join(', ')}. Must be one of: ${validFlags.join(', ')}`);
