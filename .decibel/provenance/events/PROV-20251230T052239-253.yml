@@ -1,0 +1,11 @@
+event_id: PROV-20251230T052239-253
+timestamp: 2025-12-30T05:22:39.253Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:epic:EPIC-0023
+reason_code: initial_creation
+summary: "Created epic: Decibel Tools Mobile Controller"
+fingerprint_before: null
+fingerprint_after: sha256:7f65fc15e9310820
