@@ -1,0 +1,10 @@
+id: ADR-0005
+scope: project
+project: decibel-tools-mcp
+title: Decibel Tools Mobile Controller (iOS)
+status: accepted
+created_at: 2025-12-30T05:22:25.572Z
+updated_at: 2025-12-30T05:22:25.572Z
+context: "Ideas, issues, and decisions happen away from the desk. We need lightweight visibility into Decibel project health and a fast way to share structured artifacts with the team. Mobile should not replicate desktop dashboards. It should optimize for: (1) Capture anywhere - voice memos, share extension inputs, (2) Observe key status - what's alive, failing, waiting?, (3) Trigger safe actions - queue commands, never destructive without confirmation, (4) Share outcomes - ADRs, epics, decisions to team via native share."
+decision: "Build an iOS 'Pocket Console' that captures voice/share inputs into an offline-first Dojo inbox (SwiftData queue), syncs events via iCloud Drive (baseline) with optional Hub sync later, fetches status snapshots from desktop agent or Hub, sends ToolCommand requests to Hub/desktop executor, and packages ADR/Epic/Outcome content into shareable SharePacks via native share sheet. Four core interfaces: DojoEvent v1 (capture), StatusSnapshot v1 (observe), ToolCommand v1 (act), SharePack v1 (communicate). iCloud baseline for MVP, optional Hub for Phase 2."
+consequences: "PROS: Ships fast with iCloud baseline - no infra needed. Offline-safe capture with deferred execution. Clear separation - mobile controls, desktop computes. Native share sheet leverages existing team tools. CONS: iCloud introduces eventual consistency (~60s sync). Hub adds infra + auth complexity (deferred to Phase 2). Tool execution requires guardrails/confirmations."

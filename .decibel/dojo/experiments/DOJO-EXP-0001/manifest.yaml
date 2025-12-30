@@ -1,0 +1,8 @@
+id: DOJO-EXP-0001
+proposal_id: DOJO-PROP-0001
+title: Voice Input for Decibel Commands
+type: tool
+script_type: ts
+enabled: false
+created_at: 2025-12-30T03:54:28.835Z
+project_id: decibel-tools-mcp

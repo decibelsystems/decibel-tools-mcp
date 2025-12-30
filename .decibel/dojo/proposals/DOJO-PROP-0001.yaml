@@ -1,0 +1,33 @@
+id: DOJO-PROP-0001
+title: Voice Input for Decibel Commands
+problem: No hands-free way to interact with Decibel - adding wishes, logging
+  issues, searching artifacts all require typing. Friction slows capture of
+  ideas in the moment.
+hypothesis: Using on-device speech-to-text (SFSpeechRecognizer pattern from
+  ios-studio) + AI intent parsing, we can route voice input to the right Decibel
+  action without complex command grammars
+owner: ai
+state: has_experiment
+created_at: 2025-12-30T03:53:02.875Z
+project_id: decibel-tools-mcp
+target_module: tools
+scope_in:
+  - Speech-to-text transcription
+  - AI intent detection (search, add_wish, log_issue, ask_oracle)
+  - Voice Inbox for queued/async items
+  - Integration with existing MCP tools
+scope_out:
+  - Custom wake words
+  - Streaming responses back as audio
+  - Multi-language support (start with English)
+acceptance:
+  - Can speak a wish and have it logged via dojo_add_wish
+  - Can speak a search query and get results
+  - Can queue voice notes for later processing
+  - Works on macOS (iOS later)
+risks:
+  - Microphone permissions UX
+  - Transcription accuracy for technical terms
+  - Intent disambiguation edge cases
+wish_id: WISH-0008
+experiment_id: DOJO-EXP-0001

@@ -1,0 +1,19 @@
+id: WISH-0007
+capability: Unified search across all Decibel artifacts
+reason: Currently no way to find things across epics, issues, wishes, ADRs,
+  crits, learnings - need conversational search powered by AI, not keyword grep
+inputs:
+  - natural_language_query
+  - "optional: artifact_type_filter"
+  - "optional: project_scope"
+outputs:
+  results:
+    - artifact_type: string
+      id: string
+      title: string
+      relevance_summary: string
+      path: string
+  ai_answer: conversational response synthesizing results
+created_at: 2025-12-30T03:50:14.452Z
+status: open
+project_id: decibel-tools-mcp

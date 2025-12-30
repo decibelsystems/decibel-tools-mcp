@@ -1,0 +1,39 @@
+id: DOJO-PROP-0002
+title: iOS Decibel Tools App
+problem: Ideas happen away from the desk. Currently no way to capture wishes,
+  issues, crits, or learnings on mobile. By the time you're back at a keyboard,
+  the thought is gone or diluted.
+hypothesis: A voice-first iOS app using SFSpeechRecognizer (same pattern as
+  ios-studio) can capture thoughts instantly, parse intent locally, and sync to
+  the desktop Decibel ecosystem - turning any moment into a capture opportunity.
+owner: ai
+state: draft
+created_at: 2025-12-30T04:59:23.889Z
+project_id: decibel-tools-mcp
+target_module: tools
+scope_in:
+  - Voice capture with SFSpeechRecognizer (on-device)
+  - Intent parsing (reuse DOJO-EXP-0001 patterns)
+  - Local Voice Inbox with Core Data/SwiftData
+  - Share extension for text from other apps
+  - Sync to desktop via iCloud or local network
+  - "Quick actions: Wish, Issue, Crit, Learning, Friction"
+  - Minimal UI - voice-first, not form-first
+scope_out:
+  - Full Decibel dashboard on iOS (desktop job)
+  - Real-time collaboration features
+  - Push notifications (v2)
+  - Apple Watch app (v2)
+  - Android version (separate proposal)
+acceptance:
+  - Can speak a wish and have it appear in desktop Decibel within 60 seconds
+  - Works offline - queues locally, syncs when connected
+  - Share extension captures text from Safari, Notes, etc.
+  - Intent accuracy >= 85% on natural speech
+  - Cold launch to recording < 2 seconds
+risks:
+  - Sync conflicts if editing same item on both platforms
+  - "Battery drain from always-listening (mitigation: manual trigger only)"
+  - App Store review for microphone usage
+  - Scope creep into full mobile dashboard
+wish_id: WISH-0009

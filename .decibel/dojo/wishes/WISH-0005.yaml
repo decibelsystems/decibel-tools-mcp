@@ -1,0 +1,18 @@
+id: WISH-0005
+capability: Email rich summaries via text or voice command
+reason: Enables quick sharing of project status, progress reports, and insights
+  with stakeholders without manual copy-paste or context switching - just say or
+  type what you want summarized and who should receive it
+inputs:
+  - voice_or_text_command
+  - target_email_addresses
+  - summary_type (e.g., roadmap, epic, oracle health)
+  - project_context
+outputs:
+  email_sent: true
+  recipients: []
+  summary_content: formatted HTML/rich email body
+  subject: auto-generated subject line
+created_at: 2025-12-30T01:48:36.260Z
+status: open
+project_id: decibel-tools-mcp

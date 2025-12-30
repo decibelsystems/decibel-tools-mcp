@@ -1,0 +1,11 @@
+event_id: PROV-20251230T035428-839
+timestamp: 2025-12-30T03:54:28.839Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:experiment:DOJO-EXP-0001
+reason_code: initial_creation
+summary: Scaffolded experiment from DOJO-PROP-0001
+fingerprint_before: null
+fingerprint_after: sha256:0d1504167a608b60

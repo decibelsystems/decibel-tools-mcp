@@ -1,0 +1,11 @@
+event_id: PROV-20251230T014943-390
+timestamp: 2025-12-30T01:49:43.390Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:wish:WISH-0006
+reason_code: initial_creation
+summary: "Created wish: Organizational layer with companies, people, and teams"
+fingerprint_before: null
+fingerprint_after: sha256:86ce502d47654708

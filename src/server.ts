@@ -147,6 +147,17 @@ import {
   dojoListProjects,
 } from './tools/dojo.js';
 import {
+  voiceInboxAdd,
+  VoiceInboxAddInput,
+  voiceInboxList,
+  VoiceInboxListInput,
+  voiceInboxProcess,
+  VoiceInboxProcessInput,
+  voiceCommand,
+  VoiceCommandInput,
+  voiceToolDefinitions,
+} from './tools/voice.js';
+import {
   contextRefresh,
   ContextRefreshInput,
   contextPin,
@@ -1612,6 +1623,75 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: 'object',
           properties: {},
           required: [],
+        },
+      },
+
+      // ========================================================================
+      // Voice Tools (DOJO-EXP-0001) - Ungraduated experiment
+      // ========================================================================
+      {
+        name: 'voice_inbox_add',
+        description: 'Add a voice transcript to the inbox for processing. Parses intent automatically. Use process_immediately=true for instant execution.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project ID (optional, uses default)' },
+            transcript: { type: 'string', description: 'The voice transcript text' },
+            source: {
+              type: 'string',
+              enum: ['voice_cli', 'text_input', 'share_extension', 'api'],
+              description: 'Source of the transcript (default: text_input)'
+            },
+            tags: { type: 'array', items: { type: 'string' }, description: 'Optional tags' },
+            process_immediately: { type: 'boolean', description: 'Process now instead of queuing (default: false)' },
+          },
+          required: ['transcript'],
+        },
+      },
+      {
+        name: 'voice_inbox_list',
+        description: 'List voice inbox items, optionally filtered by status.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project ID (optional, uses default)' },
+            status: {
+              type: 'string',
+              enum: ['queued', 'processing', 'completed', 'failed'],
+              description: 'Filter by status'
+            },
+            limit: { type: 'number', description: 'Max items to return' },
+          },
+        },
+      },
+      {
+        name: 'voice_inbox_process',
+        description: 'Process a queued voice inbox item by routing to the appropriate tool.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project ID (optional, uses default)' },
+            inbox_id: { type: 'string', description: 'The inbox item ID to process' },
+            override_intent: {
+              type: 'string',
+              enum: ['add_wish', 'log_issue', 'create_epic', 'search', 'ask_oracle', 'log_crit', 'log_friction', 'record_learning'],
+              description: 'Override the auto-detected intent'
+            },
+            override_params: { type: 'object', description: 'Override parsed parameters' },
+          },
+          required: ['inbox_id'],
+        },
+      },
+      {
+        name: 'voice_command',
+        description: 'Process a voice command directly without storing in inbox. For real-time interactions.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project ID (optional, uses default)' },
+            transcript: { type: 'string', description: 'The voice transcript to process' },
+          },
+          required: ['transcript'],
         },
       },
 
@@ -3207,6 +3287,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'dojo_projects': {
         const result = dojoListProjects();
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // ========================================================================
+      // Voice Tools (DOJO-EXP-0001) - Ungraduated experiment
+      // ========================================================================
+      case 'voice_inbox_add': {
+        const input = args as unknown as VoiceInboxAddInput;
+        if (!input.transcript) {
+          throw new Error('Missing required field: transcript');
+        }
+        const result = await voiceInboxAdd(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'voice_inbox_list': {
+        const input = args as unknown as VoiceInboxListInput;
+        const result = await voiceInboxList(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'voice_inbox_process': {
+        const input = args as unknown as VoiceInboxProcessInput;
+        if (!input.inbox_id) {
+          throw new Error('Missing required field: inbox_id');
+        }
+        const result = await voiceInboxProcess(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'voice_command': {
+        const input = args as unknown as VoiceCommandInput;
+        if (!input.transcript) {
+          throw new Error('Missing required field: transcript');
+        }
+        const result = await voiceCommand(input);
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };

@@ -1,0 +1,217 @@
+#!/bin/bash
+#
+# decibel-voice - Voice input CLI for Decibel
+# DOJO-EXP-0001: Voice Input for Decibel Commands
+#
+# Usage:
+#   decibel-voice              # Record and process voice
+#   decibel-voice --text "..." # Process text directly
+#   decibel-voice --listen     # Start listening mode
+#
+# Requires: macOS with Speech framework (uses 'say' and dictation)
+# or whisper.cpp for local transcription
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Config
+AUDIO_FILE="/tmp/decibel-voice-$$.wav"
+TRANSCRIPT_FILE="/tmp/decibel-voice-$$.txt"
+
+cleanup() {
+  rm -f "$AUDIO_FILE" "$TRANSCRIPT_FILE"
+}
+trap cleanup EXIT
+
+print_usage() {
+  echo "decibel-voice - Voice input for Decibel"
+  echo ""
+  echo "Usage:"
+  echo "  decibel-voice                    Record and process voice"
+  echo "  decibel-voice --text \"...\"       Process text directly"
+  echo "  decibel-voice --inbox            Show inbox items"
+  echo "  decibel-voice --process ID       Process an inbox item"
+  echo ""
+  echo "Examples:"
+  echo "  decibel-voice --text \"wish: I want better error messages\""
+  echo "  decibel-voice --text \"issue: the login button is broken\""
+  echo "  decibel-voice --text \"what's the roadmap status?\""
+}
+
+# Check if whisper is available
+check_whisper() {
+  if command -v whisper &> /dev/null; then
+    echo "whisper"
+  elif command -v whisper.cpp &> /dev/null; then
+    echo "whisper.cpp"
+  elif [ -f "$HOME/.local/bin/whisper" ]; then
+    echo "$HOME/.local/bin/whisper"
+  else
+    echo ""
+  fi
+}
+
+# Record audio using macOS
+record_audio() {
+  echo -e "${BLUE}Recording... Press Enter to stop.${NC}"
+
+  # Use sox if available (better quality)
+  if command -v sox &> /dev/null; then
+    sox -d -r 16000 -c 1 "$AUDIO_FILE" &
+    SOX_PID=$!
+    read -r
+    kill $SOX_PID 2>/dev/null || true
+  # Fall back to macOS built-in
+  elif command -v rec &> /dev/null; then
+    rec -r 16000 -c 1 "$AUDIO_FILE" &
+    REC_PID=$!
+    read -r
+    kill $REC_PID 2>/dev/null || true
+  else
+    echo -e "${RED}Error: No audio recorder found. Install sox: brew install sox${NC}"
+    exit 1
+  fi
+
+  echo -e "${GREEN}Recording saved.${NC}"
+}
+
+# Transcribe using whisper
+transcribe_audio() {
+  local whisper_cmd=$(check_whisper)
+
+  if [ -z "$whisper_cmd" ]; then
+    echo -e "${YELLOW}Warning: Whisper not found. Using macOS dictation fallback.${NC}"
+    # For now, just prompt user to speak the text
+    echo -e "${BLUE}Enter your command (or paste transcription):${NC}"
+    read -r transcript
+    echo "$transcript"
+  else
+    echo -e "${BLUE}Transcribing with Whisper...${NC}"
+    $whisper_cmd "$AUDIO_FILE" --output-txt --output-dir /tmp 2>/dev/null
+    cat "${AUDIO_FILE%.wav}.txt" 2>/dev/null || echo ""
+  fi
+}
+
+# Send to MCP server
+send_to_mcp() {
+  local transcript="$1"
+  local process_now="${2:-false}"
+
+  # Use the MCP server via stdio
+  local payload=$(cat <<EOF
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "voice_inbox_add",
+    "arguments": {
+      "transcript": "$transcript",
+      "source": "voice_cli",
+      "process_immediately": $process_now
+    }
+  }
+}
+EOF
+)
+
+  echo -e "${BLUE}Processing: ${NC}$transcript"
+
+  # Run the MCP server and send the command
+  cd "$PROJECT_ROOT"
+  echo "$payload" | node dist/server.js 2>/dev/null | jq -r '.result.content[0].text' 2>/dev/null | jq .
+}
+
+# Direct text processing (for testing without audio)
+process_text() {
+  local text="$1"
+  send_to_mcp "$text" true
+}
+
+# List inbox
+list_inbox() {
+  local payload=$(cat <<EOF
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "voice_inbox_list",
+    "arguments": {}
+  }
+}
+EOF
+)
+
+  cd "$PROJECT_ROOT"
+  echo "$payload" | node dist/server.js 2>/dev/null | jq -r '.result.content[0].text' 2>/dev/null | jq .
+}
+
+# Process inbox item
+process_item() {
+  local item_id="$1"
+  local payload=$(cat <<EOF
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "voice_inbox_process",
+    "arguments": {
+      "inbox_id": "$item_id"
+    }
+  }
+}
+EOF
+)
+
+  cd "$PROJECT_ROOT"
+  echo "$payload" | node dist/server.js 2>/dev/null | jq -r '.result.content[0].text' 2>/dev/null | jq .
+}
+
+# Main
+case "${1:-}" in
+  --help|-h)
+    print_usage
+    ;;
+  --text|-t)
+    if [ -z "${2:-}" ]; then
+      echo -e "${RED}Error: --text requires an argument${NC}"
+      exit 1
+    fi
+    process_text "$2"
+    ;;
+  --inbox|-i)
+    list_inbox
+    ;;
+  --process|-p)
+    if [ -z "${2:-}" ]; then
+      echo -e "${RED}Error: --process requires an inbox ID${NC}"
+      exit 1
+    fi
+    process_item "$2"
+    ;;
+  "")
+    # Default: record and process
+    record_audio
+    transcript=$(transcribe_audio)
+    if [ -n "$transcript" ]; then
+      send_to_mcp "$transcript" true
+    else
+      echo -e "${YELLOW}No transcription available.${NC}"
+    fi
+    ;;
+  *)
+    # Treat as direct text input
+    process_text "$1"
+    ;;
+esac

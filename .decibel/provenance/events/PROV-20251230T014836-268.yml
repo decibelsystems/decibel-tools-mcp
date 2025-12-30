@@ -1,0 +1,11 @@
+event_id: PROV-20251230T014836-268
+timestamp: 2025-12-30T01:48:36.268Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:wish:WISH-0005
+reason_code: initial_creation
+summary: "Created wish: Email rich summaries via text or voice command"
+fingerprint_before: null
+fingerprint_after: sha256:96efae4031004f50
