@@ -107,6 +107,10 @@ import {
   AuditPoliciesInput,
   isTestSpecError,
 } from './tools/testSpec.js';
+import {
+  voiceInboxAdd,
+  VoiceInboxAddInput,
+} from './tools/voice.js';
 
 // ============================================================================
 // Version Info
@@ -848,6 +852,146 @@ export async function startHttpServer(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // ========================================================================
+    // iOS Mobile App Endpoint
+    // ========================================================================
+
+    // Helper: Call ML classifier sidecar (optional, graceful fallback)
+    async function classifyWithML(transcript: string): Promise<{ intent: string; confidence: number } | null> {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1000); // 1s timeout
+
+        const resp = await fetch('http://127.0.0.1:8790/classify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcript }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (resp.ok) {
+          return await resp.json() as { intent: string; confidence: number };
+        }
+      } catch {
+        // Classifier not running or timed out - that's fine
+      }
+      return null;
+    }
+
+    // Helper: Log training sample to ML classifier
+    async function logTrainingSample(data: {
+      transcript: string;
+      user_label: string;
+      predicted: string;
+      confidence: number;
+      was_overridden: boolean;
+    }): Promise<void> {
+      try {
+        await fetch('http://127.0.0.1:8790/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+      } catch {
+        // Best effort logging
+      }
+    }
+
+    // POST /api/inbox - Receive voice transcript from iOS app
+    if (path === '/api/inbox' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /api/inbox (iOS)');
+
+        // Validate required field
+        const transcript = body.transcript as string;
+        if (!transcript) {
+          sendJson(res, 400, wrapError('Missing "transcript" field', 'MISSING_TRANSCRIPT'));
+          return;
+        }
+
+        // Build tags array
+        const tags: string[] = [];
+        if (body.device) tags.push(`device:${body.device}`);
+
+        // User's explicit intent (from button tap)
+        const userIntent = body.intent as string | undefined;
+
+        // ML classification (optional - graceful fallback if not running)
+        const mlResult = await classifyWithML(transcript);
+        let finalIntent = userIntent;
+        let wasOverridden = false;
+        let mlConfidence = 0;
+
+        if (mlResult) {
+          mlConfidence = mlResult.confidence;
+          log(`HTTP: ML classified as "${mlResult.intent}" (${(mlResult.confidence * 100).toFixed(0)}%)`);
+
+          if (userIntent) {
+            // User provided intent - ML can override if confident and disagrees
+            if (mlResult.intent !== userIntent && mlResult.confidence > 0.75) {
+              finalIntent = mlResult.intent;
+              wasOverridden = true;
+              tags.push('ml:overridden');
+              log(`HTTP: ML overriding user intent "${userIntent}" → "${mlResult.intent}"`);
+            }
+
+            // Log training sample (user label = ground truth)
+            logTrainingSample({
+              transcript,
+              user_label: userIntent,
+              predicted: mlResult.intent,
+              confidence: mlResult.confidence,
+              was_overridden: wasOverridden,
+            });
+          } else {
+            // No user intent - use ML prediction
+            finalIntent = mlResult.intent;
+            tags.push('ml:predicted');
+          }
+        }
+
+        // Mark as human-labeled if user provided intent
+        if (userIntent) {
+          tags.push('labeled:human');
+          tags.push(`user_intent:${userIntent}`);
+        }
+
+        // Map iOS payload to VoiceInboxAddInput
+        const voiceInput: VoiceInboxAddInput = {
+          transcript,
+          source: 'mobile_app',
+          project_id: body.project_id as string | undefined,
+          process_immediately: true, // Process on receipt
+          tags: tags.length > 0 ? tags : undefined,
+          // Pass final intent (may be ML-overridden)
+          explicit_intent: finalIntent,
+        };
+
+        const result = await voiceInboxAdd(voiceInput);
+        sendJson(res, 200, wrapSuccess({
+          inbox_id: result.inbox_id,
+          transcript: result.transcript,
+          intent: result.intent,
+          intent_confidence: result.intent_confidence,
+          inbox_status: result.status,
+          immediate_result: result.immediate_result,
+          // ML metadata
+          labeled: !!userIntent,
+          user_intent: userIntent || null,
+          ml_intent: mlResult?.intent || null,
+          ml_confidence: mlResult ? Math.round(mlResult.confidence * 100) / 100 : null,
+          was_overridden: wasOverridden,
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`HTTP: /api/inbox error: ${message}`);
+        sendJson(res, 400, wrapError(message, 'VOICE_INBOX_ERROR'));
       }
       return;
     }

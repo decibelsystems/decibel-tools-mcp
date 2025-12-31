@@ -1,0 +1,11 @@
+event_id: PROV-20251230T052255-986
+timestamp: 2025-12-30T05:22:55.986Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - learnings:entry:decibel-tools-mcp:3
+reason_code: initial_creation
+summary: "Appended learning: Mobile Companion App Architecture: Pocket Console Pattern"
+fingerprint_before: null
+fingerprint_after: sha256:8dd969136f3c50ec

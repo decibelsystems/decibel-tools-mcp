@@ -46,7 +46,7 @@ describe('projectPaths', () => {
       process.env.DECIBEL_PROJECT_ROOT = tempDir;
 
       await expect(resolveProjectRoot('unknown-project')).rejects.toThrow(
-        'Unknown project: "unknown-project"'
+        'PROJECT_NOT_FOUND: "unknown-project"'
       );
     });
 

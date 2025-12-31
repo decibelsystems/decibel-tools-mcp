@@ -43,6 +43,16 @@
         "guardian",
         "fuligin-guardian"
       ]
+    },
+    {
+      "id": "decibel-tools-mobile",
+      "name": "Decibel Tools Mobile",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/decibel-tools-mobile",
+      "aliases": [
+        "tools-mobile",
+        "tools-ios",
+        "tools"
+      ]
     }
   ]
 }

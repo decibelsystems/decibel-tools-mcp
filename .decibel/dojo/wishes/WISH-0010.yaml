@@ -1,0 +1,10 @@
+id: WISH-0010
+capability: a correlation matrix
+reason: Voice-captured wish
+inputs:
+  - voice_transcript
+outputs:
+  captured_from: voice
+created_at: 2025-12-31T00:23:34.044Z
+status: open
+project_id: decibel-tools-mcp

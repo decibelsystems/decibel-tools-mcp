@@ -55,3 +55,21 @@ Implemented a self-improving OCR learning system with design provenance chain:
 This pattern generalizes to any human-in-the-loop ML system where user selection = supervision signal.
 
 ---
+### [2025-12-30 05:22:55] Mobile Companion App Architecture: Pocket Console Pattern
+**Category:** architecture | **Tags:** `mobile`, `architecture`, `patterns`, `icloud`, `offline-first`
+
+For mobile companion apps in an AI/agentic ecosystem, the "Pocket Console" pattern works well:
+
+1. **Capture** - Mobile excels at voice input and share extensions. Use offline-first queue (SwiftData) with eventual sync.
+
+2. **Observe** - Don't replicate desktop dashboards. Provide glanceable status snapshots with < 10s time-to-value.
+
+3. **Act** - Voice commands that trigger queued actions. Never destructive without confirmation. Default to "enqueue if offline".
+
+4. **Share** - Use native share sheet (UIActivityViewController) instead of building in-app chat. Leverage existing team tools.
+
+Key insight: iCloud Drive provides 80% of cross-device sync value with 20% of the complexity. Write events as JSON files to inbox folders, let desktop agent watch and process. Defer Hub/API until sync latency becomes a problem.
+
+Schema versioning (v1) from day one enables future evolution without breaking changes.
+
+---

@@ -23,7 +23,7 @@ import { getDefaultProject } from '../projectRegistry.js';
 // ============================================================================
 
 export type VoiceInboxStatus = 'queued' | 'processing' | 'completed' | 'failed';
-export type VoiceInboxSource = 'voice_cli' | 'text_input' | 'share_extension' | 'api';
+export type VoiceInboxSource = 'voice_cli' | 'text_input' | 'share_extension' | 'api' | 'mobile_app';
 export type VoiceIntent =
   | 'add_wish'
   | 'log_issue'
@@ -213,6 +213,7 @@ export interface VoiceInboxAddInput extends VoiceBaseInput {
   source?: VoiceInboxSource;
   tags?: string[];
   process_immediately?: boolean;
+  explicit_intent?: string; // Human-labeled intent from button tap (bypasses pattern detection)
 }
 
 export interface VoiceInboxAddOutput {
@@ -232,8 +233,24 @@ export async function voiceInboxAdd(input: VoiceInboxAddInput): Promise<VoiceInb
   const inboxId = generateInboxId();
   const timestamp = new Date().toISOString();
 
-  // Parse intent
-  const { intent, confidence, params } = parseIntent(input.transcript);
+  // Use explicit intent if provided (human-labeled from button tap), otherwise parse
+  let intent: VoiceIntent;
+  let confidence: number;
+  let params: Record<string, unknown>;
+
+  if (input.explicit_intent) {
+    // Human-labeled intent - use as-is with 100% confidence
+    intent = input.explicit_intent as VoiceIntent;
+    confidence = 1.0;
+    params = { raw_transcript: input.transcript };
+    log(`voice: Using explicit intent "${intent}" (human-labeled)`);
+  } else {
+    // Parse intent from transcript patterns
+    const parsed = parseIntent(input.transcript);
+    intent = parsed.intent;
+    confidence = parsed.confidence;
+    params = parsed.params;
+  }
 
   const item: VoiceInboxItem = {
     id: inboxId,

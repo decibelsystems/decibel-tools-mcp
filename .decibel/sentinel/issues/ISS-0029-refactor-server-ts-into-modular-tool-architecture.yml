@@ -1,0 +1,198 @@
+id: ISS-0029
+title: Refactor server.ts into modular tool architecture
+project: decibel-tools-mcp
+status: open
+priority: medium
+tags:
+  - refactor
+  - dx
+  - ai-efficiency
+  - architecture
+created_at: 2025-12-30T19:13:43.181Z
+updated_at: 2025-12-30T19:35:00.000Z
+description: |-
+  ## Problem
+
+  `server.ts` is a 3750+ line monolith that:
+  - Makes AI context usage inefficient (loading entire file to understand one tool)
+  - Duplicates patterns across 50+ tool handlers
+  - Requires editing two locations for each new tool (definition + handler)
+  - Has no separation between tool logic and MCP plumbing
+
+  ## Decision: Option B — Domain Barrels
+
+  Group tools by domain, each domain exports an array of tools.
+
+  ### 1. Type Definition
+  ```typescript
+  // src/tools/types.ts
+  export interface ToolSpec<TArgs = unknown> {
+    definition: {
+      name: string;
+      description: string;
+      inputSchema: object;
+    };
+    handler: (args: TArgs) => Promise<ToolResult>;
+  }
+  ```
+
+  ### 2. Domain Structure
+  ```
+  src/tools/
+  ├── types.ts                    # ToolSpec interface
+  ├── shared/
+  │   ├── response.ts             # toolSuccess, toolError
+  │   ├── project.ts              # withProject helper
+  │   └── validation.ts           # requireFields
+  ├── registry/
+  │   └── index.ts                # project_init, project_status, registry_*
+  ├── sentinel/
+  │   └── index.ts                # log_epic, createIssue, listIssues, etc.
+  ├── architect/
+  │   └── index.ts                # createAdr, createPolicy, etc.
+  ├── dojo/
+  │   └── index.ts                # add_wish, create_proposal, etc.
+  ├── designer/
+  │   └── index.ts                # record_design_decision, crit, etc.
+  ├── oracle/
+  │   └── index.ts                # next_actions, roadmap, getHealth
+  ├── context/
+  │   └── index.ts                # context_pin, event_append, etc.
+  ├── friction/
+  │   └── index.ts                # friction_log, friction_bump, etc.
+  └── index.ts                    # aggregates all domains
+  ```
+
+  ### 3. Shared Helpers
+
+  **Response helpers:**
+  ```typescript
+  // src/tools/shared/response.ts
+  export const toolSuccess = (data: unknown) => ({
+    content: [{ type: 'text', text: JSON.stringify(data, null, 2) }]
+  });
+
+  export const toolError = (error: string, hint?: string) => ({
+    content: [{ type: 'text', text: JSON.stringify({ success: false, error, hint }, null, 2) }],
+    isError: true
+  });
+  ```
+
+  **Project resolution wrapper:**
+  ```typescript
+  // src/tools/shared/project.ts
+  export function withProject<T>(
+    args: { projectId?: string },
+    fn: (resolved: ResolvedProjectPaths) => Promise<T>
+  ): Promise<T> {
+    const resolved = resolveProjectPaths(args.projectId);
+    return fn(resolved);
+  }
+  ```
+
+  **Validation helper:**
+  ```typescript
+  // src/tools/shared/validation.ts
+  export function requireFields<T>(args: T, ...fields: (keyof T)[]): void {
+    const missing = fields.filter(f => !args[f]);
+    if (missing.length) throw new Error(`Missing required: ${missing.join(', ')}`);
+  }
+  ```
+
+  ### 4. Domain Barrel Example
+  ```typescript
+  // src/tools/registry/index.ts
+  import { ToolSpec } from '../types.js';
+  import { toolSuccess, toolError } from '../shared/response.js';
+
+  export const projectInitTool: ToolSpec<ProjectInitArgs> = {
+    definition: {
+      name: 'project_init',
+      description: 'Initialize a new Decibel project...',
+      inputSchema: { ... }
+    },
+    handler: async (args) => {
+      // implementation
+      return toolSuccess({ success: true, ... });
+    }
+  };
+
+  export const registryTools: ToolSpec[] = [
+    projectInitTool,
+    projectStatusTool,
+    registryAddTool,
+    registryRemoveTool,
+    registryAliasTool,
+    registryResolveTool,
+  ];
+  ```
+
+  ### 5. Aggregation
+  ```typescript
+  // src/tools/index.ts
+  import { registryTools } from './registry/index.js';
+  import { sentinelTools } from './sentinel/index.js';
+  import { dojoTools } from './dojo/index.js';
+  // ...
+
+  export const allTools: ToolSpec[] = [
+    ...registryTools,
+    ...sentinelTools,
+    ...dojoTools,
+    // ...
+  ];
+
+  export const toolMap = new Map(
+    allTools.map(t => [t.definition.name, t])
+  );
+  ```
+
+  ### 6. Slim server.ts (~150 lines)
+  ```typescript
+  import { allTools, toolMap } from './tools/index.js';
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: allTools.map(t => t.definition)
+  }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const tool = toolMap.get(request.params.name);
+    if (!tool) throw new Error(`Unknown tool: ${request.params.name}`);
+    return tool.handler(request.params.arguments);
+  });
+  ```
+
+  ## Domain Groupings
+
+  | Domain | Tools |
+  |--------|-------|
+  | registry | project_init, project_status, registry_add, registry_remove, registry_alias, registry_resolve |
+  | sentinel | log_epic, createIssue, listIssues, closeIssue, getEpic, getEpicIssues, resolveEpic, scan, scanData, createTestSpec, listTestSpecs, compileTests, auditPolicies |
+  | architect | createAdr, recordArchDecision, createPolicy, listPolicies, getPolicy, compileOversight |
+  | dojo | add_wish, list_wishes, create_proposal, scaffold_experiment, run_experiment, get_results, can_graduate, read_artifact, dojo_list, dojo_projects |
+  | designer | record_design_decision, crit, list_crits |
+  | oracle | next_actions, roadmap |
+  | context | context_refresh, context_pin, context_unpin, context_list, event_append, event_search, artifact_list, artifact_read |
+  | friction | friction_log, friction_list, friction_resolve, friction_bump |
+  | roadmap | roadmap_get, roadmap_list, roadmap_getEpicContext, roadmap_getHealth, roadmap_linkEpic, roadmap_init |
+  | voice | voice_inbox_add, voice_inbox_list, voice_inbox_process, voice_command |
+  | agentic | agentic_compile_pack, agentic_render, agentic_lint, agentic_golden_eval |
+  | learnings | learnings_append, learnings_list |
+  | provenance | provenance_list |
+
+  ## Migration Strategy
+
+  1. Create `src/tools/types.ts` and `src/tools/shared/`
+  2. Extract `registry/` domain as proof of concept (6 tools)
+  3. Verify tests pass
+  4. Batch-migrate remaining domains
+  5. Delete switch statement from server.ts
+
+  ## Acceptance Criteria
+
+  - [ ] `ToolSpec` type defined in `src/tools/types.ts`
+  - [ ] Shared helpers: `toolSuccess`, `toolError`, `withProject`, `requireFields`
+  - [ ] `registry/` domain extracted and working
+  - [ ] All domains migrated
+  - [ ] server.ts reduced to ~150 lines
+  - [ ] All existing tests pass

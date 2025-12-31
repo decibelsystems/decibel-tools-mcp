@@ -1,0 +1,38 @@
+id: ISS-0028
+title: Voice Input for Decibel - DOJO-EXP-0001 complete
+project: decibel-tools-mcp
+status: open
+priority: medium
+tags:
+  - voice
+  - dojo
+  - shipped
+created_at: 2025-12-30T06:33:38.626Z
+updated_at: 2025-12-30T06:33:38.626Z
+description: |-
+  Implemented voice input system for Decibel commands.
+
+  **Built:**
+  - `src/tools/voice.ts` - 4 MCP tools (voice_inbox_add, voice_inbox_list, voice_inbox_process, voice_command)
+  - Intent parsing for 8 intents (wish, issue, crit, friction, learning, search, oracle)
+  - Voice Inbox storage in `.decibel/voice/inbox/`
+  - `bin/decibel-voice` CLI for macOS
+  - Registered tools in server.ts
+
+  **Captured Wishes:**
+  - WISH-0005: Email rich summaries via voice
+  - WISH-0006: Emergent people layer (anti-enterprise)
+  - WISH-0007: Unified search
+  - WISH-0008: Voice input (→ DOJO-PROP-0001 → DOJO-EXP-0001)
+  - WISH-0009: iOS Decibel app
+
+  **Proposals:**
+  - DOJO-PROP-0001: Voice Input for Decibel Commands (implemented)
+  - DOJO-PROP-0002: iOS Decibel Tools App (ready for workshop)
+
+  **Crits captured:**
+  - Anti-enterprise org philosophy
+  - Emergent identity over configured
+  - AI as leverage
+
+  **Test results:** 18/18 intent parsing tests pass (100%)

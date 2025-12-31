@@ -201,19 +201,19 @@ export function resolveProject(projectId: string): ProjectEntry {
     return { id: projectId, path: envRoot };
   }
 
-  // Build helpful error message
+  // Build helpful error message with project_init hint
   const registeredIds = registry.projects.map((p) => p.id);
   const allAliases = registry.projects.flatMap((p) => p.aliases || []);
   const suggestions = [...registeredIds, ...allAliases].filter(Boolean);
 
-  let errorMsg = `Unknown project: "${projectId}".`;
+  let errorMsg = `PROJECT_NOT_FOUND: "${projectId}".`;
   if (suggestions.length > 0) {
     errorMsg += ` Registered projects: ${suggestions.join(', ')}.`;
   }
   if (discoveredRoot) {
     errorMsg += ` Current directory is in project "${path.basename(discoveredRoot)}".`;
   }
-  errorMsg += ` Register this project with 'decibel registry add'.`;
+  errorMsg += ` HINT: Run project_init with the path to create and register a new project, or registry_add if .decibel already exists.`;
 
   throw new Error(errorMsg);
 }

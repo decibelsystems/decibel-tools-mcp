@@ -1,0 +1,11 @@
+event_id: PROV-20251231T002447-311
+timestamp: 2025-12-31T00:24:47.311Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2025-12-31T00-24-47Z-there-is-a-bug-with-the-login.md
+reason_code: initial_creation
+summary: "Created issue: There is a bug with the login"
+fingerprint_before: null
+fingerprint_after: sha256:ec875567389dfd98
