@@ -111,6 +111,31 @@ import {
   voiceInboxAdd,
   VoiceInboxAddInput,
 } from './tools/voice.js';
+import {
+  // Image
+  generateImage,
+  getImageStatus,
+  GenerateImageInput,
+  // Meshy 3D
+  meshyGenerate,
+  getMeshyStatus,
+  meshyDownload,
+  MeshyGenerateInput,
+  // Tripo 3D
+  tripoGenerate,
+  getTripoStatus,
+  tripoDownload,
+  TripoGenerateInput,
+  // Kling Video
+  klingGenerateVideo,
+  klingGenerateTextVideo,
+  klingGenerateAvatar,
+  getKlingStatus,
+  KlingVideoInput,
+  KlingAvatarInput,
+  // Utility
+  listTasks,
+} from './tools/studio/index.js';
 
 // ============================================================================
 // Version Info
@@ -992,6 +1017,364 @@ export async function startHttpServer(
         const message = error instanceof Error ? error.message : String(error);
         log(`HTTP: /api/inbox error: ${message}`);
         sendJson(res, 400, wrapError(message, 'VOICE_INBOX_ERROR'));
+      }
+      return;
+    }
+
+    // ========================================================================
+    // Studio API Endpoints (frontend_v0.2 compatible)
+    // ========================================================================
+
+    // POST /api/generate-flux-kontext-image - Start image generation
+    if (path === '/api/generate-flux-kontext-image' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /api/generate-flux-kontext-image');
+
+        // Validate required fields
+        if (!body.prompt) {
+          sendJson(res, 400, wrapError('Missing "prompt" field', 'MISSING_PROMPT'));
+          return;
+        }
+
+        const input: GenerateImageInput = {
+          asset_id: (body.asset_id as string) || `asset_${Date.now()}`,
+          user_id: (body.user_id as string) || 'anonymous',
+          prompt: body.prompt as string,
+          input_image: body.input_image as string | null,
+          aspect_ratio: (body.aspect_ratio as '16:9' | '9:16' | '1:1') || '16:9',
+          model: (body.model as string) || 'flux-kontext-pro',
+        };
+
+        const result = await generateImage(input);
+        sendJson(res, 200, wrapSuccess(result as unknown as Record<string, unknown>));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`HTTP: /api/generate-flux-kontext-image error: ${message}`);
+        sendJson(res, 500, wrapError(message, 'GENERATION_ERROR'));
+      }
+      return;
+    }
+
+    // GET /api/flux-kontext-status/:taskId - Check image generation status
+    if (path.startsWith('/api/flux-kontext-status/') && req.method === 'GET') {
+      try {
+        const taskId = path.replace('/api/flux-kontext-status/', '');
+        log(`HTTP: /api/flux-kontext-status/${taskId}`);
+
+        if (!taskId) {
+          sendJson(res, 400, wrapError('Missing task ID', 'MISSING_TASK_ID'));
+          return;
+        }
+
+        const status = getImageStatus(taskId);
+        if (!status) {
+          sendJson(res, 404, wrapError('Task not found', 'TASK_NOT_FOUND'));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(status));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`HTTP: /api/flux-kontext-status error: ${message}`);
+        sendJson(res, 500, wrapError(message, 'STATUS_ERROR'));
+      }
+      return;
+    }
+
+    // ========================================================================
+    // Meshy 3D Generation Endpoints
+    // ========================================================================
+
+    // POST /api/meshy/generate - Start 3D generation
+    if (path === '/api/meshy/generate' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /api/meshy/generate');
+
+        if (!body.mode) {
+          sendJson(res, 400, wrapError('Missing "mode" field', 'MISSING_MODE'));
+          return;
+        }
+
+        const input: MeshyGenerateInput = {
+          mode: body.mode as MeshyGenerateInput['mode'],
+          prompt: body.prompt as string,
+          image_url: body.image_url as string,
+          image_urls: body.image_urls as string[],
+          preview_task_id: body.preview_task_id as string,
+          model_input: body.model_input as MeshyGenerateInput['model_input'],
+          parameters: body.parameters as Record<string, unknown>,
+          asset_id: body.asset_id as string,
+          user_id: body.user_id as string,
+        };
+
+        const result = await meshyGenerate(input);
+        sendJson(res, 200, wrapSuccess(result as unknown as Record<string, unknown>));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`HTTP: /api/meshy/generate error: ${message}`);
+        sendJson(res, 500, wrapError(message, 'MESHY_ERROR'));
+      }
+      return;
+    }
+
+    // GET /api/meshy/status/:taskId - Check 3D generation status
+    if (path.startsWith('/api/meshy/status/') && req.method === 'GET') {
+      try {
+        const taskId = path.replace('/api/meshy/status/', '').split('?')[0];
+        const url = new URL(req.url || '/', `http://${req.headers.host}`);
+        const mode = url.searchParams.get('mode');
+        log(`HTTP: /api/meshy/status/${taskId}`);
+
+        const status = getMeshyStatus(taskId, mode || undefined);
+        if (!status) {
+          sendJson(res, 404, wrapError('Task not found', 'TASK_NOT_FOUND'));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(status));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 500, wrapError(message, 'STATUS_ERROR'));
+      }
+      return;
+    }
+
+    // POST /api/meshy/download - Download completed model
+    if (path === '/api/meshy/download' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /api/meshy/download');
+
+        if (!body.task_id) {
+          sendJson(res, 400, wrapError('Missing "task_id" field', 'MISSING_TASK_ID'));
+          return;
+        }
+
+        const result = await meshyDownload(
+          body.task_id as string,
+          body.asset_id as string || `asset_${Date.now()}`,
+          body.user_id as string || 'anonymous'
+        );
+        sendJson(res, 200, wrapSuccess(result));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 500, wrapError(message, 'DOWNLOAD_ERROR'));
+      }
+      return;
+    }
+
+    // ========================================================================
+    // Tripo 3D Generation Endpoints
+    // ========================================================================
+
+    // POST /api/tripo/generate - Start Tripo 3D generation
+    if (path === '/api/tripo/generate' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /api/tripo/generate');
+
+        if (!body.type) {
+          sendJson(res, 400, wrapError('Missing "type" field', 'MISSING_TYPE'));
+          return;
+        }
+
+        const input: TripoGenerateInput = {
+          type: body.type as TripoGenerateInput['type'],
+          prompt: body.prompt as string,
+          image_url: body.image_url as string,
+          image_urls: body.image_urls as TripoGenerateInput['image_urls'],
+          parameters: body.parameters as Record<string, unknown>,
+          asset_id: body.asset_id as string,
+          user_id: body.user_id as string,
+        };
+
+        const result = await tripoGenerate(input);
+        sendJson(res, 200, wrapSuccess(result as unknown as Record<string, unknown>));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`HTTP: /api/tripo/generate error: ${message}`);
+        sendJson(res, 500, wrapError(message, 'TRIPO_ERROR'));
+      }
+      return;
+    }
+
+    // GET /api/tripo/task/:taskId - Check Tripo task status
+    if (path.startsWith('/api/tripo/task/') && req.method === 'GET') {
+      try {
+        const taskId = path.replace('/api/tripo/task/', '');
+        log(`HTTP: /api/tripo/task/${taskId}`);
+
+        const status = getTripoStatus(taskId);
+        if (!status) {
+          sendJson(res, 404, wrapError('Task not found', 'TASK_NOT_FOUND'));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(status));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 500, wrapError(message, 'STATUS_ERROR'));
+      }
+      return;
+    }
+
+    // POST /api/tripo/download/:taskId - Download Tripo model
+    if (path.startsWith('/api/tripo/download/') && req.method === 'POST') {
+      try {
+        const taskId = path.replace('/api/tripo/download/', '');
+        const body = await parseBody(req);
+        log(`HTTP: /api/tripo/download/${taskId}`);
+
+        const result = await tripoDownload(
+          taskId,
+          body.asset_id as string || `asset_${Date.now()}`,
+          body.user_id as string || 'anonymous'
+        );
+        sendJson(res, 200, wrapSuccess(result));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 500, wrapError(message, 'DOWNLOAD_ERROR'));
+      }
+      return;
+    }
+
+    // ========================================================================
+    // Kling Video Generation Endpoints
+    // ========================================================================
+
+    // POST /api/generate-kling-video - Image to video
+    if (path === '/api/generate-kling-video' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /api/generate-kling-video');
+
+        if (!body.image_url || !body.prompt) {
+          sendJson(res, 400, wrapError('Missing "image_url" or "prompt" field', 'MISSING_FIELDS'));
+          return;
+        }
+
+        const input: KlingVideoInput = {
+          asset_id: (body.asset_id as string) || `asset_${Date.now()}`,
+          image_url: body.image_url as string,
+          prompt: body.prompt as string,
+          negative_prompt: body.negative_prompt as string,
+          duration: (body.duration as 5 | 10) || 5,
+          aspect_ratio: (body.aspect_ratio as '16:9' | '9:16' | '1:1') || '16:9',
+          cfg_scale: body.cfg_scale as number,
+          seed: body.seed as number,
+          user_id: body.user_id as string,
+          model: body.model as string,
+          sound: body.sound as boolean,
+        };
+
+        const result = await klingGenerateVideo(input);
+        sendJson(res, 200, wrapSuccess(result as unknown as Record<string, unknown>));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`HTTP: /api/generate-kling-video error: ${message}`);
+        sendJson(res, 500, wrapError(message, 'KLING_ERROR'));
+      }
+      return;
+    }
+
+    // POST /api/generate-kling-text-video - Text to video
+    if (path === '/api/generate-kling-text-video' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /api/generate-kling-text-video');
+
+        if (!body.prompt) {
+          sendJson(res, 400, wrapError('Missing "prompt" field', 'MISSING_PROMPT'));
+          return;
+        }
+
+        const input: KlingVideoInput = {
+          asset_id: (body.asset_id as string) || `asset_${Date.now()}`,
+          prompt: body.prompt as string,
+          negative_prompt: body.negative_prompt as string,
+          duration: (body.duration as 5 | 10) || 5,
+          aspect_ratio: (body.aspect_ratio as '16:9' | '9:16' | '1:1') || '16:9',
+          cfg_scale: body.cfg_scale as number,
+          user_id: body.user_id as string,
+          model: body.model as string,
+          sound: body.sound as boolean,
+        };
+
+        const result = await klingGenerateTextVideo(input);
+        sendJson(res, 200, wrapSuccess(result as unknown as Record<string, unknown>));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`HTTP: /api/generate-kling-text-video error: ${message}`);
+        sendJson(res, 500, wrapError(message, 'KLING_ERROR'));
+      }
+      return;
+    }
+
+    // POST /api/generate-kling-avatar - Avatar/lip-sync video
+    if (path === '/api/generate-kling-avatar' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        log('HTTP: /api/generate-kling-avatar');
+
+        if (!body.image_url || !body.audio_url) {
+          sendJson(res, 400, wrapError('Missing "image_url" or "audio_url" field', 'MISSING_FIELDS'));
+          return;
+        }
+
+        const input: KlingAvatarInput = {
+          asset_id: (body.asset_id as string) || `asset_${Date.now()}`,
+          image_url: body.image_url as string,
+          audio_url: body.audio_url as string,
+          prompt: body.prompt as string,
+          user_id: body.user_id as string,
+          model: body.model as string,
+        };
+
+        const result = await klingGenerateAvatar(input);
+        sendJson(res, 200, wrapSuccess(result as unknown as Record<string, unknown>));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`HTTP: /api/generate-kling-avatar error: ${message}`);
+        sendJson(res, 500, wrapError(message, 'KLING_ERROR'));
+      }
+      return;
+    }
+
+    // GET /api/kling-video-status/:taskId - Check video generation status
+    if (path.startsWith('/api/kling-video-status/') && req.method === 'GET') {
+      try {
+        const taskId = path.replace('/api/kling-video-status/', '');
+        log(`HTTP: /api/kling-video-status/${taskId}`);
+
+        const status = getKlingStatus(taskId);
+        if (!status) {
+          sendJson(res, 404, wrapError('Task not found', 'TASK_NOT_FOUND'));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(status));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 500, wrapError(message, 'STATUS_ERROR'));
+      }
+      return;
+    }
+
+    // GET /api/studio/tasks - List all tasks (debug endpoint)
+    if (path === '/api/studio/tasks' && req.method === 'GET') {
+      try {
+        log('HTTP: /api/studio/tasks');
+        const tasks = listTasks();
+        sendJson(res, 200, wrapSuccess({ tasks, count: tasks.length }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 500, wrapError(message, 'LIST_ERROR'));
       }
       return;
     }

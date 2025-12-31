@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: Decibel Tools API
-  version: 0.3.3
+  version: 4.0.0
   description: MCP tools for project intelligence - Dojo experiments, context, policies, and more
 servers:
-  - url: https://noncorroboratory-degreeless-james.ngrok-free.dev
+  - url: https://senken.pro
 paths:
   /health:
     get:
@@ -258,3 +258,297 @@ paths:
             application/json:
               schema:
                 type: object
+  # ============================================================================
+  # Studio API Endpoints (Image, 3D, Video Generation)
+  # ============================================================================
+  /api/generate-flux-kontext-image:
+    post:
+      operationId: generateImage
+      summary: Start image generation using FLUX/DALL-E
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - prompt
+              properties:
+                prompt:
+                  type: string
+                  description: The image generation prompt
+                asset_id:
+                  type: string
+                  description: Optional asset identifier
+                user_id:
+                  type: string
+                  description: Optional user identifier
+                aspect_ratio:
+                  type: string
+                  enum: ['16:9', '9:16', '1:1']
+                  description: Image aspect ratio
+                input_image:
+                  type: string
+                  description: Base64 or URL of input image for editing
+      responses:
+        '200':
+          description: Image generation started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  task_id:
+                    type: string
+                  estimated_time:
+                    type: number
+  /api/flux-kontext-status/{taskId}:
+    get:
+      operationId: getImageStatus
+      summary: Check image generation status
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [queued, processing, completed, error]
+                  progress:
+                    type: number
+                  image_url:
+                    type: string
+  /api/meshy/generate:
+    post:
+      operationId: meshyGenerate
+      summary: Start 3D model generation (Meshy-compatible)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mode
+              properties:
+                mode:
+                  type: string
+                  enum: [text-to-3d-preview, text-to-3d-refine, image-to-3d, multi-image-to-3d, retexture]
+                prompt:
+                  type: string
+                image_url:
+                  type: string
+                asset_id:
+                  type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: 3D generation started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  task_id:
+                    type: string
+  /api/meshy/status/{taskId}:
+    get:
+      operationId: getMeshyStatus
+      summary: Check 3D generation status
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  progress:
+                    type: number
+                  model_url:
+                    type: string
+  /api/tripo/generate:
+    post:
+      operationId: tripoGenerate
+      summary: Start Tripo 3D model generation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+              properties:
+                type:
+                  type: string
+                  enum: [text_to_model, image_to_model, multiview_to_model]
+                prompt:
+                  type: string
+                image_url:
+                  type: string
+                asset_id:
+                  type: string
+      responses:
+        '200':
+          description: Tripo generation started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  task_id:
+                    type: string
+  /api/tripo/task/{taskId}:
+    get:
+      operationId: getTripoStatus
+      summary: Check Tripo task status
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task status
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/generate-kling-video:
+    post:
+      operationId: klingGenerateVideo
+      summary: Generate video from image (Kling)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - image_url
+                - prompt
+              properties:
+                image_url:
+                  type: string
+                prompt:
+                  type: string
+                duration:
+                  type: number
+                  enum: [5, 10]
+                aspect_ratio:
+                  type: string
+                  enum: ['16:9', '9:16', '1:1']
+                asset_id:
+                  type: string
+      responses:
+        '200':
+          description: Video generation started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  task_id:
+                    type: string
+                  cost:
+                    type: number
+  /api/generate-kling-text-video:
+    post:
+      operationId: klingGenerateTextVideo
+      summary: Generate video from text prompt (Kling)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - prompt
+              properties:
+                prompt:
+                  type: string
+                duration:
+                  type: number
+                  enum: [5, 10]
+                aspect_ratio:
+                  type: string
+                  enum: ['16:9', '9:16', '1:1']
+                asset_id:
+                  type: string
+      responses:
+        '200':
+          description: Video generation started
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/kling-video-status/{taskId}:
+    get:
+      operationId: getKlingStatus
+      summary: Check Kling video generation status
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  progress:
+                    type: number
+                  video_url:
+                    type: string
+  /api/studio/tasks:
+    get:
+      operationId: listStudioTasks
+      summary: List all Studio generation tasks (debug)
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  tasks:
+                    type: array
+                  count:
+                    type: number

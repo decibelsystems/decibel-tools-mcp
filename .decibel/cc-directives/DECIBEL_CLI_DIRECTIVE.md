@@ -136,7 +136,7 @@ src/
   Refs:  render.com, mediareason/senken-trading-agent
   
   Service: senken-trading-agent
-  URL: https://senken-trading-agent.onrender.com
+  URL: https://senken.pro
   ...
 ```
 
