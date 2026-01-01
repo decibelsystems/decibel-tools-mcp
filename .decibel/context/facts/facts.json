@@ -9,5 +9,19 @@
       "deck#4"
     ],
     "ts": "2025-12-24T17:33:04.013Z"
+  },
+  {
+    "id": "1767297425009-hfe7y0",
+    "title": "senken.pro Server Stack Overview",
+    "body": "## senken.pro — Node/Server Stack\n\n**What it is**: Hosted MCP server exposing Decibel project intelligence tools as APIs\n\n**Stack**:\n- Node.js + TypeScript\n- MCP SDK 1.0 (JSON-RPC 2.0)\n- PostgreSQL (database)\n- Render.com\n\n**Transports**:\n- stdio → Claude Code\n- HTTP → ChatGPT, iOS, remote\n\n**API Surface**:\n- GET /health — Uptime\n- GET /tools — List tools\n- POST /call — Execute any tool\n- POST /api/inbox — iOS voice\n- POST /mcp — Full MCP protocol\n\n**Tool Domains**: Sentinel, Dojo, Oracle, Architect, Designer, Context, Friction, Voice\n\n## Studio (Separate)\n- Supabase-backed\n- AI generation (image/3D/video)\n- NOT on senken.pro",
+    "trust": "high",
+    "ts": "2026-01-01T19:57:05.009Z"
+  },
+  {
+    "id": "1767297498427-mq09yp",
+    "title": "Deck App Integration with senken.pro",
+    "body": "## Deck (MTG Card Scanner) → senken.pro Integration\n\n**Deck** is a Magic: The Gathering card scanner/intelligence app that integrates with the Decibel tools architecture.\n\n### How Deck Connects\n\n**Server**: senken.pro (Render-hosted MCP server)\n**Protocol**: HTTP\n**Auth**: Bearer token (if enabled)\n\n### Key Endpoints for Deck\n\n| Endpoint | Method | Purpose |\n|----------|--------|---------|\n| `/health` | GET | Health check |\n| `/tools` | GET | List available tools |\n| `/call` | POST | Execute any tool |\n\n### POST /call Format\n```json\n{\n  \"tool\": \"tool_name\",\n  \"arguments\": { ... }\n}\n```\n\n### Relevant Tool Domains for Deck\n- **Sentinel** — Track issues, epics for Deck development\n- **Dojo** — Experiment with new card recognition features\n- **Oracle** — Get next actions, project health\n- **Context** — Persist AI memory across sessions\n\n### Stack Behind senken.pro\n- Node.js + TypeScript\n- MCP SDK 1.0\n- PostgreSQL\n- Render.com",
+    "trust": "high",
+    "ts": "2026-01-01T19:58:18.427Z"
   }
 ]

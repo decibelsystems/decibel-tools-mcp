@@ -1,0 +1,11 @@
+event_id: PROV-20260101T181023-936
+timestamp: 2026-01-01T18:10:23.936Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - learnings:entry:decibel-tools-mcp:6
+reason_code: initial_creation
+summary: "Appended learning: MCP proxy already exists in senken-trading-agent"
+fingerprint_before: null
+fingerprint_after: sha256:3a6d083dc9f695e4

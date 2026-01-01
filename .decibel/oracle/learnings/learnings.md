@@ -112,3 +112,79 @@ Uncommitted files:
 - `package.json` (likely has @supabase/supabase-js dep)
 
 ---
+### [2026-01-01 18:04:41] Deploying MCP server alongside Flask on Render (single service)
+**Category:** integration | **Tags:** `render`, `deployment`, `flask`, `node`, `submodule`, `single-service`
+
+## Context
+decibel-tools-mcp is included as a git submodule in senken-trading-agent. Both need to run on a single Render service to reduce cost and complexity.
+
+## Architecture
+```
+Render service: "senken-trading" (senken.pro)
+├── Flask (Python) on PORT (main, required by Render)
+├── Node MCP server on port 8788 (internal)
+└── Flask proxies /api/inbox → localhost:8788
+```
+
+## Implementation
+Modify `scripts/start.sh` to start both processes:
+
+```bash
+# After cd backend, before WORKERS line:
+
+# Build and start MCP server
+echo "🔧 Building decibel-tools-mcp..."
+cd ../decibel-tools-mcp
+npm install --production
+npm run build
+echo "🌐 Starting MCP server on port 8788..."
+node dist/server.js --http --port 8788 &
+MCP_PID=$!
+echo "   MCP PID: $MCP_PID"
+cd ../backend
+```
+
+## Requirements
+- Render Python runtime must have Node.js available (verify first)
+- decibel-tools-mcp must support PORT env var (added in commit 856a58d)
+- Flask needs proxy routes for MCP endpoints → localhost:8788
+
+## Alternative: Two services
+If single-service becomes complex, use render.yaml Blueprint to deploy two services from same repo:
+- Service 1: senken-trading (Flask) → senken.pro  
+- Service 2: decibel-mcp (Node, rootDir: decibel-tools-mcp) → mcp.senken.pro
+
+---
+### [2026-01-01 18:10:23] MCP proxy already exists in senken-trading-agent
+**Category:** integration | **Tags:** `senken`, `proxy`, `flask`, `mcp`, `integration`, `dont-forget`
+
+## Don't Reinvent The Wheel
+
+senken-trading-agent ALREADY has MCP proxy infrastructure at:
+`backend/routes/mcp_proxy_routes.py`
+
+## What It Does
+- Starts decibel-tools-mcp Node server as subprocess (lazy init on first request)
+- Runs on port 8787
+- Proxies: /sse/, /mcp, /call, /tools, /dojo/*, /context/*, /event/*, /artifact/*, /bench/*
+
+## Adding New Endpoints
+Just add a route to mcp_proxy_routes.py:
+```python
+@mcp_proxy_bp.route('/api/inbox', methods=['POST'])
+def api_inbox():
+    """Receive voice transcript from iOS app."""
+    return _proxy_json_request('/api/inbox')
+```
+
+## DO NOT
+- Add Node startup to start.sh (proxy handles this)
+- Create a second Render service (not needed)
+- Run Node on a different port (causes conflicts)
+
+## Key Files
+- Proxy: `backend/routes/mcp_proxy_routes.py`
+- Registration: `backend/ccxt_backend.py` line ~1045
+- Node path: Uses `DECIBEL_MCP_PATH` env var or `/decibel-mcp` submodule
+
+---

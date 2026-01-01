@@ -1,0 +1,11 @@
+event_id: PROV-20260101T180441-561
+timestamp: 2026-01-01T18:04:41.561Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - learnings:entry:decibel-tools-mcp:5
+reason_code: initial_creation
+summary: "Appended learning: Deploying MCP server alongside Flask on Render (single service)"
+fingerprint_before: null
+fingerprint_after: sha256:7afebfb8026729e1
