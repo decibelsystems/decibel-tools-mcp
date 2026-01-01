@@ -32,6 +32,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { log } from './config.js';
+import { modularToolMap, modularTools } from './tools/index.js';
 import {
   createProposal,
   scaffoldExperiment,
@@ -319,8 +320,26 @@ async function executeDojoTool(
       case 'sentinel_auditPolicies':
         result = await auditPolicies(args as unknown as AuditPoliciesInput);
         break;
-      default:
+      default: {
+        // Fallback to modular tools (deck, studio, etc.)
+        const modularTool = modularToolMap.get(tool);
+        if (modularTool) {
+          const modularResult = await modularTool.handler(args);
+          // Parse the JSON from the text result
+          const text = modularResult.content[0]?.text;
+          if (text) {
+            try {
+              result = JSON.parse(text);
+            } catch {
+              result = { message: text };
+            }
+          } else {
+            result = { success: true };
+          }
+          break;
+        }
         return wrapError(`Unknown tool: ${tool}`, 'UNKNOWN_TOOL');
+      }
     }
 
     // Check for Dojo error response
@@ -405,6 +424,11 @@ function getAvailableTools(): { name: string; description: string }[] {
     { name: 'sentinel_listTestSpecs', description: 'List test specifications' },
     { name: 'sentinel_compileTests', description: 'Compile test manifest' },
     { name: 'sentinel_auditPolicies', description: 'Audit policy compliance' },
+    // Include modular tools (deck, studio, etc.)
+    ...modularTools.map(t => ({
+      name: t.definition.name,
+      description: t.definition.description,
+    })),
   ];
 }
 
