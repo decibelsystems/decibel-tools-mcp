@@ -1124,11 +1124,9 @@ export async function startHttpServer(
     if (path.startsWith('/api/meshy/status/') && req.method === 'GET') {
       try {
         const taskId = path.replace('/api/meshy/status/', '').split('?')[0];
-        const url = new URL(req.url || '/', `http://${req.headers.host}`);
-        const mode = url.searchParams.get('mode');
         log(`HTTP: /api/meshy/status/${taskId}`);
 
-        const status = getMeshyStatus(taskId, mode || undefined);
+        const status = getMeshyStatus(taskId);
         if (!status) {
           sendJson(res, 404, wrapError('Task not found', 'TASK_NOT_FOUND'));
           return;

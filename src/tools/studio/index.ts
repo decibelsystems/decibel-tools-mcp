@@ -402,7 +402,7 @@ export async function meshyGenerate(input: MeshyGenerateInput): Promise<MeshyGen
   };
 }
 
-export function getMeshyStatus(taskId: string, mode?: string): TaskStatus | null {
+export function getMeshyStatus(taskId: string): TaskStatus | null {
   const task = taskStore.get(taskId);
   return task?.status || null;
 }
@@ -610,3 +610,120 @@ export interface StudioError {
 export function isStudioError(result: unknown): result is StudioError {
   return typeof result === 'object' && result !== null && 'error' in result && 'code' in result;
 }
+
+// ============================================================================
+// Tool Exports
+// ============================================================================
+
+import { ToolSpec } from '../types.js';
+import { toolSuccess, toolError, requireFields } from '../shared/index.js';
+import { studioCloudSpineTools } from './cloud-spine.js';
+
+// ============================================================================
+// Generation Middleware Tools (MCP-exposed)
+// ============================================================================
+
+export const studioGenerateImageTool: ToolSpec = {
+  definition: {
+    name: 'studio_generate_image',
+    description: 'Generate an image using DALL-E 3 or FLUX. Returns a task ID for polling status.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: {
+          type: 'string',
+          description: 'Text prompt for image generation',
+        },
+        aspect_ratio: {
+          type: 'string',
+          enum: ['16:9', '9:16', '1:1'],
+          description: 'Aspect ratio (default: 16:9)',
+        },
+        asset_id: {
+          type: 'string',
+          description: 'Optional asset ID for tracking',
+        },
+      },
+      required: ['prompt'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      requireFields(args, 'prompt');
+
+      const result = await generateImage({
+        asset_id: args.asset_id || `asset_${Date.now()}`,
+        user_id: 'claude-code',
+        prompt: args.prompt,
+        aspect_ratio: args.aspect_ratio || '16:9',
+      });
+
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+export const studioGetImageStatusTool: ToolSpec = {
+  definition: {
+    name: 'studio_get_image_status',
+    description: 'Get the status of an image generation task.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_id: {
+          type: 'string',
+          description: 'Task ID returned from studio_generate_image',
+        },
+      },
+      required: ['task_id'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      requireFields(args, 'task_id');
+
+      const status = getImageStatus(args.task_id);
+      if (!status) {
+        return toolError('Task not found');
+      }
+
+      return toolSuccess(status);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+export const studioListTasksTool: ToolSpec = {
+  definition: {
+    name: 'studio_list_tasks',
+    description: 'List all active generation tasks (images, 3D, video).',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  handler: async () => {
+    try {
+      const tasks = listTasks();
+      return toolSuccess({ tasks, count: tasks.length });
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// All Studio Tools
+// ============================================================================
+
+export const studioTools: ToolSpec[] = [
+  // Generation middleware
+  studioGenerateImageTool,
+  studioGetImageStatusTool,
+  studioListTasksTool,
+  // Cloud spine (Supabase)
+  ...studioCloudSpineTools,
+];

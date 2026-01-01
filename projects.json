@@ -41,7 +41,8 @@
       "name": "Fuligin Guardian",
       "aliases": [
         "guardian",
-        "fuligin-guardian"
+        "fuligin-guardian",
+        "vant"
       ]
     },
     {
@@ -53,6 +54,29 @@
         "tools-ios",
         "tools"
       ]
+    },
+    {
+      "id": "studio-ios",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/studio-ios",
+      "name": "Decibel Studio iOS",
+      "aliases": [
+        "studio-native",
+        "ios"
+      ]
+    },
+    {
+      "id": "pokedeck",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/pokedeck",
+      "name": "Pokedeck",
+      "aliases": [
+        "pokemon",
+        "poke"
+      ]
+    },
+    {
+      "id": "decibel-tools",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/decibel-tools",
+      "name": "Decibel Tools"
     }
   ]
 }

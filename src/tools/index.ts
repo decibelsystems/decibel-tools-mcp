@@ -19,6 +19,7 @@ import { contextTools } from './context/index.js';
 import { agenticTools } from './agentic/index.js';
 import { roadmapTools } from './roadmap/index.js';
 import { architectTools } from './architect/index.js';
+import { studioTools } from './studio/index.js';
 
 // ============================================================================
 // Aggregate All Tools
@@ -38,6 +39,7 @@ export const modularTools: ToolSpec[] = [
   ...agenticTools,
   ...roadmapTools,
   ...architectTools,
+  ...studioTools,
 ];
 
 // ============================================================================
