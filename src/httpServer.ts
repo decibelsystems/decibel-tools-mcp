@@ -1441,7 +1441,9 @@ export function parseHttpArgs(args: string[]): {
 } {
   const httpMode = args.includes('--http');
   const portIndex = args.indexOf('--port');
-  const port = portIndex !== -1 ? parseInt(args[portIndex + 1], 10) : 8787;
+  // Render sets PORT env var - use it if available
+  const defaultPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 8787;
+  const port = portIndex !== -1 ? parseInt(args[portIndex + 1], 10) : defaultPort;
   const authIndex = args.indexOf('--auth-token');
   const authToken = authIndex !== -1 ? args[authIndex + 1] : undefined;
   const hostIndex = args.indexOf('--host');

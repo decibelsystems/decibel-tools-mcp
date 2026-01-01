@@ -73,3 +73,42 @@ Key insight: iCloud Drive provides 80% of cross-device sync value with 20% of th
 Schema versioning (v1) from day one enables future evolution without breaking changes.
 
 ---
+### [2026-01-01 07:16:29] Supabase Cloud Spine Integration Complete
+**Category:** integration | **Tags:** `supabase`, `cloud-spine`, `studio`, `handoff`, `senken-pro`
+
+## Session Handoff - 2024-12-31
+
+### What Was Added
+
+**Supabase Client (`src/lib/supabase.ts`)**
+- Singleton pattern for anon + service role clients
+- Type definitions for all Decibel Studio entities: Project, Artifact, ArtifactFile, Device, Event, Job
+- Connects to senken.pro Supabase backend
+- Env vars: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`
+
+**Cloud Spine Tools (`src/tools/studio/cloud-spine.ts`)**
+12 MCP tools for Decibel Studio cloud sync:
+- Projects: `studio_list_projects`, `studio_create_project`, `studio_get_project`
+- Artifacts: `studio_list_artifacts`, `studio_create_artifact`, `studio_update_artifact`
+- Events: `studio_sync_events` (incremental sync by sequence number)
+- Devices: `studio_register_device`, `studio_heartbeat`
+- Jobs: `studio_list_jobs`, `studio_claim_job`, `studio_update_job`
+
+### Current State
+- Build passes ✓
+- Tools are exported via `src/tools/studio/index.ts` → `studioCloudSpineTools`
+- Files are uncommitted (staged in git status)
+
+### Pending Work
+- Test against live senken.pro Supabase with real credentials
+- Authentication flow (tools require auth for create/update operations)
+- May need RLS policies tuned on Supabase side
+
+### Git Status
+Uncommitted files:
+- `src/lib/supabase.ts` (new)
+- `src/tools/studio/cloud-spine.ts` (new)
+- `src/tools/studio/index.ts` (modified - imports cloud-spine)
+- `package.json` (likely has @supabase/supabase-js dep)
+
+---

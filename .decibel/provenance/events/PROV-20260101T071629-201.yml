@@ -1,0 +1,11 @@
+event_id: PROV-20260101T071629-201
+timestamp: 2026-01-01T07:16:29.201Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - learnings:entry:decibel-tools-mcp:4
+reason_code: initial_creation
+summary: "Appended learning: Supabase Cloud Spine Integration Complete"
+fingerprint_before: null
+fingerprint_after: sha256:d47a4d920764062c
