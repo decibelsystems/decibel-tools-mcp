@@ -975,7 +975,8 @@ export async function startHttpServer(
         if (body.device) tags.push(`device:${body.device}`);
 
         // User's explicit intent (from button tap)
-        const userIntent = body.intent as string | undefined;
+        // iOS sends as "event_type", also accept "intent" for compatibility
+        const userIntent = (body.event_type || body.intent) as string | undefined;
 
         // ML classification (optional - graceful fallback if not running)
         const mlResult = await classifyWithML(transcript);

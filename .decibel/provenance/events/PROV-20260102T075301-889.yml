@@ -1,0 +1,11 @@
+event_id: PROV-20260102T075301-889
+timestamp: 2026-01-02T07:53:01.889Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - learnings:entry:decibel-tools-mcp:7
+reason_code: initial_creation
+summary: "Appended learning: iOS Voice Inbox Supabase Fallback Not Working on Render"
+fingerprint_before: null
+fingerprint_after: sha256:75540ec3204458d0

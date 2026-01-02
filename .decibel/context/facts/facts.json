@@ -23,5 +23,12 @@
     "body": "## Deck (MTG Card Scanner) → senken.pro Integration\n\n**Deck** is a Magic: The Gathering card scanner/intelligence app that integrates with the Decibel tools architecture.\n\n### How Deck Connects\n\n**Server**: senken.pro (Render-hosted MCP server)\n**Protocol**: HTTP\n**Auth**: Bearer token (if enabled)\n\n### Key Endpoints for Deck\n\n| Endpoint | Method | Purpose |\n|----------|--------|---------|\n| `/health` | GET | Health check |\n| `/tools` | GET | List available tools |\n| `/call` | POST | Execute any tool |\n\n### POST /call Format\n```json\n{\n  \"tool\": \"tool_name\",\n  \"arguments\": { ... }\n}\n```\n\n### Relevant Tool Domains for Deck\n- **Sentinel** — Track issues, epics for Deck development\n- **Dojo** — Experiment with new card recognition features\n- **Oracle** — Get next actions, project health\n- **Context** — Persist AI memory across sessions\n\n### Stack Behind senken.pro\n- Node.js + TypeScript\n- MCP SDK 1.0\n- PostgreSQL\n- Render.com",
     "trust": "high",
     "ts": "2026-01-01T19:58:18.427Z"
+  },
+  {
+    "id": "1767340147006-0obe48",
+    "title": "Handoff Note",
+    "body": "## Session Handoff — 2026-01-01\n\n**Last session**: Documented senken.pro server stack for Deck app integration.\n\n**Deck** = MTG card scanner/intelligence app (not a presentation deck)\n\n**What was pinned**:\n1. senken.pro stack overview (Node/TS, MCP SDK, PostgreSQL, Render)\n2. Deck app integration guidance\n\n**Next steps** (if user continues):\n- Define which specific tools Deck will use\n- Document card data flow through the system\n- Any Deck-specific endpoints needed on senken.pro",
+    "trust": "high",
+    "ts": "2026-01-02T07:49:07.006Z"
   }
 ]

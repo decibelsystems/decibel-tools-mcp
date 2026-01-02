@@ -188,3 +188,45 @@ def api_inbox():
 - Node path: Uses `DECIBEL_MCP_PATH` env var or `/decibel-mcp` submodule
 
 ---
+### [2026-01-02 07:53:01] iOS Voice Inbox Supabase Fallback Not Working on Render
+**Category:** debug | **Tags:** `supabase`, `render`, `voice-inbox`, `debugging`, `env-vars`
+
+## Current Issue
+The iOS voice capture flow to senken.pro/api/inbox is still failing with:
+```
+Project "deck" registered at /Volumes/Ashitaka/Documents/GitHub/deck but .decibel folder not found
+```
+
+## Root Cause Analysis
+The Supabase fallback in `resolveVoiceRoot()` (voice.ts:90-96) should catch this error and use Supabase instead, but `isSupabaseConfigured()` appears to be returning false on Render.
+
+## Code Already Updated
+1. `isSupabaseConfigured()` in supabase.ts now checks for `SUPABASE_SERVICE_KEY` (not ANON_KEY)
+2. `voiceInboxAdd` supports remote mode writing to Supabase
+3. `voice_inbox_sync` tool added to pull messages locally
+4. Health endpoint includes debug info: `supabase_configured`, `has_supabase_url`, `has_supabase_service_key`
+
+## Next Steps to Debug
+1. Check if deploy with debug health is live: `curl https://senken.pro/mcp/health`
+   - Should now return `node_response` field with supabase config status
+2. If `has_supabase_service_key: false`, the env vars aren't being passed to Node subprocess
+3. Check Render env vars - user said they set them but names may differ:
+   - Expected: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`
+   - User may have set: `SUPABASE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, etc.
+
+## Flask Proxy Architecture
+- Flask on port 10000 (Render's PORT)
+- Node MCP server spawned by Flask on port 8787
+- subprocess.Popen inherits env from Flask by default
+- `/api/inbox` → Flask → `_proxy_json_request('/api/inbox')` → Node httpServer.ts
+
+## Files Modified This Session
+- `/Volumes/Ashitaka/Documents/GitHub/decibel-tools-mcp/src/lib/supabase.ts` - Fixed isSupabaseConfigured
+- `/Volumes/Ashitaka/Documents/GitHub/decibel-tools-mcp/src/httpServer.ts` - Added debug info to /health
+- `/Volumes/Ashitaka/Documents/GitHub/senken-trading-agent/backend/routes/mcp_proxy_routes.py` - Pass through node_response
+
+## Commits Made
+1. decibel-tools-mcp: `103364b` - feat: add Supabase config status to /health endpoint
+2. senken-trading-agent: `14ba04c9` - feat: pass through Node health response for debugging
+
+---
