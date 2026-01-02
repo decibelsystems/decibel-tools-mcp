@@ -1,0 +1,32 @@
+id: DOJO-PROP-0003
+title: Supabase-backed Voice Inbox for Remote Projects
+problem: Voice inbox currently writes to local .decibel/voice/inbox/ folders via
+  resolveVoiceRoot(). When the MCP server runs on Render, it cannot access local
+  project paths. iOS sends project_id but server fails with 'Project X
+  registered at /Volumes/... but .decibel folder not found.'
+hypothesis: If we store voice inbox items in Supabase with project_id as a
+  column, the deployed server can accept messages for any project. Local
+  projects can then pull their messages on demand via a new sync tool.
+owner: ai
+state: draft
+created_at: 2026-01-02T00:13:13.260Z
+project_id: decibel-tools-mcp
+target_module: voice
+scope_in:
+  - Supabase table for voice_inbox items
+  - Modified voiceInboxAdd to write to Supabase when in remote mode
+  - New voice_inbox_sync tool to pull messages to local .decibel
+  - Project ID validation against known projects list
+scope_out:
+  - Changing existing local file operations
+  - ML classification changes
+  - iOS app changes beyond project list
+acceptance:
+  - iOS can POST to /api/inbox with any registered project_id
+  - Messages stored in Supabase with project_id, transcript, intent, etc
+  - Local MCP can call voice_inbox_sync to pull messages for a project
+  - Synced messages appear in local .decibel/voice/inbox/
+risks:
+  - Supabase connection failures need graceful handling
+  - Need to handle duplicate syncs
+  - Auth for Supabase from deployed server

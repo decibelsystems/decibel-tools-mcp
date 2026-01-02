@@ -1,0 +1,11 @@
+event_id: PROV-20260102T001313-262
+timestamp: 2026-01-02T00:13:13.262Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:proposal:DOJO-PROP-0003
+reason_code: initial_creation
+summary: "Created proposal: Supabase-backed Voice Inbox for Remote Projects"
+fingerprint_before: null
+fingerprint_after: sha256:ff154c1809c31364

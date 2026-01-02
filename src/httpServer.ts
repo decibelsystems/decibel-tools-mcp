@@ -32,6 +32,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { log } from './config.js';
+import { isSupabaseConfigured } from './lib/supabase.js';
 import { modularToolMap, modularTools } from './tools/index.js';
 import {
   createProposal,
@@ -497,6 +498,11 @@ export async function startHttpServer(
         status: 'ok',
         version: PKG.version,
         api_version: 'v1',
+        supabase_configured: isSupabaseConfigured(),
+        env_check: {
+          has_supabase_url: !!process.env.SUPABASE_URL,
+          has_supabase_service_key: !!process.env.SUPABASE_SERVICE_KEY,
+        },
       }));
       return;
     }

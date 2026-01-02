@@ -1,0 +1,11 @@
+event_id: PROV-20260102T003124-853
+timestamp: 2026-01-02T00:31:24.853Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-01-02T00-31-24Z-http-server-didn-t-expose-modular-tools-deck-studi.md
+reason_code: initial_creation
+summary: "Created issue: HTTP server didn't expose modular tools (deck, studio, etc.)"
+fingerprint_before: null
+fingerprint_after: sha256:38627e8ea126b83d
