@@ -15,6 +15,8 @@ import {
   VoiceInboxProcessInput,
   voiceCommand,
   VoiceCommandInput,
+  voiceInboxSync,
+  VoiceInboxSyncInput,
 } from '../voice.js';
 
 // ============================================================================
@@ -150,6 +152,37 @@ export const voiceCommandTool: ToolSpec = {
 };
 
 // ============================================================================
+// Voice Inbox Sync Tool
+// ============================================================================
+
+export const voiceInboxSyncTool: ToolSpec = {
+  definition: {
+    name: 'voice_inbox_sync',
+    description: 'Sync voice inbox messages from Supabase to local project. Call this to pull down pending messages that were captured remotely (e.g., from iOS app). Like checking email.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'Project ID to sync messages for (required)' },
+        unsynced_only: { type: 'boolean', description: 'Only sync messages not yet synced (default: true)' },
+        limit: { type: 'number', description: 'Maximum messages to sync (default: 50)' },
+        process_after_sync: { type: 'boolean', description: 'Process synced messages immediately (default: false)' },
+      },
+      required: ['project_id'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as VoiceInboxSyncInput;
+      requireFields(input, 'project_id');
+      const result = await voiceInboxSync(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -158,4 +191,5 @@ export const voiceTools: ToolSpec[] = [
   voiceInboxListTool,
   voiceInboxProcessTool,
   voiceCommandTool,
+  voiceInboxSyncTool,
 ];

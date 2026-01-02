@@ -17,6 +17,7 @@ import { log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectRoot } from '../projectPaths.js';
 import { getDefaultProject } from '../projectRegistry.js';
+import { getSupabaseServiceClient, isSupabaseConfigured } from '../lib/supabase.js';
 
 // ============================================================================
 // Types
@@ -62,20 +63,64 @@ export interface VoiceBaseInput {
 // Voice Inbox Store Operations
 // ============================================================================
 
-async function resolveVoiceRoot(projectId?: string): Promise<{ projectId: string; voiceRoot: string }> {
-  if (projectId) {
-    const project = await resolveProjectRoot(projectId);
+interface VoiceRootResult {
+  projectId: string;
+  voiceRoot: string | null;  // null = use Supabase (remote mode)
+  isRemote: boolean;
+}
+
+async function resolveVoiceRoot(projectId?: string): Promise<VoiceRootResult> {
+  const targetProjectId = projectId || getDefaultProject()?.id;
+
+  if (!targetProjectId) {
+    // No project specified and no default - use Supabase with 'default' project
+    if (isSupabaseConfigured()) {
+      log('voice: No project specified, using Supabase with project_id="default"');
+      return { projectId: 'default', voiceRoot: null, isRemote: true };
+    }
+    throw new Error('No project specified and no default project found.');
+  }
+
+  // Try to resolve local project
+  try {
+    const project = await resolveProjectRoot(targetProjectId);
     const voiceRoot = path.join(project.root, '.decibel', 'voice');
-    return { projectId, voiceRoot };
+    return { projectId: targetProjectId, voiceRoot, isRemote: false };
+  } catch (err) {
+    // Local project not found - use Supabase if configured
+    if (isSupabaseConfigured()) {
+      log(`voice: Project "${targetProjectId}" not found locally, using Supabase`);
+      return { projectId: targetProjectId, voiceRoot: null, isRemote: true };
+    }
+    // Re-throw original error if Supabase not available
+    throw err;
+  }
+}
+
+// Write inbox item to Supabase
+async function writeToSupabase(item: VoiceInboxItem): Promise<void> {
+  const supabase = getSupabaseServiceClient();
+
+  const { error } = await supabase.from('voice_inbox').insert({
+    id: item.id,
+    project_id: item.project_id,
+    transcript: item.transcript,
+    source: item.source,
+    intent: item.intent || 'unknown',
+    intent_confidence: item.intent_confidence || 0,
+    parsed_params: item.parsed_params || {},
+    status: item.status,
+    device: item.tags?.find(t => t.startsWith('device:'))?.replace('device:', '') || null,
+    tags: item.tags || [],
+    created_at: item.created_at,
+  });
+
+  if (error) {
+    log(`voice: Supabase insert error: ${error.message}`);
+    throw new Error(`Failed to write to Supabase: ${error.message}`);
   }
 
-  const defaultProject = getDefaultProject();
-  if (defaultProject) {
-    const voiceRoot = path.join(defaultProject.path, '.decibel', 'voice');
-    return { projectId: defaultProject.id, voiceRoot };
-  }
-
-  throw new Error('No project specified and no default project found.');
+  log(`voice: Wrote inbox item ${item.id} to Supabase for project "${item.project_id}"`);
 }
 
 function generateInboxId(): string {
@@ -226,9 +271,7 @@ export interface VoiceInboxAddOutput {
 }
 
 export async function voiceInboxAdd(input: VoiceInboxAddInput): Promise<VoiceInboxAddOutput> {
-  const { projectId, voiceRoot } = await resolveVoiceRoot(input.project_id);
-  const inboxDir = path.join(voiceRoot, 'inbox');
-  ensureDir(inboxDir);
+  const { projectId, voiceRoot, isRemote } = await resolveVoiceRoot(input.project_id);
 
   const inboxId = generateInboxId();
   const timestamp = new Date().toISOString();
@@ -265,16 +308,25 @@ export async function voiceInboxAdd(input: VoiceInboxAddInput): Promise<VoiceInb
     project_id: projectId,
   };
 
-  // Write to inbox
-  const itemPath = path.join(inboxDir, `${inboxId}.yaml`);
-  await fs.writeFile(itemPath, YAML.stringify(item), 'utf-8');
-  log(`voice: Added inbox item ${inboxId} with intent "${intent}" (${(confidence * 100).toFixed(0)}%)`);
+  // Write to storage (Supabase for remote, local files otherwise)
+  if (isRemote) {
+    await writeToSupabase(item);
+  } else {
+    const inboxDir = path.join(voiceRoot!, 'inbox');
+    ensureDir(inboxDir);
+    const itemPath = path.join(inboxDir, `${inboxId}.yaml`);
+    await fs.writeFile(itemPath, YAML.stringify(item), 'utf-8');
+    log(`voice: Added inbox item ${inboxId} with intent "${intent}" (${(confidence * 100).toFixed(0)}%)`);
+  }
 
-  // Process immediately if requested and confidence is high enough
+  // Process immediately if requested, confidence is high enough, and running locally
+  // (Remote mode skips processing - messages are just stored for later sync)
   let immediateResult: unknown;
-  if (input.process_immediately && confidence >= 0.7) {
+  if (input.process_immediately && confidence >= 0.7 && !isRemote) {
+    const inboxDir = path.join(voiceRoot!, 'inbox');
+    const itemPath = path.join(inboxDir, `${inboxId}.yaml`);
     try {
-      immediateResult = await processVoiceItem(item, voiceRoot);
+      immediateResult = await processVoiceItem(item, voiceRoot!);
       item.status = 'completed';
       item.result = {
         tool_called: intent,
@@ -296,6 +348,8 @@ export async function voiceInboxAdd(input: VoiceInboxAddInput): Promise<VoiceInb
     intent_confidence: confidence,
     status: item.status,
     immediate_result: immediateResult,
+    // Include remote flag in output so caller knows message was stored remotely
+    ...(isRemote && { stored_in: 'supabase' as const }),
   };
 }
 
@@ -315,8 +369,7 @@ export interface VoiceInboxListOutput {
 }
 
 export async function voiceInboxList(input: VoiceInboxListInput): Promise<VoiceInboxListOutput> {
-  const { voiceRoot } = await resolveVoiceRoot(input.project_id);
-  const inboxDir = path.join(voiceRoot, 'inbox');
+  const { projectId, voiceRoot, isRemote } = await resolveVoiceRoot(input.project_id);
 
   const items: VoiceInboxItem[] = [];
   const byStatus: Record<VoiceInboxStatus, number> = {
@@ -326,35 +379,80 @@ export async function voiceInboxList(input: VoiceInboxListInput): Promise<VoiceI
     failed: 0,
   };
 
-  try {
-    const files = await fs.readdir(inboxDir);
-    for (const file of files) {
-      if (!file.endsWith('.yaml')) continue;
-      try {
-        const content = await fs.readFile(path.join(inboxDir, file), 'utf-8');
-        const item = YAML.parse(content) as VoiceInboxItem;
-        byStatus[item.status]++;
+  if (isRemote) {
+    // Query Supabase for remote mode
+    const supabase = getSupabaseServiceClient();
+    let query = supabase
+      .from('voice_inbox')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false });
 
-        // Apply filters
-        if (input.status && item.status !== input.status) continue;
-
-        items.push(item);
-      } catch {
-        // Skip malformed files
-      }
+    if (input.status) {
+      query = query.eq('status', input.status);
     }
-  } catch {
-    // Directory doesn't exist yet
+    if (input.limit) {
+      query = query.limit(input.limit);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Failed to query Supabase: ${error.message}`);
+    }
+
+    for (const row of data || []) {
+      byStatus[row.status as VoiceInboxStatus]++;
+      items.push({
+        id: row.id,
+        transcript: row.transcript,
+        source: row.source as VoiceInboxSource,
+        created_at: row.created_at,
+        status: row.status as VoiceInboxStatus,
+        intent: row.intent as VoiceIntent,
+        intent_confidence: row.intent_confidence,
+        parsed_params: row.parsed_params || {},
+        result: row.result || undefined,
+        error: row.error || undefined,
+        tags: row.tags || [],
+        project_id: row.project_id,
+      });
+    }
+  } else {
+    // Read from local filesystem
+    const inboxDir = path.join(voiceRoot!, 'inbox');
+
+    try {
+      const files = await fs.readdir(inboxDir);
+      for (const file of files) {
+        if (!file.endsWith('.yaml')) continue;
+        try {
+          const content = await fs.readFile(path.join(inboxDir, file), 'utf-8');
+          const item = YAML.parse(content) as VoiceInboxItem;
+          byStatus[item.status]++;
+
+          // Apply filters
+          if (input.status && item.status !== input.status) continue;
+
+          items.push(item);
+        } catch {
+          // Skip malformed files
+        }
+      }
+    } catch {
+      // Directory doesn't exist yet
+    }
+
+    // Sort by created_at descending (newest first)
+    items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    // Apply limit
+    if (input.limit) {
+      items.splice(input.limit);
+    }
   }
 
-  // Sort by created_at descending (newest first)
-  items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-  // Apply limit
-  const limited = input.limit ? items.slice(0, input.limit) : items;
-
   return {
-    items: limited,
+    items,
     total: items.length,
     by_status: byStatus,
   };
@@ -468,8 +566,14 @@ async function processVoiceItem(item: VoiceInboxItem, voiceRoot: string): Promis
 }
 
 export async function voiceInboxProcess(input: VoiceInboxProcessInput): Promise<VoiceInboxProcessOutput> {
-  const { voiceRoot } = await resolveVoiceRoot(input.project_id);
-  const inboxDir = path.join(voiceRoot, 'inbox');
+  const { voiceRoot, isRemote } = await resolveVoiceRoot(input.project_id);
+
+  // Processing requires local project - sync first if running remotely
+  if (isRemote) {
+    throw new Error('Cannot process voice items in remote mode. Use voice_inbox_sync to pull messages to local first.');
+  }
+
+  const inboxDir = path.join(voiceRoot!, 'inbox');
   const itemPath = path.join(inboxDir, `${input.inbox_id}.yaml`);
 
   // Read item
@@ -494,7 +598,7 @@ export async function voiceInboxProcess(input: VoiceInboxProcessInput): Promise<
   await fs.writeFile(itemPath, YAML.stringify(item), 'utf-8');
 
   try {
-    const result = await processVoiceItem(item, voiceRoot);
+    const result = await processVoiceItem(item, voiceRoot!);
 
     // Mark as completed
     item.status = 'completed';
@@ -550,7 +654,12 @@ export interface VoiceCommandOutput {
  * Use for real-time voice interactions.
  */
 export async function voiceCommand(input: VoiceCommandInput): Promise<VoiceCommandOutput> {
-  const { projectId, voiceRoot } = await resolveVoiceRoot(input.project_id);
+  const { projectId, voiceRoot, isRemote } = await resolveVoiceRoot(input.project_id);
+
+  // Direct processing requires local project
+  if (isRemote) {
+    throw new Error('Cannot process voice commands in remote mode. Use voice_inbox_add to queue, then sync locally.');
+  }
 
   // Parse intent
   const { intent, confidence, params } = parseIntent(input.transcript);
@@ -571,7 +680,7 @@ export async function voiceCommand(input: VoiceCommandInput): Promise<VoiceComma
   };
 
   try {
-    const result = await processVoiceItem(item, voiceRoot);
+    const result = await processVoiceItem(item, voiceRoot!);
     return {
       transcript: input.transcript,
       intent,
@@ -590,6 +699,170 @@ export async function voiceCommand(input: VoiceCommandInput): Promise<VoiceComma
       success: false,
     };
   }
+}
+
+// ============================================================================
+// MCP Tool: Sync Voice Inbox from Supabase
+// ============================================================================
+
+export interface VoiceInboxSyncInput extends VoiceBaseInput {
+  /** Only sync unsynced messages (default: true) */
+  unsynced_only?: boolean;
+  /** Maximum messages to sync (default: 50) */
+  limit?: number;
+  /** If true, also process synced messages immediately */
+  process_after_sync?: boolean;
+}
+
+export interface VoiceInboxSyncOutput {
+  synced: number;
+  skipped: number;
+  errors: number;
+  items: Array<{
+    id: string;
+    transcript: string;
+    intent: VoiceIntent;
+    status: 'synced' | 'already_exists' | 'error';
+    error?: string;
+  }>;
+}
+
+/**
+ * Sync voice inbox messages from Supabase to local project.
+ * This is the "pull" operation - projects can call this to get pending messages.
+ */
+export async function voiceInboxSync(input: VoiceInboxSyncInput): Promise<VoiceInboxSyncOutput> {
+  if (!isSupabaseConfigured()) {
+    throw new Error('Supabase is not configured. Cannot sync from remote.');
+  }
+
+  // Must have a local project to sync to
+  const targetProjectId = input.project_id || getDefaultProject()?.id;
+  if (!targetProjectId) {
+    throw new Error('No project specified and no default project found.');
+  }
+
+  // Verify local project exists
+  let voiceRoot: string;
+  try {
+    const project = await resolveProjectRoot(targetProjectId);
+    voiceRoot = path.join(project.root, '.decibel', 'voice');
+  } catch (err) {
+    throw new Error(`Cannot sync: local project "${targetProjectId}" not found.`);
+  }
+
+  const supabase = getSupabaseServiceClient();
+  const unsyncedOnly = input.unsynced_only !== false; // default true
+  const limit = input.limit || 50;
+
+  // Query Supabase for messages
+  let query = supabase
+    .from('voice_inbox')
+    .select('*')
+    .eq('project_id', targetProjectId)
+    .order('created_at', { ascending: true })
+    .limit(limit);
+
+  if (unsyncedOnly) {
+    query = query.is('synced_at', null);
+  }
+
+  const { data: messages, error: queryError } = await query;
+
+  if (queryError) {
+    throw new Error(`Failed to query Supabase: ${queryError.message}`);
+  }
+
+  if (!messages || messages.length === 0) {
+    log(`voice: No messages to sync for project "${targetProjectId}"`);
+    return { synced: 0, skipped: 0, errors: 0, items: [] };
+  }
+
+  log(`voice: Found ${messages.length} messages to sync for project "${targetProjectId}"`);
+
+  const inboxDir = path.join(voiceRoot, 'inbox');
+  ensureDir(inboxDir);
+
+  const results: VoiceInboxSyncOutput['items'] = [];
+  const syncedIds: string[] = [];
+
+  for (const msg of messages) {
+    const itemPath = path.join(inboxDir, `${msg.id}.yaml`);
+
+    // Check if already exists locally
+    try {
+      await fs.access(itemPath);
+      // File exists - skip
+      results.push({
+        id: msg.id,
+        transcript: msg.transcript,
+        intent: msg.intent as VoiceIntent,
+        status: 'already_exists',
+      });
+      continue;
+    } catch {
+      // File doesn't exist - good, we'll create it
+    }
+
+    // Convert Supabase row to VoiceInboxItem
+    const item: VoiceInboxItem = {
+      id: msg.id,
+      transcript: msg.transcript,
+      source: msg.source as VoiceInboxSource,
+      created_at: msg.created_at,
+      status: msg.status as VoiceInboxStatus,
+      intent: msg.intent as VoiceIntent,
+      intent_confidence: msg.intent_confidence,
+      parsed_params: msg.parsed_params || {},
+      result: msg.result || undefined,
+      error: msg.error || undefined,
+      tags: msg.tags || [],
+      project_id: msg.project_id,
+    };
+
+    try {
+      await fs.writeFile(itemPath, YAML.stringify(item), 'utf-8');
+      syncedIds.push(msg.id);
+      results.push({
+        id: msg.id,
+        transcript: msg.transcript,
+        intent: msg.intent as VoiceIntent,
+        status: 'synced',
+      });
+      log(`voice: Synced message ${msg.id}`);
+    } catch (err) {
+      results.push({
+        id: msg.id,
+        transcript: msg.transcript,
+        intent: msg.intent as VoiceIntent,
+        status: 'error',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // Update synced_at in Supabase for successfully synced messages
+  if (syncedIds.length > 0) {
+    const { error: updateError } = await supabase
+      .from('voice_inbox')
+      .update({ synced_at: new Date().toISOString() })
+      .in('id', syncedIds);
+
+    if (updateError) {
+      log(`voice: Warning - failed to update synced_at: ${updateError.message}`);
+    }
+  }
+
+  const summary = {
+    synced: results.filter(r => r.status === 'synced').length,
+    skipped: results.filter(r => r.status === 'already_exists').length,
+    errors: results.filter(r => r.status === 'error').length,
+    items: results,
+  };
+
+  log(`voice: Sync complete - ${summary.synced} synced, ${summary.skipped} skipped, ${summary.errors} errors`);
+
+  return summary;
 }
 
 // ============================================================================
@@ -660,6 +933,20 @@ export const voiceToolDefinitions = [
         transcript: { type: 'string', description: 'The voice transcript to process' },
       },
       required: ['transcript'],
+    },
+  },
+  {
+    name: 'voice_inbox_sync',
+    description: 'Sync voice inbox messages from Supabase to local project. Call this to pull down pending messages that were captured remotely (e.g., from iOS app). Like checking email.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'Project ID to sync messages for (required)' },
+        unsynced_only: { type: 'boolean', description: 'Only sync messages not yet synced (default: true)' },
+        limit: { type: 'number', description: 'Maximum messages to sync (default: 50)' },
+        process_after_sync: { type: 'boolean', description: 'Process synced messages immediately (default: false)' },
+      },
+      required: ['project_id'],
     },
   },
 ];
