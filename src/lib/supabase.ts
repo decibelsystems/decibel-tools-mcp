@@ -170,10 +170,11 @@ export function getSupabaseServiceClient(): SupabaseClient<any> {
 }
 
 /**
- * Check if Supabase is configured
+ * Check if Supabase is configured (for service-level operations like voice inbox)
+ * Requires URL and SERVICE_KEY for server-side writes
  */
 export function isSupabaseConfigured(): boolean {
-  return !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY);
+  return !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY);
 }
 
 /**
