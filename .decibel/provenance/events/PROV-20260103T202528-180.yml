@@ -1,0 +1,11 @@
+event_id: PROV-20260103T202528-180
+timestamp: 2026-01-03T20:25:28.180Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-01-03T20-25-28Z-first-ever-cursor-project-connected-successfully.md
+reason_code: initial_creation
+summary: "Created issue: First ever Cursor project connected successfully"
+fingerprint_before: null
+fingerprint_after: sha256:695f451defaf5f93
