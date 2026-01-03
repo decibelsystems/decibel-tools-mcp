@@ -36,4 +36,4 @@ description: |-
 
 ## Resolution
 
-Added cursor boolean flag to project_init that generates .cursor/mcp.json
+Shipped with Cursor integration
