@@ -1,0 +1,37 @@
+id: ISS-0033
+title: Create Cursor platform documentation
+project: decibel-tools-mcp
+status: open
+priority: medium
+epic_id: EPIC-0024
+tags:
+  - cursor
+  - docs
+created_at: 2026-01-03T19:34:33.081Z
+updated_at: 2026-01-03T19:34:33.081Z
+description: |-
+  Create platform-specific documentation for Cursor integration.
+
+  Location: `docs/platforms/cursor.md`
+
+  Contents:
+  1. Quick Start (one-click button)
+  2. Manual Setup
+     - Global config (~/.cursor/mcp.json)
+     - Project config (.cursor/mcp.json)
+  3. Verifying Connection
+     - Green indicator in MCP panel
+     - Tool count visible
+  4. Using in Agent Mode
+     - Example prompts
+     - Tool invocation patterns
+  5. Troubleshooting
+     - Common errors
+     - npx cache issues
+     - Node version requirements
+
+  Add link from main README and docs index.
+
+## Resolution
+
+Created docs/platforms/cursor.md with quick start, verification, agent mode usage, and troubleshooting

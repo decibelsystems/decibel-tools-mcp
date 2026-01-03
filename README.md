@@ -2,6 +2,10 @@
 
 MCP (Model Context Protocol) server exposing Decibel tools (Designer, Architect, Sentinel, Oracle, Learnings) over stdio. Connect from Cursor, Claude, ChatGPT, and other MCP-compatible clients.
 
+<a href="cursor://anysphere.cursor-deeplink/mcp/install?name=decibel-tools&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImRlY2liZWwtdG9vbHMtbWNwIl19">
+  <img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add Decibel Tools to Cursor" height="32" />
+</a>
+
 ## Features
 
 - **Designer** - Record design decisions with project tracking
@@ -63,19 +67,25 @@ cp .env.example .env
 
 ### Cursor
 
-Add to your Cursor MCP configuration (`~/.cursor/mcp.json` or project `.cursor/mcp.json`):
+**One-click install:** Click the button at the top of this README, or use the deep link:
+```
+cursor://anysphere.cursor-deeplink/mcp/install?name=decibel-tools&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImRlY2liZWwtdG9vbHMtbWNwIl19
+```
+
+**Manual setup:** Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project-local):
 
 ```json
 {
   "mcpServers": {
     "decibel-tools": {
-      "command": "node",
-      "type": "stdio",
-      "args": ["/path/to/decibel-tools-mcp/dist/server.js"]
+      "command": "npx",
+      "args": ["-y", "decibel-tools-mcp"]
     }
   }
 }
 ```
+
+See [Cursor platform docs](docs/platforms/cursor.md) for troubleshooting and advanced setup.
 
 ### Claude Desktop
 

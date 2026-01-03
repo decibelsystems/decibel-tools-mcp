@@ -1,0 +1,35 @@
+id: ISS-0035
+title: Deploy Remote MCP server to Vercel (Streamable HTTP)
+project: decibel-tools-mcp
+status: open
+priority: high
+epic_id: EPIC-0024
+tags:
+  - vercel
+  - remote-mcp
+  - infrastructure
+created_at: 2026-01-03T19:34:53.077Z
+updated_at: 2026-01-03T19:34:53.077Z
+description: |-
+  Deploy Decibel Tools MCP server to Vercel with Streamable HTTP transport.
+
+  This unlocks:
+  - Vercel v0
+  - ChatGPT Developer Mode
+  - Lovable custom connectors
+
+  Implementation:
+  1. Use Vercel MCP adapter / mcp-handler
+  2. Implement Streamable HTTP transport (replaces SSE)
+  3. Add OAuth support per MCP spec
+  4. Enable Fluid compute for efficient scaling
+  5. Project-specific URLs for context
+
+  Reference:
+  - https://vercel.com/docs/mcp/deploy-mcp-servers-to-vercel
+  - Vercel MCP template: https://vercel.com/templates/ai/model-context-protocol-mcp-with-vercel-functions
+
+  Challenge: Remote server needs to access project's .decibel/ folder. Options:
+  - User provides project path/repo URL
+  - GitHub integration to read .decibel/ from repo
+  - Local proxy (mcp-remote) for hybrid approach

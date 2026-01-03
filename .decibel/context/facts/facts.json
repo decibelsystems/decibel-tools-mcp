@@ -30,5 +30,12 @@
     "body": "## Session Handoff — 2026-01-01\n\n**Last session**: Documented senken.pro server stack for Deck app integration.\n\n**Deck** = MTG card scanner/intelligence app (not a presentation deck)\n\n**What was pinned**:\n1. senken.pro stack overview (Node/TS, MCP SDK, PostgreSQL, Render)\n2. Deck app integration guidance\n\n**Next steps** (if user continues):\n- Define which specific tools Deck will use\n- Document card data flow through the system\n- Any Deck-specific endpoints needed on senken.pro",
     "trust": "high",
     "ts": "2026-01-02T07:49:07.006Z"
+  },
+  {
+    "id": "1767375650127-gk5job",
+    "title": "Voice Inbox Sync Protocol",
+    "body": "## Voice Inbox: iOS → Supabase → Local\n\nHuman can send voice messages from iOS app. These go to **Supabase** first, NOT local files.\n\n**To check for voice messages:**\n1. Run `voice_inbox_sync` with `project_id` for the project you're working on\n2. This pulls queued messages from Supabase → local `.decibel/voice/inbox/`\n3. Then you can see and act on them\n\n**Proactive check**: When starting a session on a project, consider running `voice_inbox_sync` to see if human sent any voice notes.",
+    "trust": "high",
+    "ts": "2026-01-02T17:40:50.127Z"
   }
 ]

@@ -1,0 +1,29 @@
+id: ISS-0036
+title: Enable ChatGPT Developer Mode integration
+project: decibel-tools-mcp
+status: open
+priority: medium
+epic_id: EPIC-0024
+tags:
+  - chatgpt
+  - remote-mcp
+  - distribution
+created_at: 2026-01-03T19:35:00.400Z
+updated_at: 2026-01-03T19:35:00.400Z
+description: |-
+  Enable Decibel Tools as ChatGPT custom connector via Developer Mode.
+
+  Prerequisites:
+  - Remote MCP deployed (ISS-0035)
+
+  Setup:
+  1. Settings → Connectors → Advanced → Developer Mode
+  2. Add MCP server URL
+  3. OAuth flow if enabled
+
+  Documentation needed:
+  - Step-by-step setup guide
+  - Example prompts for Decibel tools
+  - Limitations (remote only, no localhost)
+
+  Future: Consider ChatGPT app directory submission for wider distribution.

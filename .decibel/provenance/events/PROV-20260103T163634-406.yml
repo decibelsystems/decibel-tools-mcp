@@ -1,0 +1,11 @@
+event_id: PROV-20260103T163634-406
+timestamp: 2026-01-03T16:36:34.406Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:proposal:DOJO-PROP-0004
+reason_code: initial_creation
+summary: "Created proposal: HTTP Status & Projects Endpoints for iOS App"
+fingerprint_before: null
+fingerprint_after: sha256:4561a9651846bf76

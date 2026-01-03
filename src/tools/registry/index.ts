@@ -132,6 +132,10 @@ This creates: architect/, designer/, sentinel/, dojo/, oracle/, context/, fricti
           type: 'boolean',
           description: 'Overwrite existing .decibel folder if present',
         },
+        cursor: {
+          type: 'boolean',
+          description: 'Generate .cursor/mcp.json for Cursor MCP integration',
+        },
       },
       required: ['path'],
     },
@@ -195,6 +199,30 @@ decibel_version: "1.0"
         fs.writeFileSync(manifestPath, manifestContent);
       }
 
+      // Generate .cursor/mcp.json if requested
+      let cursorConfigCreated = false;
+      if (args.cursor) {
+        const cursorDir = path.join(args.path, '.cursor');
+        const cursorConfigPath = path.join(cursorDir, 'mcp.json');
+
+        if (!fs.existsSync(cursorDir)) {
+          fs.mkdirSync(cursorDir, { recursive: true });
+        }
+
+        const cursorConfig = {
+          mcpServers: {
+            'decibel-tools': {
+              command: 'npx',
+              args: ['-y', 'decibel-tools-mcp'],
+              env: {},
+            },
+          },
+        };
+
+        fs.writeFileSync(cursorConfigPath, JSON.stringify(cursorConfig, null, 2) + '\n');
+        cursorConfigCreated = true;
+      }
+
       // Register in project registry
       try {
         registerProject({
@@ -211,6 +239,15 @@ decibel_version: "1.0"
         }
       }
 
+      const nextSteps = [
+        `Project is ready! Use projectId="${projectId}" in tool calls.`,
+        'Available tools: sentinel_log_epic, sentinel_createIssue, designer_record_design_decision, architect_createAdr, dojo_add_wish, friction_log, learnings_append',
+      ];
+
+      if (cursorConfigCreated) {
+        nextSteps.push('Cursor config created at .cursor/mcp.json - restart Cursor to activate');
+      }
+
       return toolSuccess({
         success: true,
         message: `Project "${projectId}" initialized and registered`,
@@ -225,10 +262,11 @@ decibel_version: "1.0"
           created: createdDirs.length,
           folders: DECIBEL_STRUCTURE,
         },
-        next_steps: [
-          `Project is ready! Use projectId="${projectId}" in tool calls.`,
-          'Available tools: sentinel_log_epic, sentinel_createIssue, designer_record_design_decision, architect_createAdr, dojo_add_wish, friction_log, learnings_append',
-        ],
+        cursor: cursorConfigCreated ? {
+          config_path: path.join(args.path, '.cursor', 'mcp.json'),
+          server_name: 'decibel-tools',
+        } : undefined,
+        next_steps: nextSteps,
       });
     } catch (err) {
       return toolError(err instanceof Error ? err.message : String(err));

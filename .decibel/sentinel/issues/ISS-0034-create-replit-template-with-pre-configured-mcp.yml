@@ -1,0 +1,28 @@
+id: ISS-0034
+title: Create Replit template with pre-configured MCP
+project: decibel-tools-mcp
+status: open
+priority: medium
+epic_id: EPIC-0024
+tags:
+  - replit
+  - template
+  - distribution
+created_at: 2026-01-03T19:34:41.242Z
+updated_at: 2026-01-03T19:34:41.242Z
+description: |-
+  Create a Replit template with Decibel Tools pre-configured.
+
+  Requirements:
+  1. MCP server runs as background process in container
+  2. Replit Agent connects via stdio or localhost SSE
+  3. .decibel/ folder included in template
+  4. Setup script handles installation on fork
+
+  Investigate:
+  - Replit background workers / always-on
+  - .replit config file options
+  - Agent MCP configuration location
+  - Template publishing process
+
+  Template should be minimal but functional - users fork and get working Decibel immediately.

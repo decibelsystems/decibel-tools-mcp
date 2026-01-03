@@ -145,3 +145,16 @@ When investigating issues, bugs, or unexpected behavior:
 - ❌ Jumping to solutions before completing hypothesis set
 - ❌ Treating absence of evidence as evidence of absence
 - ❌ Confidence > 80% without call chain or log confirmation
+
+---
+
+## Voice Inbox Protocol
+
+Human sends voice notes via iOS → Supabase. **Messages don't go to local files directly.**
+
+**At session start**, run:
+```
+voice_inbox_sync with project_id: "decibel-tools-mcp"
+```
+
+This pulls queued messages from Supabase → local `.decibel/voice/inbox/` so you can see and act on them.

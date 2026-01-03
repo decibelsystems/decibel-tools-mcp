@@ -1,0 +1,39 @@
+id: ISS-0032
+title: Add --cursor flag to project_init for .cursor/mcp.json generation
+project: decibel-tools-mcp
+status: open
+priority: high
+epic_id: EPIC-0024
+tags:
+  - cursor
+  - project-init
+  - config
+created_at: 2026-01-03T19:34:25.522Z
+updated_at: 2026-01-03T19:34:25.522Z
+description: |-
+  Add --cursor flag to project_init that generates `.cursor/mcp.json` in the project root.
+
+  Output file:
+  ```json
+  {
+    "mcpServers": {
+      "decibel-tools": {
+        "command": "npx",
+        "args": ["-y", "decibel-tools-mcp"],
+        "env": {}
+      }
+    }
+  }
+  ```
+
+  Implementation:
+  - Add flag to project_init tool
+  - Create .cursor/ directory if needed
+  - Write mcp.json with proper formatting
+  - Log success message
+
+  Could also support `--cursor-dev` for local development path.
+
+## Resolution
+
+Added cursor boolean flag to project_init that generates .cursor/mcp.json

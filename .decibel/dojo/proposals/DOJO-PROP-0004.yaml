@@ -1,0 +1,39 @@
+id: DOJO-PROP-0004
+title: HTTP Status & Projects Endpoints for iOS App
+problem: iOS app (Tools) calls /api/status and /api/projects on senken.pro but
+  these endpoints don't exist on the MCP server. The /api/inbox endpoint works
+  because it's proxied, but status/projects return 404. This breaks the
+  StatusView and project picker in the mobile app.
+hypothesis: Adding /api/status and /api/projects endpoints to httpServer.ts that
+  aggregate existing MCP tool data (sentinel issues/epics, registry projects)
+  will enable the iOS app to display live project status without any iOS code
+  changes.
+owner: ai
+state: draft
+created_at: 2026-01-03T16:36:34.399Z
+project_id: decibel-tools-mcp
+target_module: tools
+scope_in:
+  - Add GET /api/projects endpoint - return registry_list data
+  - Add GET /api/status endpoint - aggregate sentinel data into StatusSnapshot
+    format
+  - Add GET /health at /api/health as alternative (since /health goes to Next.js)
+  - Wire up existing tool functions (listIssues, listEpics, registryList) to
+    HTTP responses
+scope_out:
+  - Changes to iOS app
+  - Authentication/rate limiting (use existing auth if configured)
+  - New MCP tools
+  - Database changes
+acceptance:
+  - "curl senken.pro/api/projects returns {projects: [...]} with id, name,
+    aliases"
+  - curl senken.pro/api/status returns StatusSnapshot with systems, projects,
+    alerts
+  - "curl senken.pro/api/health returns {status: 'ok', version: ...}"
+  - iOS StatusView displays live data instead of 'NO STATUS AVAILABLE'
+risks:
+  - Proxy config on senken.pro needs to forward /api/status and /api/projects to
+    MCP server
+  - StatusSnapshot schema in iOS may not match what we return - need to match
+    exactly
