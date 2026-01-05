@@ -37,5 +37,12 @@
     "body": "## Voice Inbox: iOS → Supabase → Local\n\nHuman can send voice messages from iOS app. These go to **Supabase** first, NOT local files.\n\n**To check for voice messages:**\n1. Run `voice_inbox_sync` with `project_id` for the project you're working on\n2. This pulls queued messages from Supabase → local `.decibel/voice/inbox/`\n3. Then you can see and act on them\n\n**Proactive check**: When starting a session on a project, consider running `voice_inbox_sync` to see if human sent any voice notes.",
     "trust": "high",
     "ts": "2026-01-02T17:40:50.127Z"
+  },
+  {
+    "id": "1767596931986-ohjpo4",
+    "title": "Tools Dashboard - Next Session",
+    "body": "Ben is thinking about building a visual dashboard for Decibel tools. Key context:\n\n**What it would surface:**\n- Sentinel: Epic kanban, issue heatmap, health scores\n- Dojo: Wish → Proposal → Experiment pipeline\n- Oracle: Roadmap timeline, milestone progress\n- Architect: ADR timeline, policy status\n- Designer: Crits stream, decision log\n- Friction: Pain points ranked by signal\n- Voice: Inbox queue\n\n**Options discussed:**\n1. Web dashboard (React/Next.js + HTTP wrapper)\n2. Native macOS (SwiftUI)\n3. Electron/Tauri desktop\n4. Terminal UI (Blessed/Ink)\n\n**No decision yet** - pick up the conversation about which approach to take and whether to capture as a Dojo wish/proposal first.",
+    "trust": "high",
+    "ts": "2026-01-05T07:08:51.986Z"
   }
 ]

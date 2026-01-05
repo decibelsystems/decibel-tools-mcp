@@ -1,9 +1,14 @@
 {
   "name": "decibel-tools-mcp",
-  "version": "4.0.2",
+  "version": "1.0.2",
   "description": "MCP server exposing Decibel tools (Designer, Architect, Sentinel, Oracle) over stdio",
   "main": "dist/server.js",
   "type": "module",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/server.ts",
@@ -26,7 +31,7 @@
     "sentinel",
     "oracle"
   ],
-  "author": "mediareason",
+  "author": "Decibel Systems",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

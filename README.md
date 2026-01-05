@@ -1,78 +1,49 @@
 # decibel-tools-mcp
 
-MCP (Model Context Protocol) server exposing Decibel tools (Designer, Architect, Sentinel, Oracle, Learnings) over stdio. Connect from Cursor, Claude, ChatGPT, and other MCP-compatible clients.
+MCP server that gives AI assistants structured access to project intelligence: epics, issues, ADRs, experiments, roadmaps, and more.
+
+**92 tools** across 14 domains. Tested with Claude Desktop, Claude Code, and Cursor.
 
 <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=decibel-tools&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImRlY2liZWwtdG9vbHMtbWNwIl19">
-  <img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add Decibel Tools to Cursor" height="32" />
+  <img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add to Cursor" height="32" />
 </a>
 
-## Features
+## What It Does
 
-- **Designer** - Record design decisions with project tracking
-- **Architect** - Create Architecture Decision Records (ADRs)
-- **Sentinel** - Track issues and epics with severity levels
-- **Oracle** - Get AI-powered next action recommendations
-- **Learnings** - Maintain living technical learnings documents
+| Domain | Purpose | Example Tools |
+|--------|---------|---------------|
+| **Sentinel** | Work tracking | `sentinel_create_issue`, `sentinel_log_epic`, `sentinel_list_epics` |
+| **Dojo** | AI incubator | `dojo_add_wish`, `dojo_create_proposal`, `dojo_run_experiment` |
+| **Architect** | Decisions | `architect_createAdr`, `architect_createPolicy` |
+| **Roadmap** | Strategy | `roadmap_get`, `roadmap_getHealth`, `roadmap_linkEpic` |
+| **Oracle** | Recommendations | `oracle_next_actions`, `oracle_roadmap` |
+| **Designer** | Design decisions | `designer_record_design_decision`, `designer_crit` |
+| **Friction** | Pain points | `friction_log`, `friction_bump`, `friction_resolve` |
+| **Learnings** | Knowledge base | `learnings_append`, `learnings_list` |
+| **Voice** | Voice commands | `voice_inbox_sync`, `voice_inbox_list`, `voice_command` |
+| **Context** | AI memory | `decibel_context_pin`, `decibel_context_refresh` |
+| **Studio** | Asset generation | `studio_generate_image`, `studio_list_projects` |
+| **Registry** | Project management | `project_init`, `registry_list`, `registry_add` |
+| **Agentic** | Config compilation | `agentic_compile_pack`, `agentic_render` |
+| **Provenance** | Audit trail | `provenance_list` |
 
 ## Quick Start
 
-### Installation
-
 ```bash
-npm install
+# Install globally
+npm install -g decibel-tools-mcp
+
+# Or run directly with npx
+npx decibel-tools-mcp
 ```
 
-### Development
-
-Run the server in development mode:
-
-```bash
-npm run dev
-```
-
-### Production Build
-
-```bash
-npm run build
-npm start
-```
-
-### Testing
-
-Run the test script to verify all tools work:
-
-```bash
-npm test
-```
-
-## Configuration
-
-The server uses environment variables for configuration:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DECIBEL_ENV` | `dev` | Environment (dev, staging, prod) |
-| `DECIBEL_ORG` | `mediareason` | Organization name |
-| `DECIBEL_MCP_ROOT` | `~/.decibel` | Root directory for global data storage |
-
-Data is stored in project-local `.decibel/` folders when available, falling back to the global root for cross-project data.
-
-Copy `.env.example` to `.env` and configure as needed:
-
-```bash
-cp .env.example .env
-```
-
-## Connecting to Clients
+## Platform Setup
 
 ### Cursor
 
-**One-click install:** Click the button at the top of this README, or use the deep link:
-```
-cursor://anysphere.cursor-deeplink/mcp/install?name=decibel-tools&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImRlY2liZWwtdG9vbHMtbWNwIl19
-```
+**One-click:** Click the button at the top of this README.
 
-**Manual setup:** Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project-local):
+**Manual:** Add to `~/.cursor/mcp.json`:
 
 ```json
 {
@@ -85,251 +56,237 @@ cursor://anysphere.cursor-deeplink/mcp/install?name=decibel-tools&config=eyJjb21
 }
 ```
 
-See [Cursor platform docs](docs/platforms/cursor.md) for troubleshooting and advanced setup.
-
 ### Claude Desktop
 
-Add to your Claude configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ```json
 {
   "mcpServers": {
     "decibel-tools": {
-      "command": "node",
-      "args": ["/path/to/decibel-tools-mcp/dist/server.js"]
+      "command": "npx",
+      "args": ["-y", "decibel-tools-mcp"]
     }
   }
 }
 ```
 
-The server will automatically discover `.decibel/` folders in your projects. No `DECIBEL_MCP_ROOT` environment variable is needed for typical use.
+---
 
 ## Tools Reference
 
-### designer_record_design_decision
+### Sentinel (16 tools)
+*Work tracking: issues, epics, test specs*
 
-Record a design decision for a project.
+| Tool | Description |
+|------|-------------|
+| `sentinel_create_issue` | Create a tracked issue with severity (low/med/high/critical) |
+| `sentinel_close_issue` | Close an issue with resolution note |
+| `sentinel_list_repo_issues` | List issues for a project, optionally filtered by status |
+| `sentinel_listIssues` | List issues with filtering by epic or status |
+| `sentinel_createIssue` | Create issue (YAML format with auto-generated ID) |
+| `sentinel_log_epic` | Create a new epic (large feature) record |
+| `sentinel_list_epics` | List all epics with optional filters |
+| `sentinel_get_epic` | Get details of a specific epic |
+| `sentinel_get_epic_issues` | Get all issues linked to an epic |
+| `sentinel_resolve_epic` | Fuzzy search for epics by name or keyword |
+| `sentinel_scan` | Scan project data for validation, orphans, stale items |
+| `sentinel_scanData` | Scan using Python Sentinel Data Inspector |
+| `sentinel_createTestSpec` | Create a test specification atom |
+| `sentinel_listTestSpecs` | List all test specifications |
+| `sentinel_compileTests` | Compile test specs into documentation |
+| `sentinel_auditPolicies` | Audit policy compliance and freshness |
 
-**Input:**
-- `project_id` (required): Project identifier
-- `area` (required): Design area (e.g., "UI", "API", "Database")
-- `summary` (required): Brief summary of the decision
-- `details` (optional): Detailed explanation
+### Dojo (10 tools)
+*AI Feature Incubator: wishes, proposals, experiments*
 
-**Output:**
-- `id`: Filename of the created record
-- `timestamp`: ISO timestamp
-- `path`: Full path to the file
+| Tool | Description |
+|------|-------------|
+| `dojo_add_wish` | Add a capability wish (what, why, inputs, outputs) |
+| `dojo_list_wishes` | List wishes from the wishlist |
+| `dojo_create_proposal` | Create a proposal for a feature or capability |
+| `dojo_scaffold_experiment` | Create experiment skeleton from a proposal |
+| `dojo_list` | List proposals, experiments, and wishes |
+| `dojo_run_experiment` | Run an experiment in sandbox mode |
+| `dojo_get_results` | Get results from a previous experiment run |
+| `dojo_read_artifact` | Read artifact file from experiment results |
+| `dojo_can_graduate` | Check if experiment can graduate to real tool |
+| `dojo_projects` | List available projects for Dojo operations |
 
-**File Location:** `{ROOT_DIR}/designer/{project_id}/YYYY-MM-DDTHH-mm-ssZ-{slug}.md`
+### Architect (6 tools)
+*Architecture decisions and policies*
 
----
+| Tool | Description |
+|------|-------------|
+| `architect_record_arch_decision` | Record an ADR (markdown format) |
+| `architect_createAdr` | Create ADR (YAML format with auto ID) |
+| `architect_createPolicy` | Create a policy with rules and enforcement |
+| `architect_listPolicies` | List all policies, filter by severity/tags |
+| `architect_getPolicy` | Get details of a specific policy |
+| `architect_compileOversight` | Compile policies into documentation |
 
-### architect_record_arch_decision
+### Roadmap (6 tools)
+*Strategic planning and health tracking*
 
-Record an Architecture Decision Record (ADR).
+| Tool | Description |
+|------|-------------|
+| `roadmap_get` | Get full roadmap (objectives, themes, milestones) |
+| `roadmap_list` | List epics with roadmap context and health scores |
+| `roadmap_getEpicContext` | Get strategic context for a specific epic |
+| `roadmap_getHealth` | Get epics with low health scores needing attention |
+| `roadmap_linkEpic` | Link epic to theme, milestone, objectives |
+| `roadmap_init` | Initialize a new roadmap.yaml scaffold |
 
-**Input:**
-- `system_id` (required): System identifier
-- `change` (required): Description of the architectural change
-- `rationale` (required): Reasoning behind the decision
-- `impact` (optional): Expected impact description
+### Oracle (2 tools)
+*AI-powered recommendations*
 
-**Output:**
-- `id`: Filename of the created ADR
-- `timestamp`: ISO timestamp
-- `path`: Full path to the file
+| Tool | Description |
+|------|-------------|
+| `oracle_next_actions` | Get recommended next actions for a project |
+| `oracle_roadmap` | Evaluate roadmap progress against milestones |
 
-**File Location:** `{ROOT_DIR}/architect/{system_id}/YYYY-MM-DDTHH-mm-ssZ-{slug}.md`
+### Designer (3 tools)
+*Design decisions and creative feedback*
 
----
+| Tool | Description |
+|------|-------------|
+| `designer_record_design_decision` | Record a design decision |
+| `designer_crit` | Log early creative feedback (gut reactions, hunches) |
+| `designer_list_crits` | List crit observations, filter by area/sentiment |
 
-### sentinel_create_issue
+### Friction (4 tools)
+*Track recurring pain points*
 
-Create a tracked issue for a repository.
+| Tool | Description |
+|------|-------------|
+| `friction_log` | Log a friction point (context, description, impact) |
+| `friction_list` | List friction points sorted by impact/signal |
+| `friction_resolve` | Mark friction as resolved with solution reference |
+| `friction_bump` | Bump signal count when encountering same friction |
 
-**Input:**
-- `repo` (required): Repository name
-- `severity` (required): One of `low`, `med`, `high`, `critical`
-- `title` (required): Issue title
-- `details` (required): Detailed description
-- `epic_id` (optional): Parent epic ID (e.g., "EPIC-0001")
+### Learnings (2 tools)
+*Living knowledge documents*
 
-**Output:**
-- `id`: Filename of the created issue
-- `timestamp`: ISO timestamp
-- `path`: Full path to the file
-- `status`: Issue status (always "open" for new issues)
+| Tool | Description |
+|------|-------------|
+| `learnings_append` | Append entry to project's learnings document |
+| `learnings_list` | List entries, filter by category |
 
-**File Location:** `{ROOT_DIR}/sentinel/{repo}/issues/YYYY-MM-DDTHH-mm-ssZ-{slug}.md`
+### Voice (5 tools)
+*Voice command processing and mobile inbox*
 
----
+| Tool | Description |
+|------|-------------|
+| `voice_inbox_add` | Add transcript to inbox for processing |
+| `voice_inbox_list` | List inbox items by status |
+| `voice_inbox_process` | Process a queued inbox item |
+| `voice_command` | Process voice command directly (real-time) |
+| `voice_inbox_sync` | Sync messages from Supabase to local project |
 
-### sentinel_log_epic
+### Context (8 tools)
+*AI memory: pinned facts, events, artifacts*
 
-Create a new epic (large feature) record.
+| Tool | Description |
+|------|-------------|
+| `decibel_context_refresh` | Compile full context pack for AI memory |
+| `decibel_context_pin` | Pin a fact to persistent memory |
+| `decibel_context_unpin` | Remove a pinned fact |
+| `decibel_context_list` | List all pinned facts |
+| `decibel_event_append` | Append event to activity journal |
+| `decibel_event_search` | Search events in journal |
+| `decibel_artifact_list` | List artifacts for a run |
+| `decibel_artifact_read` | Read artifact content |
 
-**Input:**
-- `title` (required): Epic title
-- `summary` (required): Brief summary
-- `motivation` (optional): Array of motivation statements
-- `outcomes` (optional): Array of desired outcomes
-- `acceptance_criteria` (optional): Array of acceptance criteria
-- `priority` (optional): One of `low`, `medium`, `high`, `critical`
-- `tags` (optional): Array of tags
-- `owner` (optional): Epic owner
-- `squad` (optional): Team responsible
+### Studio (15 tools)
+*Cloud asset generation and project management*
 
-**Output:**
-- `epic_id`: Generated epic ID (e.g., "EPIC-0001")
-- `timestamp`: ISO timestamp
-- `path`: Full path to the file
+| Tool | Description |
+|------|-------------|
+| `studio_generate_image` | Generate image using DALL-E 3 or FLUX |
+| `studio_get_image_status` | Get status of image generation task |
+| `studio_list_tasks` | List all active generation tasks |
+| `studio_list_projects` | List Decibel Studio projects |
+| `studio_create_project` | Create a new Studio project |
+| `studio_get_project` | Get project details |
+| `studio_list_artifacts` | List artifacts in a project |
+| `studio_create_artifact` | Create artifact record |
+| `studio_update_artifact` | Update artifact (status, rating, pinned) |
+| `studio_sync_events` | Get events since sequence number |
+| `studio_register_device` | Register device for sync and job routing |
+| `studio_heartbeat` | Update device last_seen_at |
+| `studio_list_jobs` | List pending jobs |
+| `studio_claim_job` | Claim a job for execution |
+| `studio_update_job` | Update job progress or status |
 
----
+### Registry (7 tools)
+*Project discovery and management*
 
-### sentinel_list_epics
+| Tool | Description |
+|------|-------------|
+| `project_init` | Initialize .decibel/ folder in a project |
+| `project_status` | Check project status and available tools |
+| `registry_list` | List all registered projects |
+| `registry_add` | Register a project in the registry |
+| `registry_remove` | Remove project from registry |
+| `registry_alias` | Add alias to a project |
+| `registry_resolve` | Test resolution of project ID/alias |
 
-List all epics with optional filters.
+### Agentic (4 tools)
+*Configuration compilation and rendering*
 
-**Input:**
-- `status` (optional): Filter by status (`planned`, `in_progress`, `shipped`, `on_hold`, `cancelled`)
-- `priority` (optional): Filter by priority
-- `tags` (optional): Filter by tags (matches any)
+| Tool | Description |
+|------|-------------|
+| `agentic_compile_pack` | Compile config into versioned, hashed pack |
+| `agentic_render` | Transform payload into rendered text |
+| `agentic_lint` | Validate output against renderer constraints |
+| `agentic_golden_eval` | Run golden eval regression tests |
 
----
+### Provenance (1 tool)
+*Audit trail*
 
-### sentinel_get_epic
-
-Get details of a specific epic.
-
-**Input:**
-- `epic_id` (required): Epic ID (e.g., "EPIC-0001")
-
----
-
-### sentinel_get_epic_issues
-
-Get all issues linked to an epic.
-
-**Input:**
-- `epic_id` (required): Epic ID
-
----
-
-### sentinel_resolve_epic
-
-Fuzzy search for epics by name or keyword.
-
-**Input:**
-- `query` (required): Search query
-- `limit` (optional): Maximum matches to return (default: 5)
-
----
-
-### oracle_next_actions
-
-Get recommended next actions based on recent project activity.
-
-**Input:**
-- `project_id` (required): Project to analyze
-- `focus` (optional): Filter by area (e.g., "architect", "sentinel", or keyword)
-
-**Output:**
-- `actions`: Array of recommended actions
-  - `description`: What to do
-  - `source`: File path reference
-  - `priority`: One of `low`, `med`, `high`
-
----
-
-### learnings_append
-
-Append a new entry to a project's technical learnings document. Creates a living document that accumulates lessons learned, gotchas, and insights over time.
-
-**Input:**
-- `project_id` (required): Project identifier
-- `category` (required): One of `debug`, `integration`, `architecture`, `tooling`, `process`, `other`
-- `title` (required): Brief title for the learning
-- `content` (required): The learning content - what happened, what was learned
-- `tags` (optional): Array of tags for searchability
-
-**Output:**
-- `timestamp`: ISO timestamp
-- `path`: Full path to the file
-- `entry_count`: Total number of entries in the document
-
-**File Location:** `{ROOT_DIR}/learnings/{project_id}.md`
-
----
-
-### learnings_list
-
-List entries from a project's technical learnings document.
-
-**Input:**
-- `project_id` (required): Project identifier
-- `category` (optional): Filter by category
-- `limit` (optional): Maximum entries to return (most recent first)
-
-**Output:**
-- `path`: Path to the learnings file
-- `entries`: Array of learning entries
-- `total_count`: Total number of entries
+| Tool | Description |
+|------|-------------|
+| `provenance_list` | List provenance events for artifact/actor |
 
 ---
 
 ## Data Storage
 
-Data is stored in project-local `.decibel/` folders as YAML files:
+Data is stored in project-local `.decibel/` folders:
 
 ```
-{project_root}/
+{project}/
 └── .decibel/
     ├── sentinel/
-    │   ├── issues/
-    │   │   └── ISS-{nnnn}.yml
-    │   └── epics/
-    │       └── EPIC-{nnnn}.yml
+    │   ├── issues/      # ISS-{nnnn}.yml
+    │   └── epics/       # EPIC-{nnnn}.yml
     ├── architect/
-    │   └── adrs/
-    │       └── ADR-{nnnn}.yml
-    ├── designer/
-    │   └── YYYY-MM-DDTHH-mm-ssZ-{slug}.md
-    └── learnings/
-        └── {project_id}.md
+    │   ├── adrs/        # ADR-{nnnn}.yml
+    │   └── policies/    # POL-{nnnn}.yaml
+    ├── dojo/
+    │   ├── proposals/   # DOJO-PROP-{nnnn}.yml
+    │   ├── experiments/ # DOJO-EXP-{nnnn}/
+    │   └── wishes/      # WISH-{nnnn}.yml
+    ├── designer/        # Design decisions
+    ├── friction/        # Pain point logs
+    ├── learnings/       # Knowledge documents
+    ├── context/         # Pinned facts, events
+    └── voice/inbox/     # Voice messages
 ```
 
-Global data (friction logs, cross-project learnings) is stored in `~/.decibel/` or the path specified by `DECIBEL_MCP_ROOT`.
+## Configuration
 
-## Development
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DECIBEL_ENV` | `dev` | Environment (dev, staging, prod) |
+| `DECIBEL_ORG` | `mediareason` | Organization name |
+| `DECIBEL_MCP_ROOT` | `~/.decibel` | Global data storage root |
 
-### Project Structure
-
-```
-src/
-├── server.ts      # MCP server entrypoint
-├── config.ts      # Environment configuration
-├── test.ts        # Test script
-└── tools/
-    ├── designer.ts   # Design decision recording
-    ├── architect.ts  # Architecture decision recording
-    ├── sentinel.ts   # Issue and epic tracking
-    ├── oracle.ts     # Next actions inference
-    └── learnings.ts  # Living learnings documents
-```
-
-### Building
-
-```bash
-npm run build   # Compile TypeScript to dist/
-```
-
-### Running in Development
-
-```bash
-npm run dev     # Run with tsx (no build required)
-```
+Optional for cloud features:
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_SERVICE_KEY` - Supabase service role key
+- `OPENAI_API_KEY` - For image generation
 
 ## License
 
-MIT
+MIT - Decibel Systems
