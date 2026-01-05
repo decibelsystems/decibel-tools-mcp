@@ -1,6 +1,6 @@
 {
   "name": "decibel-tools-mcp",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "MCP server exposing Decibel tools (Designer, Architect, Sentinel, Oracle) over stdio",
   "main": "dist/server.js",
   "type": "module",

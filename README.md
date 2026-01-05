@@ -2,7 +2,7 @@
 
 MCP server that gives AI assistants structured access to project intelligence: epics, issues, ADRs, experiments, roadmaps, and more.
 
-**92 tools** across 14 domains. Tested with Claude Desktop, Claude Code, and Cursor.
+**72 tools** across 12 domains. Tested with Claude Desktop, Claude Code, and Cursor.
 
 <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=decibel-tools&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImRlY2liZWwtdG9vbHMtbWNwIl19">
   <img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add to Cursor" height="32" />
@@ -20,9 +20,7 @@ MCP server that gives AI assistants structured access to project intelligence: e
 | **Designer** | Design decisions | `designer_record_design_decision`, `designer_crit` |
 | **Friction** | Pain points | `friction_log`, `friction_bump`, `friction_resolve` |
 | **Learnings** | Knowledge base | `learnings_append`, `learnings_list` |
-| **Voice** | Voice commands | `voice_inbox_sync`, `voice_inbox_list`, `voice_command` |
 | **Context** | AI memory | `decibel_context_pin`, `decibel_context_refresh` |
-| **Studio** | Asset generation | `studio_generate_image`, `studio_list_projects` |
 | **Registry** | Project management | `project_init`, `registry_list`, `registry_add` |
 | **Agentic** | Config compilation | `agentic_compile_pack`, `agentic_render` |
 | **Provenance** | Audit trail | `provenance_list` |
@@ -172,17 +170,6 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 | `learnings_append` | Append entry to project's learnings document |
 | `learnings_list` | List entries, filter by category |
 
-### Voice (5 tools)
-*Voice command processing and mobile inbox*
-
-| Tool | Description |
-|------|-------------|
-| `voice_inbox_add` | Add transcript to inbox for processing |
-| `voice_inbox_list` | List inbox items by status |
-| `voice_inbox_process` | Process a queued inbox item |
-| `voice_command` | Process voice command directly (real-time) |
-| `voice_inbox_sync` | Sync messages from Supabase to local project |
-
 ### Context (8 tools)
 *AI memory: pinned facts, events, artifacts*
 
@@ -196,27 +183,6 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 | `decibel_event_search` | Search events in journal |
 | `decibel_artifact_list` | List artifacts for a run |
 | `decibel_artifact_read` | Read artifact content |
-
-### Studio (15 tools)
-*Cloud asset generation and project management*
-
-| Tool | Description |
-|------|-------------|
-| `studio_generate_image` | Generate image using DALL-E 3 or FLUX |
-| `studio_get_image_status` | Get status of image generation task |
-| `studio_list_tasks` | List all active generation tasks |
-| `studio_list_projects` | List Decibel Studio projects |
-| `studio_create_project` | Create a new Studio project |
-| `studio_get_project` | Get project details |
-| `studio_list_artifacts` | List artifacts in a project |
-| `studio_create_artifact` | Create artifact record |
-| `studio_update_artifact` | Update artifact (status, rating, pinned) |
-| `studio_sync_events` | Get events since sequence number |
-| `studio_register_device` | Register device for sync and job routing |
-| `studio_heartbeat` | Update device last_seen_at |
-| `studio_list_jobs` | List pending jobs |
-| `studio_claim_job` | Claim a job for execution |
-| `studio_update_job` | Update job progress or status |
 
 ### Registry (7 tools)
 *Project discovery and management*
