@@ -1,0 +1,11 @@
+event_id: PROV-20260106T172830-186
+timestamp: 2026-01-06T17:28:30.186Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - learnings:entry:decibel-tools-mcp:8
+reason_code: initial_creation
+summary: "Appended learning: First public npm release - v1.0.0 through v1.0.4"
+fingerprint_before: null
+fingerprint_after: sha256:f4a2fc97645d272e

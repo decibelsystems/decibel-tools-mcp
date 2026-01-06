@@ -230,3 +230,28 @@ The Supabase fallback in `resolveVoiceRoot()` (voice.ts:90-96) should catch this
 2. senken-trading-agent: `14ba04c9` - feat: pass through Node health response for debugging
 
 ---
+### [2026-01-06 17:28:30] First public npm release - v1.0.0 through v1.0.4
+**Category:** process | **Tags:** `npm`, `release`, `publishing`, `documentation`
+
+Published decibel-tools-mcp to npm for public use.
+
+**Release progression:**
+- v1.0.0: Initial public release
+- v1.0.1: Added complete docs for all 92 tools
+- v1.0.2: Corrected platform claims (Claude Desktop, Cursor only - not Codex/ChatGPT)
+- v1.0.3: Added Claude Code to tested platforms
+- v1.0.4: Removed Studio (15 tools) and Voice (5 tools) from public docs - still ship internally
+
+**Final public release:** 72 tools across 12 domains
+
+**Platforms tested:** Claude Desktop, Claude Code, Cursor
+
+**Internal-only tools (undocumented but functional):**
+- Studio: 15 tools for cloud asset generation
+- Voice: 5 tools for voice inbox processing
+
+**npm auth:** Using access token with bypass 2FA, stored in ~/.npmrc
+
+**Package config:** Uses `files` whitelist in package.json to exclude .decibel/ project data from npm package.
+
+---
