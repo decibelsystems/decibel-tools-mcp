@@ -27,3 +27,5 @@ npm-debug.log*
 
 # Test coverage
 coverage/
+package-lock.json
+package.json

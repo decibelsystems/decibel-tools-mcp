@@ -54,6 +54,21 @@ npx decibel-tools-mcp
 }
 ```
 
+### Claude Code
+
+Add to `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "decibel-tools": {
+      "command": "npx",
+      "args": ["-y", "decibel-tools-mcp"]
+    }
+  }
+}
+```
+
 ### Claude Desktop
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
