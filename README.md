@@ -2,7 +2,7 @@
 
 MCP server that gives AI assistants structured access to project intelligence: epics, issues, ADRs, experiments, roadmaps, and more.
 
-**108 tools** across 14 domains. Tested with Claude Desktop, Claude Code, and Cursor.
+**108 tools** across 14 domains. Tested with Claude Desktop, Claude Code, and Cursor. [Learn more →](https://decibel.systems/tools)
 
 <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=decibel-tools&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImRlY2liZWwtdG9vbHMtbWNwIl19">
   <img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add to Cursor" height="32" />
@@ -351,4 +351,4 @@ These optional integrations are clearly marked with `openWorldHint: true` in the
 
 ## License
 
-MIT - Decibel Systems
+MIT - [Decibel Systems](https://decibel.systems)
