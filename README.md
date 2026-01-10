@@ -2,7 +2,7 @@
 
 MCP server that gives AI assistants structured access to project intelligence: epics, issues, ADRs, experiments, roadmaps, and more.
 
-**72 tools** across 12 domains. Tested with Claude Desktop, Claude Code, and Cursor.
+**76 tools** across 12 domains. Tested with Claude Desktop, Claude Code, and Cursor.
 
 <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=decibel-tools&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImRlY2liZWwtdG9vbHMtbWNwIl19">
   <img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add to Cursor" height="32" />
@@ -56,7 +56,19 @@ npx decibel-tools-mcp
 
 ### Claude Code
 
-Add to `~/.claude/settings.json`:
+**Plugin (recommended):**
+
+```bash
+# Add the marketplace
+/plugin marketplace add decibelsystems/decibel-tools-mcp
+
+# Install the plugin
+/plugin install decibel-tools@decibel-marketplace
+```
+
+This gives you slash commands like `/decibel-tools:init`, `/decibel-tools:scan`, `/decibel-tools:next`.
+
+**Manual:** Add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -158,14 +170,18 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 | `oracle_next_actions` | Get recommended next actions for a project |
 | `oracle_roadmap` | Evaluate roadmap progress against milestones |
 
-### Designer (3 tools)
-*Design decisions and creative feedback*
+### Designer (7 tools)
+*Design decisions, Figma integration, and creative feedback*
 
 | Tool | Description |
 |------|-------------|
 | `designer_record_design_decision` | Record a design decision |
 | `designer_crit` | Log early creative feedback (gut reactions, hunches) |
 | `designer_list_crits` | List crit observations, filter by area/sentiment |
+| `designer_sync_tokens` | Sync design tokens from Figma variables |
+| `designer_review_figma` | Review Figma component against design principles |
+| `designer_upsert_principle` | Create or update a design principle |
+| `designer_list_principles` | List design principles, filter by category |
 
 ### Friction (4 tools)
 *Track recurring pain points*
@@ -267,6 +283,7 @@ Optional for cloud features:
 - `SUPABASE_URL` - Supabase project URL
 - `SUPABASE_SERVICE_KEY` - Supabase service role key
 - `OPENAI_API_KEY` - For image generation
+- `FIGMA_ACCESS_TOKEN` - For Figma integration (designer_sync_tokens, designer_review_figma)
 
 ## License
 

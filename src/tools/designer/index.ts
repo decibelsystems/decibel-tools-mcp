@@ -6,7 +6,18 @@
 
 import { ToolSpec } from '../types.js';
 import { toolSuccess, toolError, requireFields } from '../shared/index.js';
-import { recordDesignDecision, RecordDesignDecisionInput } from '../designer.js';
+import {
+  recordDesignDecision,
+  RecordDesignDecisionInput,
+  syncTokens,
+  SyncTokensInput,
+  reviewFigma,
+  ReviewFigmaInput,
+  upsertPrinciple,
+  UpsertPrincipleInput,
+  listPrinciples,
+  ListPrinciplesInput,
+} from '../designer.js';
 import {
   logCrit,
   LogCritInput,
@@ -190,6 +201,189 @@ export const designerListCritsTool: ToolSpec = {
 };
 
 // ============================================================================
+// Sync Tokens Tool
+// ============================================================================
+
+export const designerSyncTokensTool: ToolSpec = {
+  definition: {
+    name: 'designer_sync_tokens',
+    description: 'Sync design tokens from a Figma file. Fetches variables and saves them to .decibel/designer/tokens/. Requires FIGMA_ACCESS_TOKEN env var.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        fileKey: {
+          type: 'string',
+          description: 'Figma file key (the part after /file/ in the URL)',
+        },
+        forceRefresh: {
+          type: 'boolean',
+          description: 'Bypass cache and fetch fresh data (default: false)',
+        },
+      },
+      required: ['fileKey'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      normalizeProjectId(rawInput);
+      const input = rawInput as unknown as SyncTokensInput;
+
+      requireFields(input, 'fileKey');
+
+      const result = await syncTokens(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// Review Figma Tool
+// ============================================================================
+
+export const designerReviewFigmaTool: ToolSpec = {
+  definition: {
+    name: 'designer_review_figma',
+    description: 'Review a Figma component against project design principles. Checks accessibility, consistency, and custom principles. Requires FIGMA_ACCESS_TOKEN env var.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        fileKey: {
+          type: 'string',
+          description: 'Figma file key (the part after /file/ in the URL)',
+        },
+        nodeId: {
+          type: 'string',
+          description: 'Component node ID (from the URL when component is selected)',
+        },
+        scope: {
+          type: 'string',
+          enum: ['full', 'accessibility', 'consistency'],
+          description: 'Review scope: full (all checks), accessibility (a11y only), consistency (design system alignment)',
+        },
+      },
+      required: ['fileKey', 'nodeId'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      normalizeProjectId(rawInput);
+      const input = rawInput as unknown as ReviewFigmaInput;
+
+      requireFields(input, 'fileKey', 'nodeId');
+
+      const result = await reviewFigma(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// Upsert Principle Tool
+// ============================================================================
+
+export const designerUpsertPrincipleTool: ToolSpec = {
+  definition: {
+    name: 'designer_upsert_principle',
+    description: 'Create or update a design principle. Principles are used by designer_review_figma to check components.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        id: {
+          type: 'string',
+          description: 'Principle ID. If provided, updates existing. If omitted, creates new.',
+        },
+        title: {
+          type: 'string',
+          description: 'Principle title (e.g., "4px Grid System")',
+        },
+        description: {
+          type: 'string',
+          description: 'Full description of the principle',
+        },
+        category: {
+          type: 'string',
+          description: 'Category: spacing, color, typography, accessibility, etc.',
+        },
+        checks: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Things to verify (e.g., ["spacing must be multiples of 4"])',
+        },
+      },
+      required: ['title', 'description', 'category'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      normalizeProjectId(rawInput);
+      const input = rawInput as unknown as UpsertPrincipleInput;
+
+      requireFields(input, 'title', 'description', 'category');
+
+      const result = await upsertPrinciple(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// List Principles Tool
+// ============================================================================
+
+export const designerListPrinciplesTool: ToolSpec = {
+  definition: {
+    name: 'designer_list_principles',
+    description: 'List design principles for a project, optionally filtered by category.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        category: {
+          type: 'string',
+          description: 'Filter by category (e.g., "spacing", "color")',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      normalizeProjectId(rawInput);
+      const input = rawInput as unknown as ListPrinciplesInput;
+
+      const result = await listPrinciples(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -197,4 +391,8 @@ export const designerTools: ToolSpec[] = [
   designerRecordDecisionTool,
   designerCritTool,
   designerListCritsTool,
+  designerSyncTokensTool,
+  designerReviewFigmaTool,
+  designerUpsertPrincipleTool,
+  designerListPrinciplesTool,
 ];

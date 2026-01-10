@@ -1,0 +1,18 @@
+{
+  "name": "decibel-marketplace",
+  "owner": {
+    "name": "Decibel Systems",
+    "email": "hello@decibel.systems"
+  },
+  "plugins": [
+    {
+      "name": "decibel-tools",
+      "source": "..",
+      "description": "Project intelligence system with Sentinel, Architect, Dojo, Oracle, and Designer",
+      "version": "1.0.7",
+      "author": {
+        "name": "Decibel Systems"
+      }
+    }
+  ]
+}

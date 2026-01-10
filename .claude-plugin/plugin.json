@@ -1,0 +1,22 @@
+{
+  "name": "decibel-tools",
+  "version": "1.0.7",
+  "description": "Project intelligence system with Sentinel (work tracking), Architect (ADRs), Dojo (experiments), Oracle (strategy), and Designer (design decisions)",
+  "author": {
+    "name": "Decibel Systems",
+    "email": "hello@decibel.systems"
+  },
+  "homepage": "https://github.com/decibelsystems/decibel-tools-mcp",
+  "repository": "https://github.com/decibelsystems/decibel-tools-mcp",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "project-management",
+    "architecture",
+    "adr",
+    "epics",
+    "issues",
+    "experiments",
+    "roadmap"
+  ]
+}

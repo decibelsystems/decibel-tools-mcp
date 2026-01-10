@@ -1,6 +1,6 @@
 {
   "name": "decibel-tools-mcp",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "bin": {
     "decibel-tools-mcp": "dist/server.js"
   },
