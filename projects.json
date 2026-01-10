@@ -85,6 +85,15 @@
       "aliases": [
         "vector"
       ]
+    },
+    {
+      "id": "habit-tracker",
+      "name": "Habit Tracker",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/habit-tracker",
+      "aliases": [
+        "habits",
+        "tracker"
+      ]
     }
   ]
 }

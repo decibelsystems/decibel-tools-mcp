@@ -1,6 +1,6 @@
 {
   "name": "decibel-tools-mcp",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "MCP server for project intelligence: epics, issues, ADRs, experiments, roadmaps, and more. 108 tools across 14 domains.",
   "author": "Decibel Systems",
   "license": "MIT",
