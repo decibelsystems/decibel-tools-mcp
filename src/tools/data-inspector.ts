@@ -3,6 +3,7 @@ import fsSync from 'fs';
 import path from 'path';
 import os from 'os';
 import { log } from '../config.js';
+import { resolveProjectPaths } from '../projectRegistry.js';
 
 // ============================================================================
 // Types - Data Models
@@ -125,6 +126,7 @@ export type ScanScope = 'runtime' | 'data' | 'all';
 export type FlagCategory = 'orphans' | 'stale' | 'invalid';
 
 export interface ScanDataInput {
+  projectId?: string;
   scope: ScanScope;
   validate?: boolean;
   flag?: FlagCategory[];
@@ -721,7 +723,7 @@ export function generateSummary(
  * Execute the data scan
  */
 export async function scanData(input: ScanDataInput): Promise<ScanDataOutput> {
-  const { scope, validate = false, flag = [], days = 21 } = input;
+  const { projectId, scope, validate = false, flag = [], days = 21 } = input;
 
   // For 'runtime' scope, just return a placeholder (not implemented yet)
   if (scope === 'runtime') {
@@ -732,17 +734,33 @@ export async function scanData(input: ScanDataInput): Promise<ScanDataOutput> {
     };
   }
 
-  // Find .decibel root
-  const decibelRoot = findDecibelRoot();
-  if (!decibelRoot) {
-    return {
-      scope,
-      projectName: 'unknown',
-      error: `No .decibel directory found above ${process.cwd()}. Data inspector cannot run.`,
-    };
-  }
+  // Find .decibel root - use projectId if provided, otherwise walk up from cwd
+  let decibelRoot: string | undefined;
+  let projectName: string;
 
-  const projectName = getProjectNameFromRoot(decibelRoot);
+  if (projectId) {
+    try {
+      const resolved = resolveProjectPaths(projectId);
+      decibelRoot = resolved.decibelPath;
+      projectName = resolved.id;
+    } catch (err) {
+      return {
+        scope,
+        projectName: projectId,
+        error: `Failed to resolve project "${projectId}": ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  } else {
+    decibelRoot = findDecibelRoot();
+    if (!decibelRoot) {
+      return {
+        scope,
+        projectName: 'unknown',
+        error: `No .decibel directory found above ${process.cwd()}. Data inspector cannot run.`,
+      };
+    }
+    projectName = getProjectNameFromRoot(decibelRoot);
+  }
 
   // Load all data
   const { issues, epics, adrs } = await loadDataIndex(decibelRoot);

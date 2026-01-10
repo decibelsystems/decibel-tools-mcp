@@ -29,3 +29,7 @@ description: |-
   - Document installation and usage
 
   This is the "harden for own use" phase before public distribution.
+
+## Resolution
+
+Completed in commit eeb9774: feat: add Claude Code plugin structure + Figma designer tools

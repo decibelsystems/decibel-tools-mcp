@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { modularTools, modularToolMap } from './tools/index.js';
+import { getAllTools } from './tools/index.js';
+import { ToolSpec } from './tools/types.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
@@ -23,10 +24,17 @@ log(`Starting Decibel MCP Server`);
 log(`Environment: ${config.env}`);
 log(`Organization: ${config.org}`);
 log(`Root Directory: ${config.rootDir}`);
+if (process.env.DECIBEL_PRO === '1') {
+  log(`Pro features: ENABLED`);
+}
 
 // Load graduated Dojo tools
 const graduatedTools: GraduatedTool[] = loadGraduatedTools();
 log(`Loaded ${graduatedTools.length} graduated Dojo tools`);
+
+// Tools loaded async at startup
+let allTools: ToolSpec[] = [];
+let toolMap: Map<string, ToolSpec> = new Map();
 
 const server = new Server(
   {
@@ -45,9 +53,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       // Modular tools (from src/tools/*)
-      ...modularTools.map(t => t.definition),
-
-      // Architect, roadmap, oracle, learnings, friction, designer, voice, context, provenance, and agentic tools are now modular (see src/tools/)
+      ...allTools.map(t => t.definition),
 
       // Dynamically add graduated Dojo tools
       ...graduatedToolsToMcpDefinitions(graduatedTools),
@@ -64,14 +70,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     // Check modular tools first (from src/tools/*)
-    const modularTool = modularToolMap.get(name);
+    const modularTool = toolMap.get(name);
     if (modularTool) {
       const result = await modularTool.handler(args);
       // Cast to match MCP SDK expected return type
       return result as { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
     }
 
-    // All domain tools are now modular (see src/tools/*)
     // Only handle graduated dojo tools here
     if (name.startsWith('graduated_')) {
       const tool = findGraduatedTool(graduatedTools, name);
@@ -97,6 +102,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start the server
 async function main() {
+  // Load all tools (including pro if DECIBEL_PRO=1)
+  allTools = await getAllTools();
+  toolMap = new Map(allTools.map(t => [t.definition.name, t]));
+  log(`Loaded ${allTools.length} tools`);
+
   const { httpMode, port, authToken, host } = parseHttpArgs(process.argv);
 
   if (httpMode) {

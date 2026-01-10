@@ -77,6 +77,14 @@
       "id": "decibel-tools",
       "path": "/Volumes/Ashitaka/Documents/GitHub/decibel-tools",
       "name": "Decibel Tools"
+    },
+    {
+      "id": "decibel-vector",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/decibel-vector",
+      "name": "Decibel Vector",
+      "aliases": [
+        "vector"
+      ]
     }
   ]
 }

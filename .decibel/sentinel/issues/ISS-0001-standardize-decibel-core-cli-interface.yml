@@ -22,3 +22,7 @@ description: |-
   - Document the full CLI surface in a single reference
 
   This is the foundation that makes the Node shim thin and maintainable.
+
+## Resolution
+
+Architecture changed: MCP server is now native TypeScript, not a shim over Python CLI. The CLI standardization approach was superseded.

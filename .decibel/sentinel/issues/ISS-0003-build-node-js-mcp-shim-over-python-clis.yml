@@ -37,3 +37,7 @@ description: |-
   - Works standalone for testing before .mcpb packaging
 
   This shim should be <500 lines total—all logic stays in Python.
+
+## Resolution
+
+Architecture changed: went with native TypeScript implementation instead of Node.js shim over Python CLIs. All tools now use direct file operations.

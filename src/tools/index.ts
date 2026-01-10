@@ -14,19 +14,21 @@ import { oracleTools } from './oracle/index.js';
 import { learningsTools } from './learnings/index.js';
 import { frictionTools } from './friction/index.js';
 import { designerTools } from './designer/index.js';
-import { voiceTools } from './voice/index.js';
 import { contextTools } from './context/index.js';
 import { agenticTools } from './agentic/index.js';
 import { roadmapTools } from './roadmap/index.js';
 import { architectTools } from './architect/index.js';
-import { studioTools } from './studio/index.js';
 import { deckTools } from './deck.js';
+
+// Pro tier tools (require DECIBEL_PRO=1)
+const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
 
 // ============================================================================
 // Aggregate All Tools
 // ============================================================================
 
-export const modularTools: ToolSpec[] = [
+// Core tools (always included)
+const coreTools: ToolSpec[] = [
   ...registryTools,
   ...sentinelTools,
   ...dojoTools,
@@ -35,14 +37,40 @@ export const modularTools: ToolSpec[] = [
   ...learningsTools,
   ...frictionTools,
   ...designerTools,
-  ...voiceTools,
   ...contextTools,
   ...agenticTools,
   ...roadmapTools,
   ...architectTools,
-  ...studioTools,
   ...deckTools,
 ];
+
+// Pro tools (only when DECIBEL_PRO=1)
+async function loadProTools(): Promise<ToolSpec[]> {
+  if (!PRO_ENABLED) return [];
+
+  const [
+    { voiceTools },
+    { studioTools },
+    { vectorTools },
+    { corpusTools },
+  ] = await Promise.all([
+    import('./voice/index.js'),
+    import('./studio/index.js'),
+    import('./vector/index.js'),
+    import('./corpus/index.js'),
+  ]);
+
+  return [...voiceTools, ...studioTools, ...vectorTools, ...corpusTools];
+}
+
+// Export sync version for backward compat (pro tools loaded async)
+export const modularTools: ToolSpec[] = coreTools;
+
+// Async loader for full tool set
+export async function getAllTools(): Promise<ToolSpec[]> {
+  const proTools = await loadProTools();
+  return [...coreTools, ...proTools];
+}
 
 // ============================================================================
 // Tool Map for Fast Lookup

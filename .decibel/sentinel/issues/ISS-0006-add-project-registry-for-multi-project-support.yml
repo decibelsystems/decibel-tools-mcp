@@ -27,3 +27,7 @@ description: |-
   ```
 
   Update resolveProjectRoot() to check registry before failing.
+
+## Resolution
+
+Completed: projects.json registry + projectRegistry.ts implemented. Multi-project support works via project IDs and aliases.

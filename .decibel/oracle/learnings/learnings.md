@@ -255,3 +255,9 @@ Published decibel-tools-mcp to npm for public use.
 **Package config:** Uses `files` whitelist in package.json to exclude .decibel/ project data from npm package.
 
 ---
+### [2026-01-10 21:22:06] Issue triage: Python CLI approach obsolete
+**Category:** process | **Tags:** `triage`, `architecture`, `tech-debt`
+
+Triaged ISS-0001 through ISS-0016. Key insight: early issues (Dec 2025) assumed a Python CLI + Node.js shim architecture. This was superseded by native TypeScript with direct file operations. Closed 8 issues as wontfix/completed/duplicate. The CLAUDE.md now documents the correct architecture: self-contained MCP server using fs/YAML, never shelling out to CLI.
+
+---

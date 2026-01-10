@@ -49,3 +49,7 @@ description: |-
 
   - Context tool implementations in decibel-tools-mcp
   - Possibly a shared "exec with fallback" utility
+
+## Resolution
+
+Duplicate of ISS-0012 (YAML fallback for context tools). Consolidating tracking there.

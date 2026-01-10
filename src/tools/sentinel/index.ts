@@ -30,11 +30,10 @@ import {
   isProjectResolutionError,
 } from '../sentinel.js';
 import {
-  scanData as scanDataPython,
-  ScanDataInput as ScanDataPythonInput,
-  ScanDataFlag,
-  isScanDataError,
-} from '../sentinel-scan-data.js';
+  scanData as scanDataTS,
+  ScanDataInput as ScanDataTSInput,
+  FlagCategory as DataInspectorFlag,
+} from '../data-inspector.js';
 import {
   listIssuesForProject,
   createIssue as createSentinelIssue,
@@ -476,19 +475,20 @@ export const sentinelScanTool: ToolSpec = {
       requireFields(args, 'projectId');
 
       const validScopes = ['runtime', 'data', 'all'];
-      const scope = args.scope || 'data';
+      const scope = (args.scope || 'data') as 'runtime' | 'data' | 'all';
       requireOneOf(scope, 'scope', validScopes);
 
-      // Use Python backend
-      const result = await scanDataPython({
-        projectId: args.projectId,
+      // Use TypeScript backend
+      const result = await scanDataTS({
+        projectId: args.projectId as string,
+        scope,
         validate: args.validate ?? false,
-        flags: (args.flag as ScanDataFlag[]) || ['orphans', 'stale', 'invalid'],
+        flag: (args.flag as DataInspectorFlag[]) || ['orphans', 'stale', 'invalid'],
         days: args.days || 21,
       });
 
-      if ('error' in result) {
-        return toolError(`${result.error}\n\nstderr: ${result.stderr || 'none'}`);
+      if (result.error) {
+        return toolError(result.error);
       }
 
       return toolSuccess(result);
@@ -538,25 +538,22 @@ export const sentinelScanDataTool: ToolSpec = {
 
       // Validate flag categories if provided
       if (args.flags && args.flags.length > 0) {
-        const validFlags: ScanDataFlag[] = ['orphans', 'stale', 'invalid', 'packages'];
+        const validFlags: DataInspectorFlag[] = ['orphans', 'stale', 'invalid'];
         for (const f of args.flags) {
           requireOneOf(f, 'flag', validFlags);
         }
       }
 
-      const result = await scanDataPython({
-        projectId: args.projectId,
+      const result = await scanDataTS({
+        projectId: args.projectId as string,
+        scope: 'data',
         validate: args.validate ?? false,
-        flags: args.flags ?? [],
+        flag: (args.flags as DataInspectorFlag[]) ?? [],
         days: args.days ?? 21,
       });
 
-      if (isScanDataError(result)) {
-        return toolError(JSON.stringify({
-          error: result.error,
-          exitCode: result.exitCode,
-          stderr: result.stderr,
-        }));
+      if (result.error) {
+        return toolError(result.error);
       }
 
       return toolSuccess(result);

@@ -39,3 +39,7 @@ description: |-
   This makes the Desktop Extension truly one-click with no prerequisites.
 
   Defer until beta feedback confirms this is worth the build complexity.
+
+## Resolution
+
+No longer applicable: Python CLI approach was abandoned in favor of native TypeScript. No binaries to bundle.

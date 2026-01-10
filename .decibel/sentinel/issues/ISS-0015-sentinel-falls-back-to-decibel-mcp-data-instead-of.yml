@@ -40,3 +40,7 @@ description: |-
   - Sentinel tool implementations (log_epic, create_issue, etc.)
   - Project resolution logic
   - Any hardcoded paths to `decibel-mcp-data`
+
+## Resolution
+
+Duplicate: consolidated with ISS-0015-fix-sentinel-silent-fallback.yml which has the cleaner description.

@@ -30,3 +30,7 @@ description: |-
   Implemented: dojo → alpha → beta → release
 
   See ADR-0003 for details.
+
+## Resolution
+
+Completed: Beta repo created, package published to npm as @anthropic/decibel-tools. Distribution now via npm + Claude Code plugin.
