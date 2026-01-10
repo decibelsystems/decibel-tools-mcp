@@ -627,6 +627,12 @@ export const studioGenerateImageTool: ToolSpec = {
   definition: {
     name: 'studio_generate_image',
     description: 'Generate an image using DALL-E 3 or FLUX. Returns a task ID for polling status.',
+    annotations: {
+      title: 'Generate Image',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -669,6 +675,11 @@ export const studioGetImageStatusTool: ToolSpec = {
   definition: {
     name: 'studio_get_image_status',
     description: 'Get the status of an image generation task.',
+    annotations: {
+      title: 'Get Image Status',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -700,6 +711,11 @@ export const studioListTasksTool: ToolSpec = {
   definition: {
     name: 'studio_list_tasks',
     description: 'List all active generation tasks (images, 3D, video).',
+    annotations: {
+      title: 'List Tasks',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {},

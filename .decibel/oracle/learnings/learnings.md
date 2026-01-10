@@ -261,3 +261,36 @@ Published decibel-tools-mcp to npm for public use.
 Triaged ISS-0001 through ISS-0016. Key insight: early issues (Dec 2025) assumed a Python CLI + Node.js shim architecture. This was superseded by native TypeScript with direct file operations. Closed 8 issues as wontfix/completed/duplicate. The CLAUDE.md now documents the correct architecture: self-contained MCP server using fs/YAML, never shelling out to CLI.
 
 ---
+### [2026-01-10 21:47:17] dataRoot.ts cleanup - resolvePath was dead code
+**Category:** architecture | **Tags:** `cleanup`, `dead-code`, `projectRegistry`
+
+The entire resolvePath() mechanism in dataRoot.ts with DataDomain types and unknown_project fallback was dead code. All tools had migrated to resolveProjectPaths() from projectRegistry.ts. Removed ~250 lines of dead code, keeping only ensureDir(). Issues ISS-0015 (silent fallback) and ISS-0008 (dojo CLI) were already fixed by the projectRegistry migration but never closed.
+
+---
+### [2026-01-10 21:57:37] dataRoot.ts Dead Code Cleanup
+**Category:** architecture | **Tags:** `dead-code`, `cleanup`, `projectRegistry`, `dataRoot`
+
+**What happened:** Cleaned up 250+ lines of dead code from src/dataRoot.ts.
+
+**Dead code removed:**
+- `resolvePath()` function with DataDomain enum switch
+- `DataDomain` type and `ResolvePathOptions` interface
+- `hasProjectLocal()` and `getProjectName()` helpers
+- `initProjectDecibel()` initialization function
+- Internal helpers: `findUpDir()`, `inferProjectName()`, `getRoots()`, `throwProjectResolutionError()`
+
+**Why it was dead:** All project resolution migrated to `projectRegistry.ts` which:
+- Uses `resolveProject()` for ID/alias → path mapping
+- Uses `resolveProjectPaths()` helper for tools
+- Throws explicit PROJECT_NOT_FOUND errors (no silent fallback)
+
+**What remains:** Only `ensureDir()` - used by 13 files with 28+ call sites.
+
+**Verification process:**
+1. Grep for imports showed only `ensureDir` imported
+2. Grep for each function name found zero callers
+3. External second opinion confirmed cleanup was safe
+
+**Lesson:** When migrating to new architecture, add cleanup task for old code paths.
+
+---

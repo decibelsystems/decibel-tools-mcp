@@ -36,6 +36,12 @@ export const frictionLogTool: ToolSpec = {
   definition: {
     name: 'friction_log',
     description: 'Log a persistent friction point or pain point. Both humans and agents can call this to track recurring issues that erode productivity. Signal strength increases when similar friction is logged multiple times.',
+    annotations: {
+      title: 'Log Friction',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -107,6 +113,11 @@ export const frictionListTool: ToolSpec = {
   definition: {
     name: 'friction_list',
     description: 'List friction points, sorted by impact and signal count. High-signal friction should be prioritized for resolution.',
+    annotations: {
+      title: 'List Friction',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -162,6 +173,12 @@ export const frictionResolveTool: ToolSpec = {
   definition: {
     name: 'friction_resolve',
     description: 'Mark a friction point as resolved. Can include a resolution note and reference to the solution (issue, ADR, commit).',
+    annotations: {
+      title: 'Resolve Friction',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -214,6 +231,12 @@ export const frictionBumpTool: ToolSpec = {
   definition: {
     name: 'friction_bump',
     description: 'Bump the signal count on an existing friction point. Use when encountering the same friction again. Higher signal = higher priority.',
+    annotations: {
+      title: 'Bump Friction',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {

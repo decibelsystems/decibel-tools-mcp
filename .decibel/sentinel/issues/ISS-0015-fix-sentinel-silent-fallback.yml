@@ -23,3 +23,7 @@ description: |-
   **Testing:**
   After fix, calling sentinel functions without a valid project should return
   a structured error instead of silently writing to unknown_project folder.
+
+## Resolution
+
+Fixed by removing dead code. The silent fallback to unknown_project was in resolvePath() which had zero callers - all tools now use projectRegistry.resolveProjectPaths() which throws PROJECT_NOT_FOUND. Cleaned dataRoot.ts from 267 to 24 lines, keeping only ensureDir().

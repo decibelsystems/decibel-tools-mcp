@@ -50,6 +50,12 @@ const deckBuylistSearch: ToolSpec = {
   definition: {
     name: 'deck_buylist_search',
     description: 'Search MTG card buylist prices by card name. Returns prices from multiple stores.',
+    annotations: {
+      title: 'Search Buylist',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -94,6 +100,12 @@ const deckBuylistList: ToolSpec = {
   definition: {
     name: 'deck_buylist_list',
     description: 'List top buylist prices for a specific store, ordered by NM price descending.',
+    annotations: {
+      title: 'List Store Buylist',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -137,6 +149,12 @@ const deckBuylistStores: ToolSpec = {
   definition: {
     name: 'deck_buylist_stores',
     description: 'List all stores in the buylist database with card counts and last update time.',
+    annotations: {
+      title: 'List Stores',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {},

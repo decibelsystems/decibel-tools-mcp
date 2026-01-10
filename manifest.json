@@ -1,0 +1,28 @@
+{
+  "name": "decibel-tools-mcp",
+  "version": "1.1.0",
+  "description": "MCP server for project intelligence: epics, issues, ADRs, experiments, roadmaps, and more. 108 tools across 14 domains.",
+  "author": "Decibel Systems",
+  "license": "MIT",
+  "repository": "https://github.com/decibelsystems/decibel-tools-mcp",
+  "privacy_policies": [
+    {
+      "name": "Local Storage Only",
+      "description": "All project data is stored locally in .decibel/ folders within your project directories. No data is sent to external servers by default."
+    },
+    {
+      "name": "Optional Cloud Integrations",
+      "description": "Some tools optionally connect to external services when configured: Figma API (designer_sync_tokens, designer_review_figma), Supabase (voice inbox sync). These require explicit API key configuration and are clearly marked with openWorldHint annotations."
+    },
+    {
+      "name": "No Telemetry",
+      "description": "This MCP server does not collect telemetry, usage analytics, or any form of tracking data."
+    }
+  ],
+  "categories": ["developer-tools", "project-management", "documentation"],
+  "platforms": ["Claude Desktop", "Claude Code", "Cursor"],
+  "install": {
+    "command": "npx",
+    "args": ["-y", "decibel-tools-mcp"]
+  }
+}

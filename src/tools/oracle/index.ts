@@ -32,6 +32,11 @@ export const oracleNextActionsTool: ToolSpec = {
   definition: {
     name: 'oracle_next_actions',
     description: 'Get recommended next actions for a project based on recent design decisions, architecture changes, and issues.',
+    annotations: {
+      title: 'Next Actions',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -68,6 +73,12 @@ export const oracleRoadmapTool: ToolSpec = {
   definition: {
     name: 'oracle_roadmap',
     description: 'Evaluate roadmap progress against milestones and objectives. Reads roadmap from .decibel/architect/roadmap/roadmap.yaml, cross-references epic statuses from Sentinel, and optionally saves progress to .decibel/oracle/progress.yaml.',
+    annotations: {
+      title: 'Roadmap Progress',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {

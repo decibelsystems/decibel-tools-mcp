@@ -38,6 +38,12 @@ export const learningsAppendTool: ToolSpec = {
   definition: {
     name: 'learnings_append',
     description: "Append a new entry to a project's technical learnings document. Creates a living document that accumulates lessons learned, gotchas, and insights over time.",
+    annotations: {
+      title: 'Append Learning',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -95,6 +101,11 @@ export const learningsListTool: ToolSpec = {
   definition: {
     name: 'learnings_list',
     description: "List entries from a project's technical learnings document, optionally filtered by category.",
+    annotations: {
+      title: 'List Learnings',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {

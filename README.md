@@ -285,6 +285,70 @@ Optional for cloud features:
 - `OPENAI_API_KEY` - For image generation
 - `FIGMA_ACCESS_TOKEN` - For Figma integration (designer_sync_tokens, designer_review_figma)
 
+## Usage Examples
+
+### Example 1: Initialize a Project and Create an Epic
+
+```
+User: "Initialize decibel for this project and create an epic for user authentication"
+
+AI uses: project_init → sentinel_log_epic
+
+Result: Creates .decibel/ folder structure and EPIC-0001.yml for "User Authentication"
+```
+
+### Example 2: Track Work with Issues Linked to Epics
+
+```
+User: "Create issues for the auth epic: login form, password reset, and session management"
+
+AI uses: sentinel_resolve_epic → sentinel_createIssue (×3)
+
+Result: Creates ISS-0001, ISS-0002, ISS-0003 all linked to EPIC-0001
+```
+
+### Example 3: Record Architecture Decisions
+
+```
+User: "We decided to use JWT tokens instead of sessions. Document this ADR."
+
+AI uses: architect_createAdr
+
+Result: Creates ADR-0001.yml with context, decision, and consequences
+```
+
+### Example 4: AI Feature Incubation (Dojo)
+
+```
+User: "I wish we had a tool that detects rate limit patterns in logs"
+
+AI uses: dojo_add_wish → dojo_create_proposal → dojo_scaffold_experiment
+
+Result: WISH-0001.yml → DOJO-PROP-0001.yml → DOJO-EXP-0001/ with entrypoint ready to implement
+```
+
+### Example 5: Get Recommended Next Actions
+
+```
+User: "What should I work on next?"
+
+AI uses: oracle_next_actions
+
+Result: Prioritized list based on stale issues, epic health, pending experiments
+```
+
+## Privacy Policy
+
+**Local Storage Only**: All project data is stored locally in `.decibel/` folders within your project directories. No data is sent to external servers by default.
+
+**Optional Cloud Integrations**: Some tools optionally connect to external services when you explicitly configure API keys:
+- **Figma API** (`designer_sync_tokens`, `designer_review_figma`) - requires `FIGMA_ACCESS_TOKEN`
+- **Supabase** (voice inbox sync) - requires `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`
+
+These optional integrations are clearly marked with `openWorldHint: true` in their tool annotations.
+
+**No Telemetry**: This MCP server does not collect telemetry, usage analytics, or any form of tracking data.
+
 ## License
 
 MIT - Decibel Systems

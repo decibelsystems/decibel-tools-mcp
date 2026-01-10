@@ -32,3 +32,7 @@ description: |-
   - `dojo_list(filter=all)` succeeds on a machine where `decibel list` exists but `--json` is not supported.
   - `dojo_list_wishes(unresolved_only=...)` succeeds under same conditions.
   - No regression when `--json` *is* supported.
+
+## Resolution
+
+Already fixed. dojo.ts uses native file operations (fs/promises + YAML) not CLI. Verified zero references to spawn/execSync/child_process. The --flag handling concern is moot since no CLI is invoked.

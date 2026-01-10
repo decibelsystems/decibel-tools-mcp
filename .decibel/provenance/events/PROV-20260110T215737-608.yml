@@ -1,0 +1,11 @@
+event_id: PROV-20260110T215737-608
+timestamp: 2026-01-10T21:57:37.608Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - learnings:entry:decibel-tools-mcp:11
+reason_code: initial_creation
+summary: "Appended learning: dataRoot.ts Dead Code Cleanup"
+fingerprint_before: null
+fingerprint_after: sha256:a4ed61c21b4f2052

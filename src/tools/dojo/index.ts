@@ -38,6 +38,12 @@ export const dojoCreateProposalTool: ToolSpec = {
   definition: {
     name: 'dojo_create_proposal',
     description: 'Create a new Dojo proposal for a feature or capability. Automatically saves to .decibel/dojo/proposals/. AI can propose, but only humans can enable experiments. No separate file writing needed.',
+    annotations: {
+      title: 'Create Proposal',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -129,6 +135,12 @@ export const dojoScaffoldExperimentTool: ToolSpec = {
   definition: {
     name: 'dojo_scaffold_experiment',
     description: 'Create an experiment skeleton from a proposal. Automatically creates the experiment directory at .decibel/dojo/experiments/ with manifest, entrypoint, and README. No separate file writing needed.',
+    annotations: {
+      title: 'Scaffold Experiment',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -185,6 +197,11 @@ export const dojoListTool: ToolSpec = {
   definition: {
     name: 'dojo_list',
     description: 'List Dojo proposals, experiments, and wishes with their states.',
+    annotations: {
+      title: 'List Dojo Items',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -230,6 +247,12 @@ export const dojoRunExperimentTool: ToolSpec = {
   definition: {
     name: 'dojo_run_experiment',
     description: 'Run an experiment in SANDBOX mode. Results are written to {project}/.decibel/dojo/results/. NOTE: This always runs in sandbox mode - enabled mode is human-only via CLI.',
+    annotations: {
+      title: 'Run Experiment',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -273,6 +296,11 @@ export const dojoGetResultsTool: ToolSpec = {
   definition: {
     name: 'dojo_get_results',
     description: 'Get results from a previous experiment run. Use to examine what an experiment produced.',
+    annotations: {
+      title: 'Get Results',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -319,6 +347,11 @@ export const dojoReadArtifactTool: ToolSpec = {
   definition: {
     name: 'dojo_read_artifact',
     description: 'Read an artifact file from experiment results. Returns parsed content for yaml/json, raw text for others, base64 for binary.',
+    annotations: {
+      title: 'Read Artifact',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -369,6 +402,11 @@ export const dojoCanGraduateTool: ToolSpec = {
   definition: {
     name: 'dojo_can_graduate',
     description: 'Check if an experiment can be graduated to a real tool. Returns eligibility and reasons. (Actual graduation is human-only via CLI)',
+    annotations: {
+      title: 'Check Graduation',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -415,6 +453,12 @@ export const dojoAddWishTool: ToolSpec = {
   definition: {
     name: 'dojo_add_wish',
     description: 'Add a capability wish to the Dojo wishlist. Requires 4 fields: capability (what), reason (why), inputs (data needed), outputs (what it produces).',
+    annotations: {
+      title: 'Add Wish',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -495,6 +539,11 @@ export const dojoListWishesTool: ToolSpec = {
   definition: {
     name: 'dojo_list_wishes',
     description: 'List wishes from the Dojo wishlist. Shows what capabilities AI has requested.',
+    annotations: {
+      title: 'List Wishes',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -539,6 +588,11 @@ export const dojoProjectsTool: ToolSpec = {
   definition: {
     name: 'dojo_projects',
     description: 'List available projects for Dojo operations. Helps discover which projects you can use. Shows the default project if one exists.',
+    annotations: {
+      title: 'List Projects',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {},

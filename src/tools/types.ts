@@ -16,6 +16,23 @@ export interface ToolResult {
 }
 
 /**
+ * MCP Tool Annotations for Connectors Directory compliance.
+ * These hints describe tool behavior for safety and UX purposes.
+ */
+export interface ToolAnnotations {
+  /** Human-readable title for the tool */
+  title?: string;
+  /** Tool only reads data, never modifies it */
+  readOnlyHint?: boolean;
+  /** Tool performs destructive/irreversible actions */
+  destructiveHint?: boolean;
+  /** Multiple calls produce the same result */
+  idempotentHint?: boolean;
+  /** Tool accesses external resources (network, APIs) */
+  openWorldHint?: boolean;
+}
+
+/**
  * Tool specification combining definition and handler.
  * Each tool exports one of these, domains export arrays of them.
  *
@@ -31,6 +48,7 @@ export interface ToolSpec {
       properties: Record<string, unknown>;
       required?: string[];
     };
+    annotations?: ToolAnnotations;
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: (args: any) => Promise<ToolResult>;

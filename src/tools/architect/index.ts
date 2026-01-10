@@ -89,6 +89,12 @@ export const architectRecordArchDecisionTool: ToolSpec = {
   definition: {
     name: 'architect_record_arch_decision',
     description: 'Record an architectural decision (ADR) for a project. Automatically saves a markdown file to .decibel/architect/adrs/ with Change, Rationale, and Impact sections. No separate file writing needed.',
+    annotations: {
+      title: 'Record Arch Decision',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -143,6 +149,12 @@ export const architectCreateAdrTool: ToolSpec = {
   definition: {
     name: 'architect_createAdr',
     description: 'Create a new Architecture Decision Record (ADR) for a project. Writes a YAML file to .decibel/architect/adrs/ with auto-generated ID (ADR-NNNN).',
+    annotations: {
+      title: 'Create ADR',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -204,6 +216,12 @@ export const architectCreatePolicyTool: ToolSpec = {
   definition: {
     name: 'architect_createPolicy',
     description: 'Create a new policy atom. Policies define rules and constraints for code, architecture, and processes.',
+    annotations: {
+      title: 'Create Policy',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -300,6 +318,11 @@ export const architectListPoliciesTool: ToolSpec = {
   definition: {
     name: 'architect_listPolicies',
     description: 'List all policies for a project, optionally filtered by severity or tags.',
+    annotations: {
+      title: 'List Policies',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -342,6 +365,11 @@ export const architectGetPolicyTool: ToolSpec = {
   definition: {
     name: 'architect_getPolicy',
     description: 'Get details of a specific policy by ID.',
+    annotations: {
+      title: 'Get Policy',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -380,6 +408,12 @@ export const architectCompileOversightTool: ToolSpec = {
   definition: {
     name: 'architect_compileOversight',
     description: 'Compile all policies into documentation (policies.md and/or compiled.json).',
+    annotations: {
+      title: 'Compile Oversight',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {

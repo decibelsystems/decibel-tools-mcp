@@ -33,6 +33,12 @@ export const studioListProjectsTool: ToolSpec = {
   definition: {
     name: 'studio_list_projects',
     description: 'List all Decibel Studio projects for the authenticated user.',
+    annotations: {
+      title: 'List Projects',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -89,6 +95,12 @@ export const studioCreateProjectTool: ToolSpec = {
   definition: {
     name: 'studio_create_project',
     description: 'Create a new Decibel Studio project.',
+    annotations: {
+      title: 'Create Project',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -152,6 +164,12 @@ export const studioGetProjectTool: ToolSpec = {
   definition: {
     name: 'studio_get_project',
     description: 'Get details of a specific Decibel Studio project.',
+    annotations: {
+      title: 'Get Project',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -198,6 +216,12 @@ export const studioListArtifactsTool: ToolSpec = {
   definition: {
     name: 'studio_list_artifacts',
     description: 'List artifacts in a Decibel Studio project.',
+    annotations: {
+      title: 'List Artifacts',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -278,6 +302,12 @@ export const studioCreateArtifactTool: ToolSpec = {
   definition: {
     name: 'studio_create_artifact',
     description: 'Create a new artifact record in a Decibel Studio project. Use this to register an artifact before uploading files.',
+    annotations: {
+      title: 'Create Artifact',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -369,6 +399,12 @@ export const studioUpdateArtifactTool: ToolSpec = {
   definition: {
     name: 'studio_update_artifact',
     description: 'Update an artifact record (status, rating, pinned, etc).',
+    annotations: {
+      title: 'Update Artifact',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -460,6 +496,12 @@ export const studioSyncEventsTool: ToolSpec = {
   definition: {
     name: 'studio_sync_events',
     description: 'Get events for a project since a given sequence number. Use for incremental sync.',
+    annotations: {
+      title: 'Sync Events',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -528,6 +570,12 @@ export const studioRegisterDeviceTool: ToolSpec = {
   definition: {
     name: 'studio_register_device',
     description: 'Register this device for Decibel Studio sync and job routing.',
+    annotations: {
+      title: 'Register Device',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -597,6 +645,12 @@ export const studioHeartbeatTool: ToolSpec = {
   definition: {
     name: 'studio_heartbeat',
     description: 'Update device last_seen_at timestamp. Call periodically to keep device active.',
+    annotations: {
+      title: 'Device Heartbeat',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -642,6 +696,12 @@ export const studioListJobsTool: ToolSpec = {
   definition: {
     name: 'studio_list_jobs',
     description: 'List pending jobs that can be claimed by this device.',
+    annotations: {
+      title: 'List Jobs',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -705,6 +765,12 @@ export const studioClaimJobTool: ToolSpec = {
   definition: {
     name: 'studio_claim_job',
     description: 'Claim a pending job for this device to execute.',
+    annotations: {
+      title: 'Claim Job',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -767,6 +833,12 @@ export const studioUpdateJobTool: ToolSpec = {
   definition: {
     name: 'studio_update_job',
     description: 'Update job progress or complete/fail the job.',
+    annotations: {
+      title: 'Update Job',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {

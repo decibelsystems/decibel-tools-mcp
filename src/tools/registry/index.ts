@@ -104,6 +104,12 @@ Use this when:
 - Converting an existing repo to use Decibel
 
 This creates: architect/, designer/, sentinel/, dojo/, oracle/, context/, friction/, learnings/, provenance/ folders.`,
+    annotations: {
+      title: 'Initialize Project',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -278,6 +284,11 @@ export const projectStatusTool: ToolSpec = {
   definition: {
     name: 'project_status',
     description: 'Check the status of a project - whether it exists, is registered, and what tools are available.',
+    annotations: {
+      title: 'Project Status',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -366,6 +377,11 @@ export const registryListTool: ToolSpec = {
   definition: {
     name: 'registry_list',
     description: 'List all registered projects in the Decibel registry. Shows project IDs, paths, and aliases.',
+    annotations: {
+      title: 'List Projects',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {},
@@ -400,6 +416,12 @@ export const registryAddTool: ToolSpec = {
   definition: {
     name: 'registry_add',
     description: 'Register a project in the Decibel registry. The project path must contain a .decibel folder.',
+    annotations: {
+      title: 'Register Project',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -443,6 +465,12 @@ export const registryRemoveTool: ToolSpec = {
   definition: {
     name: 'registry_remove',
     description: 'Remove a project from the Decibel registry. Does not delete project files.',
+    annotations: {
+      title: 'Unregister Project',
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -474,6 +502,12 @@ export const registryAliasTool: ToolSpec = {
   definition: {
     name: 'registry_alias',
     description: 'Add an alias (shortcut name) to an existing project in the registry.',
+    annotations: {
+      title: 'Add Project Alias',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -507,6 +541,11 @@ export const registryResolveTool: ToolSpec = {
   definition: {
     name: 'registry_resolve',
     description: 'Test resolution of a project ID/alias. Shows which project would be resolved and how.',
+    annotations: {
+      title: 'Resolve Project',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {

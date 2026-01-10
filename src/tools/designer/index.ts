@@ -50,6 +50,12 @@ export const designerRecordDecisionTool: ToolSpec = {
   definition: {
     name: 'designer_record_design_decision',
     description: 'Record a design decision for a project. Automatically saves a markdown file to .decibel/designer/decisions/ with frontmatter. No separate file writing needed.',
+    annotations: {
+      title: 'Record Design Decision',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -97,6 +103,12 @@ export const designerCritTool: ToolSpec = {
   definition: {
     name: 'designer_crit',
     description: 'Log early creative feedback before decisions crystallize. Use for gut reactions, observations, questions, and hunches during exploration phases.',
+    annotations: {
+      title: 'Log Crit',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -158,6 +170,11 @@ export const designerListCritsTool: ToolSpec = {
   definition: {
     name: 'designer_list_crits',
     description: 'List crit observations for a project, optionally filtered by area or sentiment.',
+    annotations: {
+      title: 'List Crits',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -208,6 +225,12 @@ export const designerSyncTokensTool: ToolSpec = {
   definition: {
     name: 'designer_sync_tokens',
     description: 'Sync design tokens from a Figma file. Fetches variables and saves them to .decibel/designer/tokens/. Requires FIGMA_ACCESS_TOKEN env var.',
+    annotations: {
+      title: 'Sync Design Tokens',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -251,6 +274,12 @@ export const designerReviewFigmaTool: ToolSpec = {
   definition: {
     name: 'designer_review_figma',
     description: 'Review a Figma component against project design principles. Checks accessibility, consistency, and custom principles. Requires FIGMA_ACCESS_TOKEN env var.',
+    annotations: {
+      title: 'Review Figma Component',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -299,6 +328,12 @@ export const designerUpsertPrincipleTool: ToolSpec = {
   definition: {
     name: 'designer_upsert_principle',
     description: 'Create or update a design principle. Principles are used by designer_review_figma to check components.',
+    annotations: {
+      title: 'Upsert Principle',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -355,6 +390,11 @@ export const designerListPrinciplesTool: ToolSpec = {
   definition: {
     name: 'designer_list_principles',
     description: 'List design principles for a project, optionally filtered by category.',
+    annotations: {
+      title: 'List Principles',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {

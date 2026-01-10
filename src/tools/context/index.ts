@@ -44,6 +44,11 @@ export const contextRefreshTool: ToolSpec = {
   definition: {
     name: 'decibel_context_refresh',
     description: 'Compile full context pack for AI memory. Returns pinned facts, recent events, and current state.',
+    annotations: {
+      title: 'Refresh Context',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -93,6 +98,12 @@ export const contextPinTool: ToolSpec = {
   definition: {
     name: 'decibel_context_pin',
     description: 'Pin a fact to persistent memory. Mother uses this to remember important insights.',
+    annotations: {
+      title: 'Pin Context',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -156,6 +167,12 @@ export const contextUnpinTool: ToolSpec = {
   definition: {
     name: 'decibel_context_unpin',
     description: 'Remove a pinned fact from persistent memory.',
+    annotations: {
+      title: 'Unpin Context',
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -205,6 +222,11 @@ export const contextListTool: ToolSpec = {
   definition: {
     name: 'decibel_context_list',
     description: 'List all pinned facts.',
+    annotations: {
+      title: 'List Context',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -249,6 +271,12 @@ export const eventAppendTool: ToolSpec = {
   definition: {
     name: 'decibel_event_append',
     description: 'Append an event to the activity journal. Append-only log of significant activities.',
+    annotations: {
+      title: 'Append Event',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -307,6 +335,11 @@ export const eventSearchTool: ToolSpec = {
   definition: {
     name: 'decibel_event_search',
     description: 'Search events in the activity journal.',
+    annotations: {
+      title: 'Search Events',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -360,6 +393,11 @@ export const artifactListTool: ToolSpec = {
   definition: {
     name: 'decibel_artifact_list',
     description: 'List artifacts for a specific run. Use run_id from dojo_run_experiment response.',
+    annotations: {
+      title: 'List Artifacts',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -409,6 +447,11 @@ export const artifactReadTool: ToolSpec = {
   definition: {
     name: 'decibel_artifact_read',
     description: 'Read an artifact by run_id and name. Returns content with mime type.',
+    annotations: {
+      title: 'Read Artifact',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {

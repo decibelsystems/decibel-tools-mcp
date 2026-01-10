@@ -25,6 +25,12 @@ export const agenticCompilePackTool: ToolSpec = {
   definition: {
     name: 'agentic_compile_pack',
     description: 'Compile agentic configuration files into a versioned, hashed pack. Reads from .decibel/architect/agentic/ and outputs compiled_agentic_pack.json',
+    annotations: {
+      title: 'Compile Agentic Pack',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -58,6 +64,12 @@ export const agenticRenderTool: ToolSpec = {
   definition: {
     name: 'agentic_render',
     description: 'Transform a canonical payload into rendered text using a specified renderer. Pure function - no side effects.',
+    annotations: {
+      title: 'Render Payload',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -105,6 +117,12 @@ export const agenticLintTool: ToolSpec = {
   definition: {
     name: 'agentic_lint',
     description: 'Validate rendered output against renderer constraints. Checks emoji count, banned words, line limits, and other dialect rules.',
+    annotations: {
+      title: 'Lint Output',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -151,6 +169,11 @@ export const agenticGoldenEvalTool: ToolSpec = {
   definition: {
     name: 'agentic_golden_eval',
     description: 'Run golden eval regression tests. Compares rendered outputs against known-good baseline files.',
+    annotations: {
+      title: 'Run Golden Eval',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {

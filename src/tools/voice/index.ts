@@ -27,6 +27,12 @@ export const voiceInboxAddTool: ToolSpec = {
   definition: {
     name: 'voice_inbox_add',
     description: 'Add a voice transcript to the inbox for processing. Parses intent automatically. Use process_immediately=true for instant execution.',
+    annotations: {
+      title: 'Add Voice Transcript',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -63,6 +69,11 @@ export const voiceInboxListTool: ToolSpec = {
   definition: {
     name: 'voice_inbox_list',
     description: 'List voice inbox items, optionally filtered by status.',
+    annotations: {
+      title: 'List Voice Inbox',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -95,6 +106,11 @@ export const voiceInboxProcessTool: ToolSpec = {
   definition: {
     name: 'voice_inbox_process',
     description: 'Process a queued voice inbox item by routing to the appropriate tool.',
+    annotations: {
+      title: 'Process Voice Item',
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -130,6 +146,11 @@ export const voiceCommandTool: ToolSpec = {
   definition: {
     name: 'voice_command',
     description: 'Process a voice command directly without storing in inbox. For real-time interactions.',
+    annotations: {
+      title: 'Voice Command',
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -159,6 +180,12 @@ export const voiceInboxSyncTool: ToolSpec = {
   definition: {
     name: 'voice_inbox_sync',
     description: 'Sync voice inbox messages from Supabase to local project. Call this to pull down pending messages that were captured remotely (e.g., from iOS app). Like checking email.',
+    annotations: {
+      title: 'Sync Voice Inbox',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {

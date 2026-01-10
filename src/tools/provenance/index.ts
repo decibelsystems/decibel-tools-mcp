@@ -19,6 +19,11 @@ export const provenanceListTool: ToolSpec = {
   definition: {
     name: 'provenance_list',
     description: 'List provenance events for an artifact or actor. Shows the history of changes with fingerprints for tracking who did what and when.',
+    annotations: {
+      title: 'List Provenance',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {

@@ -30,6 +30,11 @@ export const roadmapGetTool: ToolSpec = {
   definition: {
     name: 'roadmap_get',
     description: 'Get the strategic roadmap - objectives, themes, milestones, and epic context. Returns the full roadmap structure with summary stats.',
+    annotations: {
+      title: 'Get Roadmap',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -64,6 +69,11 @@ export const roadmapListTool: ToolSpec = {
   definition: {
     name: 'roadmap_list',
     description: 'List all epics with their roadmap context (theme, milestone, objectives) and health scores. Sorted by milestone target date.',
+    annotations: {
+      title: 'List Roadmap Epics',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -98,6 +108,11 @@ export const roadmapGetEpicContextTool: ToolSpec = {
   definition: {
     name: 'roadmap_getEpicContext',
     description: 'Get the strategic context for a specific epic - theme, milestone, objectives, and Oracle health annotation.',
+    annotations: {
+      title: 'Get Epic Context',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -136,6 +151,11 @@ export const roadmapGetHealthTool: ToolSpec = {
   definition: {
     name: 'roadmap_getHealth',
     description: "Get Oracle's health report - epics with low health scores that need attention. Use to prioritize work and identify risky areas.",
+    annotations: {
+      title: 'Get Roadmap Health',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -174,6 +194,12 @@ export const roadmapLinkEpicTool: ToolSpec = {
   definition: {
     name: 'roadmap_linkEpic',
     description: 'Link an epic to roadmap elements (theme, milestone, objectives). Maintains strategic context for your work.',
+    annotations: {
+      title: 'Link Epic to Roadmap',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -235,6 +261,12 @@ export const roadmapInitTool: ToolSpec = {
   definition: {
     name: 'roadmap_init',
     description: 'Initialize a new roadmap.yaml scaffold with example objectives, themes, and milestones.',
+    annotations: {
+      title: 'Initialize Roadmap',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {

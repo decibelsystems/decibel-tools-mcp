@@ -29,6 +29,11 @@ export const corpusSearchTool: ToolSpec = {
   definition: {
     name: 'corpus_search',
     description: `Search decibel-corpus for patterns, playbooks, and field notes. Use when you encounter problems that may have been solved before (DB collisions, auth patterns, deployment issues, webhook retries, etc.). Returns matching documents with snippets and relevance scores.`,
+    annotations: {
+      title: 'Search Corpus',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -82,6 +87,11 @@ export const corpusStatusTool: ToolSpec = {
   definition: {
     name: 'corpus_status',
     description: 'Check the status of decibel-corpus. Shows location and whether it exists.',
+    annotations: {
+      title: 'Corpus Status',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {},

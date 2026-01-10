@@ -69,6 +69,12 @@ export const sentinelCreateIssueTool: ToolSpec = {
   definition: {
     name: 'sentinel_create_issue',
     description: 'Create a new issue for a project. Automatically saves a markdown file to .decibel/sentinel/issues/ with severity and status tracking. Can optionally link to an epic. No separate file writing needed.',
+    annotations: {
+      title: 'Create Issue',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -120,6 +126,12 @@ export const sentinelCloseIssueTool: ToolSpec = {
   definition: {
     name: 'sentinel_close_issue',
     description: 'Close an existing issue. Updates the status to closed and adds a closed_at timestamp. Can optionally add a resolution note.',
+    annotations: {
+      title: 'Close Issue',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -169,6 +181,11 @@ export const sentinelListRepoIssuesTool: ToolSpec = {
   definition: {
     name: 'sentinel_list_repo_issues',
     description: 'List all issues for a specific project, optionally filtered by status.',
+    annotations: {
+      title: 'List Issues',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -207,6 +224,12 @@ export const sentinelLogEpicTool: ToolSpec = {
   definition: {
     name: 'sentinel_log_epic',
     description: 'Create a new Sentinel epic (large feature) record. Automatically saves to .decibel/sentinel/epics/. Returns the epic_id and file path. No separate file writing needed.',
+    annotations: {
+      title: 'Log Epic',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -280,6 +303,11 @@ export const sentinelListEpicsTool: ToolSpec = {
   definition: {
     name: 'sentinel_list_epics',
     description: 'List all epics, optionally filtered by status, priority, or tags.',
+    annotations: {
+      title: 'List Epics',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -328,6 +356,11 @@ export const sentinelGetEpicTool: ToolSpec = {
   definition: {
     name: 'sentinel_get_epic',
     description: 'Get details of a specific epic by ID.',
+    annotations: {
+      title: 'Get Epic',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -366,6 +399,11 @@ export const sentinelGetEpicIssuesTool: ToolSpec = {
   definition: {
     name: 'sentinel_get_epic_issues',
     description: 'Get all issues linked to a specific epic.',
+    annotations: {
+      title: 'Get Epic Issues',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -396,6 +434,11 @@ export const sentinelResolveEpicTool: ToolSpec = {
   definition: {
     name: 'sentinel_resolve_epic',
     description: 'Resolve a fuzzy epic name/keyword into one or more matching epics. Use this to find the correct epic_id before creating issues.',
+    annotations: {
+      title: 'Resolve Epic',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -435,6 +478,11 @@ export const sentinelScanTool: ToolSpec = {
   definition: {
     name: 'sentinel_scan',
     description: 'Scan project data (issues, epics, ADRs) for validation, orphans, and stale items. Use scope "data" for data inspection, "runtime" for runtime health (not yet implemented), or "all" for both.',
+    annotations: {
+      title: 'Scan Project Data',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -502,6 +550,11 @@ export const sentinelScanDataTool: ToolSpec = {
   definition: {
     name: 'sentinel_scanData',
     description: 'Scan project data using the Python Sentinel Data Inspector. Resolves project by ID and shells out to Python for inspection logic.',
+    annotations: {
+      title: 'Scan Data (Python)',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -571,6 +624,11 @@ export const sentinelListIssuesTool: ToolSpec = {
   definition: {
     name: 'sentinel_listIssues',
     description: 'List issues for a project from .decibel/sentinel/issues/*.yml files. Returns issue metadata including id, title, status, priority, epicId, and tags.',
+    annotations: {
+      title: 'List Issues (YAML)',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -633,6 +691,12 @@ export const sentinelCreateIssueTool2: ToolSpec = {
   definition: {
     name: 'sentinel_createIssue',
     description: 'Create a new issue for a project. Writes a YAML file to .decibel/sentinel/issues/ with auto-generated ID (ISS-NNNN).',
+    annotations: {
+      title: 'Create Issue (YAML)',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -692,6 +756,12 @@ export const sentinelCreateTestSpecTool: ToolSpec = {
   definition: {
     name: 'sentinel_createTestSpec',
     description: 'Create a new test specification atom. Test specs define test cases and requirements.',
+    annotations: {
+      title: 'Create Test Spec',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -772,6 +842,11 @@ export const sentinelListTestSpecsTool: ToolSpec = {
   definition: {
     name: 'sentinel_listTestSpecs',
     description: 'List all test specifications for a project.',
+    annotations: {
+      title: 'List Test Specs',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -818,6 +893,12 @@ export const sentinelCompileTestsTool: ToolSpec = {
   definition: {
     name: 'sentinel_compileTests',
     description: 'Compile all test specifications into documentation (manifest.md and/or manifest.json).',
+    annotations: {
+      title: 'Compile Tests',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
     inputSchema: {
       type: 'object',
       properties: {
@@ -854,6 +935,11 @@ export const sentinelAuditPoliciesTool: ToolSpec = {
   definition: {
     name: 'sentinel_auditPolicies',
     description: 'Audit policy compliance. Checks documentation freshness and runs enforcement checks.',
+    annotations: {
+      title: 'Audit Policies',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
     inputSchema: {
       type: 'object',
       properties: {
