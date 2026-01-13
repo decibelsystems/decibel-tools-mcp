@@ -4,9 +4,11 @@ MCP server that gives AI assistants structured access to project intelligence: e
 
 **108 tools** across 14 domains. Tested with Claude Desktop, Claude Code, and Cursor. [Learn more →](https://decibel.systems/tools)
 
-<a href="cursor://anysphere.cursor-deeplink/mcp/install?name=decibel-tools&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImRlY2liZWwtdG9vbHMtbWNwIl19">
+<a href="https://github.com/decibelsystems/decibel-tools-mcp#cursor">
   <img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add to Cursor" height="32" />
 </a>
+
+> **Note:** The one-click Cursor install only works on GitHub. [Click here](https://github.com/decibelsystems/decibel-tools-mcp#cursor) or see manual setup below.
 
 ## What It Does
 
@@ -39,7 +41,11 @@ npx decibel-tools-mcp
 
 ### Cursor
 
-**One-click:** Click the button at the top of this README.
+**One-click:**
+
+<a href="cursor://anysphere.cursor-deeplink/mcp/install?name=decibel-tools&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImRlY2liZWwtdG9vbHMtbWNwIl19">
+  <img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add to Cursor" height="32" />
+</a>
 
 **Manual:** Add to `~/.cursor/mcp.json`:
 
