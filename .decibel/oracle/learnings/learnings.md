@@ -294,3 +294,51 @@ The entire resolvePath() mechanism in dataRoot.ts with DataDomain types and unkn
 **Lesson:** When migrating to new architecture, add cleanup task for old code paths.
 
 ---
+### [2026-01-12 06:52:46] External Second Opinion for Risky Refactors
+**Category:** process | **Tags:** `refactoring`, `code-review`, `second-opinion`, `process`
+
+**Context:** Proposed removing ~250 lines of "dead code" from dataRoot.ts. User correctly flagged this as risky and requested external validation before proceeding.
+
+**What worked:**
+1. User got independent Claude session to review the same codebase
+2. External review confirmed: "CC got this one right. The cleanup is safe."
+3. Only then proceeded with deletion
+
+**Lesson:** For significant deletions or refactors where the AI claims code is "dead" or "unused":
+- Grep searches can miss dynamic imports, reflection, or external consumers
+- A second opinion from independent context catches blind spots
+- The few minutes of validation prevents potential rollback pain
+
+**Also this session:** Added website links to README (decibel.systems/tools in header, decibel.systems on MIT footer). Published 1.1.2.
+
+---
+### [2026-01-13 06:49:43] Carbon Voice Integration - Initial Setup Complete
+**Category:** integration | **Tags:** `carbon-voice`, `voice`, `oauth`, `webhooks`, `edge-functions`
+
+Met with Carbon Voice CEO - good meeting. Integration path is clear.
+
+## What Carbon Voice Provides
+- OAuth 2.1 flow for user auth
+- Webhook events on `ai.prompt.response.generated`
+- Already has MCP server (`cv-mcp-server`) and npm types (`cv-contracts`)
+- API docs: https://api.carbonvoice.app/docs
+
+## Work Completed
+1. Created Edge Functions in `decibel-studio/supabase/functions/`:
+   - `carbon-voice-callback/index.ts` - OAuth redirect handler
+   - `carbon-voice-webhook/index.ts` - Receives AI events, inserts to voice_inbox
+   - `_shared/carbon-voice.ts` - Types and helpers
+
+2. API key created in Carbon dashboard (test key with placeholder URLs)
+
+## Next Steps
+- Set Supabase secrets (CARBON_VOICE_CLIENT_ID, CLIENT_SECRET, WEBHOOK_SECRET, REDIRECT_URI)
+- Create `carbon_voice_credentials` table migration
+- Update Carbon dashboard with real callback/webhook URLs after deploy
+- Deploy Edge Functions: `supabase functions deploy`
+- Test OAuth flow end-to-end
+
+## Integration Architecture
+Carbon Voice → webhook → Supabase Edge Function → voice_inbox table → voice_inbox_sync pulls to local
+
+---

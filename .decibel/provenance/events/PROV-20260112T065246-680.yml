@@ -1,0 +1,11 @@
+event_id: PROV-20260112T065246-680
+timestamp: 2026-01-12T06:52:46.680Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - learnings:entry:decibel-tools-mcp:12
+reason_code: initial_creation
+summary: "Appended learning: External Second Opinion for Risky Refactors"
+fingerprint_before: null
+fingerprint_after: sha256:0d52cce6854bd511

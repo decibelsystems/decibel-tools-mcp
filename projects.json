@@ -94,6 +94,24 @@
         "habits",
         "tracker"
       ]
+    },
+    {
+      "id": "machina",
+      "name": "Machina VTT",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/machina",
+      "aliases": [
+        "vtt",
+        "machina-vtt"
+      ]
+    },
+    {
+      "id": "salt",
+      "name": "Salt - Echo Realms MUD",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/salt",
+      "aliases": [
+        "echo-realms",
+        "mud"
+      ]
     }
   ]
 }

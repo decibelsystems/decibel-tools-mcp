@@ -19,9 +19,10 @@ import { agenticTools } from './agentic/index.js';
 import { roadmapTools } from './roadmap/index.js';
 import { architectTools } from './architect/index.js';
 import { deckTools } from './deck.js';
+import { vectorTools } from './vector/index.js';
 
-// Pro tier tools (require DECIBEL_PRO=1)
-const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
+// Pro tier tools (require DECIBEL_PRO=1 in production, always enabled in dev)
+const PRO_ENABLED = process.env.DECIBEL_PRO === '1' || process.env.NODE_ENV !== 'production';
 
 // ============================================================================
 // Aggregate All Tools
@@ -42,6 +43,7 @@ const coreTools: ToolSpec[] = [
   ...roadmapTools,
   ...architectTools,
   ...deckTools,
+  ...vectorTools,
 ];
 
 // Pro tools (only when DECIBEL_PRO=1)
@@ -51,16 +53,14 @@ async function loadProTools(): Promise<ToolSpec[]> {
   const [
     { voiceTools },
     { studioTools },
-    { vectorTools },
     { corpusTools },
   ] = await Promise.all([
     import('./voice/index.js'),
     import('./studio/index.js'),
-    import('./vector/index.js'),
     import('./corpus/index.js'),
   ]);
 
-  return [...voiceTools, ...studioTools, ...vectorTools, ...corpusTools];
+  return [...voiceTools, ...studioTools, ...corpusTools];
 }
 
 // Export sync version for backward compat (pro tools loaded async)
