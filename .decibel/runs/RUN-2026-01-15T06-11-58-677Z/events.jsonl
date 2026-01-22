@@ -1,0 +1,2 @@
+{"ts":"2026-01-15T06:11:58.679Z","run_id":"RUN-2026-01-15T06-11-58-677Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-01-15T06:11:58.685Z","run_id":"RUN-2026-01-15T06-11-58-677Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"learnings_append","result":"success","summary":"Appended learning: Added REST API layer for OpenAI SDK compatibility"}}

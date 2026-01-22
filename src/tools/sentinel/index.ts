@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
-import { toolSuccess, toolError, requireFields, requireOneOf } from '../shared/index.js';
+import { toolSuccess, toolError, requireFields, requireOneOf, withRunTracking, summaryGenerators } from '../shared/index.js';
 import {
   createIssue,
   CreateIssueInput,
@@ -103,23 +103,29 @@ export const sentinelCreateIssueTool: ToolSpec = {
       required: ['severity', 'title', 'details'],
     },
   },
-  handler: async (args) => {
-    try {
-      requireFields(args, 'severity', 'title', 'details');
-      const validSeverities: Severity[] = ['low', 'med', 'high', 'critical'];
-      requireOneOf(args.severity, 'severity', validSeverities);
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        requireFields(args, 'severity', 'title', 'details');
+        const validSeverities: Severity[] = ['low', 'med', 'high', 'critical'];
+        requireOneOf(args.severity, 'severity', validSeverities);
 
-      const result = await createIssue(args as CreateIssueInput);
+        const result = await createIssue(args as CreateIssueInput);
 
-      if ('error' in result && result.error === 'EPIC_NOT_FOUND') {
-        return toolError(JSON.stringify(result));
+        if ('error' in result && result.error === 'EPIC_NOT_FOUND') {
+          return toolError(JSON.stringify(result));
+        }
+
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
       }
-
-      return toolSuccess(result);
-    } catch (err) {
-      return toolError(err instanceof Error ? err.message : String(err));
+    },
+    {
+      toolName: 'sentinel_create_issue',
+      getSummary: summaryGenerators.issue,
     }
-  },
+  ),
 };
 
 export const sentinelCloseIssueTool: ToolSpec = {
@@ -156,25 +162,31 @@ export const sentinelCloseIssueTool: ToolSpec = {
       required: ['issue_id'],
     },
   },
-  handler: async (args) => {
-    try {
-      requireFields(args, 'issue_id');
-      if (args.status) {
-        const validStatuses: Array<'closed' | 'wontfix'> = ['closed', 'wontfix'];
-        requireOneOf(args.status, 'status', validStatuses);
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        requireFields(args, 'issue_id');
+        if (args.status) {
+          const validStatuses: Array<'closed' | 'wontfix'> = ['closed', 'wontfix'];
+          requireOneOf(args.status, 'status', validStatuses);
+        }
+
+        const result = await closeIssue(args as CloseIssueInput);
+
+        if ('error' in result && result.error === 'ISSUE_NOT_FOUND') {
+          return toolError(JSON.stringify(result));
+        }
+
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
       }
-
-      const result = await closeIssue(args as CloseIssueInput);
-
-      if ('error' in result && result.error === 'ISSUE_NOT_FOUND') {
-        return toolError(JSON.stringify(result));
-      }
-
-      return toolSuccess(result);
-    } catch (err) {
-      return toolError(err instanceof Error ? err.message : String(err));
+    },
+    {
+      toolName: 'sentinel_close_issue',
+      getSummary: summaryGenerators.closeIssue,
     }
-  },
+  ),
 };
 
 export const sentinelListRepoIssuesTool: ToolSpec = {
@@ -283,20 +295,26 @@ export const sentinelLogEpicTool: ToolSpec = {
       required: ['title', 'summary'],
     },
   },
-  handler: async (args) => {
-    try {
-      requireFields(args, 'title', 'summary');
-      if (args.priority) {
-        const validPriorities: Priority[] = ['low', 'medium', 'high', 'critical'];
-        requireOneOf(args.priority, 'priority', validPriorities);
-      }
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        requireFields(args, 'title', 'summary');
+        if (args.priority) {
+          const validPriorities: Priority[] = ['low', 'medium', 'high', 'critical'];
+          requireOneOf(args.priority, 'priority', validPriorities);
+        }
 
-      const result = await logEpic(args as LogEpicInput);
-      return toolSuccess(result);
-    } catch (err) {
-      return toolError(err instanceof Error ? err.message : String(err));
+        const result = await logEpic(args as LogEpicInput);
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    {
+      toolName: 'sentinel_log_epic',
+      getSummary: summaryGenerators.epic,
     }
-  },
+  ),
 };
 
 export const sentinelListEpicsTool: ToolSpec = {
@@ -731,21 +749,27 @@ export const sentinelCreateIssueTool2: ToolSpec = {
       required: ['projectId', 'title'],
     },
   },
-  handler: async (args) => {
-    try {
-      requireFields(args, 'projectId', 'title');
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        requireFields(args, 'projectId', 'title');
 
-      if (args.priority) {
-        const validPriorities: SentinelIssuePriority[] = ['low', 'medium', 'high'];
-        requireOneOf(args.priority, 'priority', validPriorities);
+        if (args.priority) {
+          const validPriorities: SentinelIssuePriority[] = ['low', 'medium', 'high'];
+          requireOneOf(args.priority, 'priority', validPriorities);
+        }
+
+        const result = await createSentinelIssue(args as CreateSentinelIssueInput);
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
       }
-
-      const result = await createSentinelIssue(args as CreateSentinelIssueInput);
-      return toolSuccess(result);
-    } catch (err) {
-      return toolError(err instanceof Error ? err.message : String(err));
+    },
+    {
+      toolName: 'sentinel_createIssue',
+      getSummary: summaryGenerators.issue,
     }
-  },
+  ),
 };
 
 // ============================================================================

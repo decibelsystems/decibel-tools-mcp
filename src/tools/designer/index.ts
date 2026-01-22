@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
-import { toolSuccess, toolError, requireFields } from '../shared/index.js';
+import { toolSuccess, toolError, requireFields, withRunTracking, summaryGenerators } from '../shared/index.js';
 import {
   recordDesignDecision,
   RecordDesignDecisionInput,
@@ -79,20 +79,27 @@ export const designerRecordDecisionTool: ToolSpec = {
       required: ['area', 'summary'],
     },
   },
-  handler: async (args) => {
-    try {
-      const rawInput = args as Record<string, unknown>;
-      normalizeProjectId(rawInput);
-      const input = rawInput as unknown as RecordDesignDecisionInput;
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        const rawInput = args as Record<string, unknown>;
+        normalizeProjectId(rawInput);
+        const input = rawInput as unknown as RecordDesignDecisionInput;
 
-      requireFields(input, 'area', 'summary');
+        requireFields(input, 'area', 'summary');
 
-      const result = await recordDesignDecision(input);
-      return toolSuccess(result);
-    } catch (err) {
-      return toolError(err instanceof Error ? err.message : String(err));
+        const result = await recordDesignDecision(input);
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    {
+      toolName: 'designer_record_design_decision',
+      getProjectId: (args) => (args.projectId as string | undefined) || (args.project_id as string | undefined),
+      getSummary: summaryGenerators.designDecision,
     }
-  },
+  ),
 };
 
 // ============================================================================

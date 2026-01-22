@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
-import { toolSuccess, toolError, requireFields } from '../shared/index.js';
+import { toolSuccess, toolError, requireFields, withRunTracking, summaryGenerators } from '../shared/index.js';
 import {
   appendLearning,
   AppendLearningInput,
@@ -73,24 +73,31 @@ export const learningsAppendTool: ToolSpec = {
       required: ['project_id', 'category', 'title', 'content'],
     },
   },
-  handler: async (args) => {
-    try {
-      const rawInput = args as Record<string, unknown>;
-      normalizeProjectId(rawInput);
-      const input = rawInput as unknown as AppendLearningInput;
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        const rawInput = args as Record<string, unknown>;
+        normalizeProjectId(rawInput);
+        const input = rawInput as unknown as AppendLearningInput;
 
-      requireFields(input, 'category', 'title', 'content');
+        requireFields(input, 'category', 'title', 'content');
 
-      if (!VALID_CATEGORIES.includes(input.category)) {
-        throw new Error(`Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
+        if (!VALID_CATEGORIES.includes(input.category)) {
+          throw new Error(`Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
+        }
+
+        const result = await appendLearning(input);
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
       }
-
-      const result = await appendLearning(input);
-      return toolSuccess(result);
-    } catch (err) {
-      return toolError(err instanceof Error ? err.message : String(err));
+    },
+    {
+      toolName: 'learnings_append',
+      getProjectId: (args) => (args.projectId as string | undefined) || (args.project_id as string | undefined),
+      getSummary: summaryGenerators.learning,
     }
-  },
+  ),
 };
 
 // ============================================================================

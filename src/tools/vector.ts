@@ -165,6 +165,12 @@ export interface ScorePromptInput {
 // ============================================================================
 
 const VALID_AGENT_TYPES: AgentType[] = ['claude-code', 'cursor', 'replit', 'chatgpt', 'custom'];
+
+/** Path to global hook events log */
+const GLOBAL_EVENTS_PATH = path.join(process.env.HOME || '~', '.decibel', 'events.jsonl');
+
+/** How far back to look for hook events (ms) */
+const HOOK_EVENT_LOOKBACK_MS = 5 * 60 * 1000; // 5 minutes
 const VALID_EVENT_TYPES: EventType[] = [
   'prompt_received', 'plan_proposed', 'assumption_made', 'clarifying_question',
   'command_ran', 'file_touched', 'test_result', 'backtrack', 'error',
@@ -218,6 +224,93 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
+/** Hook event from global events.jsonl */
+interface HookEvent {
+  ts: string;
+  tool: string;
+  project: string;
+  cwd: string;
+}
+
+/**
+ * Map hook tool names to Vector event types
+ */
+function mapToolToEventType(tool: string): EventType {
+  const toolLower = tool.toLowerCase();
+  if (toolLower === 'edit' || toolLower === 'write' || toolLower === 'notebookedit') {
+    return 'file_touched';
+  }
+  if (toolLower === 'bash') {
+    return 'command_ran';
+  }
+  // Default to file_touched for unknown tools
+  return 'file_touched';
+}
+
+/**
+ * Import recent hook events from global events.jsonl
+ * Filters by project name and recency (last 5 minutes by default)
+ */
+async function importHookEvents(
+  projectName: string,
+  agent: AgentInfo,
+  run_id: string,
+  lookbackMs: number = HOOK_EVENT_LOOKBACK_MS
+): Promise<VectorEvent[]> {
+  const events: VectorEvent[] = [];
+
+  if (!await fileExists(GLOBAL_EVENTS_PATH)) {
+    log(`Vector: No global events file at ${GLOBAL_EVENTS_PATH}`);
+    return events;
+  }
+
+  try {
+    const content = await fs.readFile(GLOBAL_EVENTS_PATH, 'utf-8');
+    const lines = content.trim().split('\n').filter(Boolean);
+    const cutoffTime = Date.now() - lookbackMs;
+
+    for (const line of lines) {
+      try {
+        const hookEvent = JSON.parse(line) as HookEvent;
+
+        // Filter by project
+        if (hookEvent.project !== projectName) {
+          continue;
+        }
+
+        // Filter by recency
+        const eventTime = new Date(hookEvent.ts).getTime();
+        if (eventTime < cutoffTime) {
+          continue;
+        }
+
+        // Convert to VectorEvent
+        const vectorEvent: VectorEvent = {
+          ts: hookEvent.ts,
+          run_id,
+          agent,
+          type: mapToolToEventType(hookEvent.tool),
+          payload: {
+            tool: hookEvent.tool,
+            cwd: hookEvent.cwd,
+            source: 'hook_import',
+          },
+        };
+
+        events.push(vectorEvent);
+      } catch {
+        // Skip malformed lines
+      }
+    }
+
+    log(`Vector: Imported ${events.length} hook events for project ${projectName}`);
+  } catch (err) {
+    log(`Vector: Error reading global events: ${err}`);
+  }
+
+  return events;
+}
+
 // ============================================================================
 // Run Management
 // ============================================================================
@@ -225,9 +318,13 @@ async function fileExists(filePath: string): Promise<boolean> {
 /**
  * Create a new run for an agent session
  */
-export async function createRun(input: CreateRunInput): Promise<{ run_id: string; path: string }> {
+export async function createRun(input: CreateRunInput): Promise<{ run_id: string; path: string; imported_events?: number }> {
   const projectId = input.projectId || input.project_id;
-  const runsDir = getRunsDir(projectId);
+  const resolved = resolveProjectPaths(projectId);
+  const runsDir = resolved.subPath('runs');
+
+  // Get project name for hook event matching
+  const projectName = path.basename(resolved.projectPath);
 
   // Validate agent type
   if (!VALID_AGENT_TYPES.includes(input.agent.type)) {
@@ -270,9 +367,22 @@ export async function createRun(input: CreateRunInput): Promise<{ run_id: string
     JSON.stringify(initialEvent) + '\n'
   );
 
-  log(`Vector: Created run ${run_id}`);
+  // Import recent hook events from global events.jsonl (Option D reconciliation)
+  const hookEvents = await importHookEvents(projectName, input.agent, run_id);
+  if (hookEvents.length > 0) {
+    const eventsPath = path.join(runDir, 'events.jsonl');
+    for (const event of hookEvents) {
+      await fs.appendFile(eventsPath, JSON.stringify(event) + '\n');
+    }
+  }
 
-  return { run_id, path: runDir };
+  log(`Vector: Created run ${run_id} (imported ${hookEvents.length} hook events)`);
+
+  return {
+    run_id,
+    path: runDir,
+    imported_events: hookEvents.length > 0 ? hookEvents.length : undefined,
+  };
 }
 
 /**

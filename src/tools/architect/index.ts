@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
-import { toolSuccess, toolError, requireFields } from '../shared/index.js';
+import { toolSuccess, toolError, requireFields, withRunTracking, summaryGenerators } from '../shared/index.js';
 import {
   recordArchDecision,
   RecordArchDecisionInput,
@@ -118,27 +118,34 @@ export const architectRecordArchDecisionTool: ToolSpec = {
       required: ['change', 'rationale'],
     },
   },
-  handler: async (args) => {
-    try {
-      const rawInput = args as Record<string, unknown>;
-      const input = normalizeParams<RecordArchDecisionInput>(
-        rawInput,
-        ['projectId', 'project_id', 'change', 'rationale', 'impact']
-      );
-      // Support project_id as alias for projectId
-      if (!input.projectId && rawInput.project_id) {
-        input.projectId = rawInput.project_id as string;
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        const rawInput = args as Record<string, unknown>;
+        const input = normalizeParams<RecordArchDecisionInput>(
+          rawInput,
+          ['projectId', 'project_id', 'change', 'rationale', 'impact']
+        );
+        // Support project_id as alias for projectId
+        if (!input.projectId && rawInput.project_id) {
+          input.projectId = rawInput.project_id as string;
+        }
+        requireFields(input, 'change', 'rationale');
+        const result = await recordArchDecision(input);
+        if ('error' in result) {
+          return toolError(JSON.stringify(result, null, 2));
+        }
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
       }
-      requireFields(input, 'change', 'rationale');
-      const result = await recordArchDecision(input);
-      if ('error' in result) {
-        return toolError(JSON.stringify(result, null, 2));
-      }
-      return toolSuccess(result);
-    } catch (err) {
-      return toolError(err instanceof Error ? err.message : String(err));
+    },
+    {
+      toolName: 'architect_record_arch_decision',
+      getProjectId: (args) => (args.projectId as string | undefined) || (args.project_id as string | undefined),
+      getSummary: summaryGenerators.adr,
     }
-  },
+  ),
 };
 
 // ============================================================================
@@ -192,20 +199,26 @@ export const architectCreateAdrTool: ToolSpec = {
       required: ['projectId', 'title', 'context', 'decision', 'consequences'],
     },
   },
-  handler: async (args) => {
-    try {
-      // Normalize parameter keys to handle case variations
-      const input = normalizeParams<AdrInput>(
-        args as Record<string, unknown>,
-        ['projectId', 'title', 'context', 'decision', 'consequences', 'relatedIssues', 'relatedEpics']
-      );
-      requireFields(input, 'projectId', 'title', 'context', 'decision', 'consequences');
-      const result = await createProjectAdr(input);
-      return toolSuccess(result);
-    } catch (err) {
-      return toolError(err instanceof Error ? err.message : String(err));
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        // Normalize parameter keys to handle case variations
+        const input = normalizeParams<AdrInput>(
+          args as Record<string, unknown>,
+          ['projectId', 'title', 'context', 'decision', 'consequences', 'relatedIssues', 'relatedEpics']
+        );
+        requireFields(input, 'projectId', 'title', 'context', 'decision', 'consequences');
+        const result = await createProjectAdr(input);
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    {
+      toolName: 'architect_createAdr',
+      getSummary: summaryGenerators.adr,
     }
-  },
+  ),
 };
 
 // ============================================================================

@@ -1,0 +1,9 @@
+{
+  "run_id": "RUN-2026-01-13T20-54-02-499Z",
+  "agent": {
+    "type": "claude-code",
+    "version": "test"
+  },
+  "raw_prompt": "Testing hook event import",
+  "created_at": "2026-01-13T20:54:02.499Z"
+}

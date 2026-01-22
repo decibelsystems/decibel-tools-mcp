@@ -546,6 +546,41 @@ function getAvailableTools(): { name: string; description: string }[] {
   ];
 }
 
+/**
+ * OpenAI function calling format for a tool
+ */
+interface OpenAIFunction {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: 'object';
+      properties: Record<string, unknown>;
+      required?: string[];
+    };
+  };
+}
+
+/**
+ * Get tools in OpenAI function calling format
+ * This includes the full parameter schema for each tool
+ */
+function getOpenAITools(): OpenAIFunction[] {
+  return modularTools.map(t => ({
+    type: 'function' as const,
+    function: {
+      name: t.definition.name,
+      description: t.definition.description,
+      parameters: {
+        type: 'object' as const,
+        properties: t.definition.inputSchema.properties,
+        required: t.definition.inputSchema.required,
+      },
+    },
+  }));
+}
+
 export interface HttpServerOptions {
   port: number;
   authToken?: string;
@@ -702,6 +737,67 @@ export async function startHttpServer(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // ========================================================================
+    // OpenAI-Compatible REST API (for SDK function calling)
+    // ========================================================================
+
+    // GET /api/tools - List tools in OpenAI function calling format
+    if (path === '/api/tools' && req.method === 'GET') {
+      const tools = getOpenAITools();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(tools));
+      return;
+    }
+
+    // POST /api/tools/{name} - Execute a tool by name
+    if (path.startsWith('/api/tools/') && req.method === 'POST') {
+      try {
+        const toolName = path.replace('/api/tools/', '');
+        if (!toolName) {
+          sendJson(res, 400, wrapError('Missing tool name in path', 'MISSING_TOOL_NAME'));
+          return;
+        }
+
+        const body = await parseBody(req);
+        log(`HTTP: /api/tools/${toolName}`);
+
+        // Check if tool exists in modular tools
+        const tool = modularToolMap.get(toolName);
+        if (!tool) {
+          // Try executeDojoTool for non-modular tools
+          const result = await executeDojoTool(toolName, body);
+          sendJson(res, result.status === 'error' ? 400 : 200, result);
+          return;
+        }
+
+        // Execute the modular tool
+        const toolResult = await tool.handler(body);
+        const text = toolResult.content[0]?.text;
+
+        // Parse JSON result or wrap as message
+        let result: Record<string, unknown>;
+        if (text) {
+          try {
+            result = JSON.parse(text);
+          } catch {
+            result = { message: text };
+          }
+        } else {
+          result = { success: true };
+        }
+
+        if (toolResult.isError) {
+          sendJson(res, 400, wrapError(text || 'Tool execution failed', 'TOOL_ERROR'));
+        } else {
+          sendJson(res, 200, wrapSuccess(result));
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'EXECUTION_ERROR'));
       }
       return;
     }

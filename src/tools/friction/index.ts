@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
-import { toolSuccess, toolError, requireFields } from '../shared/index.js';
+import { toolSuccess, toolError, requireFields, withRunTracking, summaryGenerators } from '../shared/index.js';
 import {
   logFriction,
   LogFrictionInput,
@@ -85,24 +85,30 @@ export const frictionLogTool: ToolSpec = {
       required: ['context', 'description'],
     },
   },
-  handler: async (args) => {
-    try {
-      const input = args as LogFrictionInput;
-      requireFields(input, 'context', 'description');
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        const input = args as LogFrictionInput;
+        requireFields(input, 'context', 'description');
 
-      if (input.frequency && !VALID_FREQUENCIES.includes(input.frequency)) {
-        throw new Error(`Invalid frequency. Must be one of: ${VALID_FREQUENCIES.join(', ')}`);
-      }
-      if (input.impact && !VALID_IMPACTS.includes(input.impact)) {
-        throw new Error(`Invalid impact. Must be one of: ${VALID_IMPACTS.join(', ')}`);
-      }
+        if (input.frequency && !VALID_FREQUENCIES.includes(input.frequency)) {
+          throw new Error(`Invalid frequency. Must be one of: ${VALID_FREQUENCIES.join(', ')}`);
+        }
+        if (input.impact && !VALID_IMPACTS.includes(input.impact)) {
+          throw new Error(`Invalid impact. Must be one of: ${VALID_IMPACTS.join(', ')}`);
+        }
 
-      const result = await logFriction(input);
-      return toolSuccess(result);
-    } catch (err) {
-      return toolError(err instanceof Error ? err.message : String(err));
+        const result = await logFriction(input);
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    {
+      toolName: 'friction_log',
+      getSummary: summaryGenerators.friction,
     }
-  },
+  ),
 };
 
 // ============================================================================

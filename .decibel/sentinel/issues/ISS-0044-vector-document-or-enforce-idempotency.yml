@@ -1,0 +1,19 @@
+id: ISS-0044
+title: "Vector: Document or enforce idempotency"
+project: decibel-tools-mcp
+status: open
+priority: low
+tags:
+  - vector
+  - docs
+  - reliability
+created_at: 2026-01-13T20:36:52.042Z
+updated_at: 2026-01-13T20:36:52.042Z
+description: |-
+  Unclear what happens if same event is logged twice. Options:
+
+  1. Document that events are append-only, duplicates allowed
+  2. Add event_id for deduplication
+  3. Hash-based deduplication
+
+  Need to pick approach and document it.

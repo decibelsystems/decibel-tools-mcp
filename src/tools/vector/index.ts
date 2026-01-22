@@ -23,6 +23,13 @@ import {
   AgentType,
   EventType,
 } from '../vector.js';
+import {
+  buildContextPack,
+  checkpoint,
+  aggregateAssumptions,
+  type ContextPackRequest,
+  type CheckpointRequest,
+} from '../../lib/agent-services/index.js';
 
 // ============================================================================
 // Constants
@@ -353,6 +360,225 @@ export const vectorScorePromptTool: ToolSpec = {
 };
 
 // ============================================================================
+// Agent Context Pack Tool
+// ============================================================================
+
+export const vectorAgentContextPackTool: ToolSpec = {
+  definition: {
+    name: 'vector_agent_context_pack',
+    description: 'Build a memory brief from past runs before starting a task. Returns relevant past runs, churn hotspots, failure patterns, and suggested questions. Use this at the start of complex tasks to learn from history.',
+    annotations: {
+      title: 'Agent Context Pack',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        task: {
+          type: 'string',
+          description: 'The task description or goal you are about to work on',
+        },
+        files_hint: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Hint about which files/modules might be involved (e.g., ["src/auth/*", "api/users"])',
+        },
+        lookback_days: {
+          type: 'integer',
+          description: 'How far back to look for relevant runs (default: 30)',
+        },
+        max_runs: {
+          type: 'integer',
+          description: 'Maximum number of runs to analyze (default: 50)',
+        },
+      },
+      required: ['task'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as ContextPackRequest & { projectId?: string };
+      requireFields(input, 'task');
+
+      const result = await buildContextPack(
+        {
+          task: input.task,
+          files_hint: input.files_hint,
+          lookback_days: input.lookback_days,
+          max_runs: input.max_runs,
+        },
+        input.projectId
+      );
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// Agent Checkpoint Tool
+// ============================================================================
+
+export const vectorAgentCheckpointTool: ToolSpec = {
+  definition: {
+    name: 'vector_agent_checkpoint',
+    description: 'Mid-run checkpoint to detect drift and gate actions. Returns drift analysis, action gate result (if action provided), and overall status (green/yellow/red). Use this periodically during complex tasks.',
+    annotations: {
+      title: 'Agent Checkpoint',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        run_id: {
+          type: 'string',
+          description: 'The run ID for this session',
+        },
+        original_intent: {
+          type: 'string',
+          description: 'The original task/goal you started with',
+        },
+        current_plan: {
+          type: 'string',
+          description: 'What you are currently doing or planning to do',
+        },
+        files_touched: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Files you have modified so far',
+        },
+        pending_action: {
+          type: 'object',
+          description: 'Optional action you want to gate before executing',
+          properties: {
+            action: {
+              type: 'string',
+              description: 'Description of the action',
+            },
+            action_type: {
+              type: 'string',
+              enum: ['file_edit', 'command', 'api_call', 'refactor', 'delete'],
+              description: 'Type of action',
+            },
+            confidence: {
+              type: 'number',
+              description: 'Your confidence in this action (0-1)',
+            },
+            affected_files: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Files that would be affected',
+            },
+            reversible: {
+              type: 'boolean',
+              description: 'Whether this action is easily reversible',
+            },
+            risk_areas: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Risk areas involved (e.g., "auth", "database")',
+            },
+          },
+          required: ['action', 'action_type', 'confidence', 'reversible'],
+        },
+      },
+      required: ['run_id', 'original_intent', 'current_plan', 'files_touched'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as CheckpointRequest & { projectId?: string };
+      requireFields(input, 'run_id', 'original_intent', 'current_plan', 'files_touched');
+
+      const result = checkpoint({
+        run_id: input.run_id,
+        original_intent: input.original_intent,
+        current_plan: input.current_plan,
+        files_touched: input.files_touched,
+        pending_action: input.pending_action,
+      });
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// Agent Assumptions Tool
+// ============================================================================
+
+export const vectorAgentAssumptionsTool: ToolSpec = {
+  definition: {
+    name: 'vector_agent_assumptions',
+    description: 'Aggregate assumption data across past runs. Returns high-risk categories, specific assumptions to always ask about, and validation rates. Use this to understand what the agent should verify before assuming.',
+    annotations: {
+      title: 'Agent Assumptions',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        lookback_days: {
+          type: 'integer',
+          description: 'How far back to look (default: 30)',
+        },
+        max_runs: {
+          type: 'integer',
+          description: 'Maximum runs to analyze (default: 100)',
+        },
+        include_details: {
+          type: 'boolean',
+          description: 'Include full assumption list (default: false, returns only stats)',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as {
+        projectId?: string;
+        lookback_days?: number;
+        max_runs?: number;
+        include_details?: boolean;
+      };
+
+      const fullResult = await aggregateAssumptions(input.projectId, {
+        lookback_days: input.lookback_days,
+        max_runs: input.max_runs,
+      });
+
+      // Return stats only unless details requested
+      if (input.include_details) {
+        return toolSuccess(fullResult);
+      }
+
+      // Return just the stats
+      const { assumptions: _omit, ...stats } = fullResult;
+      return toolSuccess(stats);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -363,4 +589,7 @@ export const vectorTools: ToolSpec[] = [
   vectorListRunsTool,
   vectorGetRunTool,
   vectorScorePromptTool,
+  vectorAgentContextPackTool,
+  vectorAgentCheckpointTool,
+  vectorAgentAssumptionsTool,
 ];

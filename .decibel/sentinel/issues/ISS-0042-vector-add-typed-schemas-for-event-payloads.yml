@@ -1,0 +1,20 @@
+id: ISS-0042
+title: "Vector: Add typed schemas for event payloads"
+project: decibel-tools-mcp
+status: open
+priority: medium
+tags:
+  - vector
+  - types
+  - schema
+created_at: 2026-01-13T20:36:51.756Z
+updated_at: 2026-01-13T20:36:51.756Z
+description: |-
+  Event payloads are currently untyped (Record<string, any>). Should have specific schemas per event type:
+
+  - prompt_received: { prompt: string }
+  - command_ran: { tool: string, result: 'success'|'error', summary: string }
+  - file_touched: { path: string, action: 'read'|'write'|'delete' }
+  - etc.
+
+  Enables validation and better tooling.

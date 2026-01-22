@@ -342,3 +342,32 @@ Met with Carbon Voice CEO - good meeting. Integration path is clear.
 Carbon Voice → webhook → Supabase Edge Function → voice_inbox table → voice_inbox_sync pulls to local
 
 ---
+### [2026-01-15 06:11:58] Added REST API layer for OpenAI SDK compatibility
+**Category:** integration | **Tags:** `openai`, `rest-api`, `integration`, `httpServer`
+
+## What was done
+
+Added OpenAI-compatible REST endpoints to httpServer.ts:
+
+- `GET /api/tools` - Returns all tools in OpenAI function calling format
+- `POST /api/tools/{name}` - Execute any tool by name with JSON body
+
+## Key insight
+
+We built Streamable HTTP transport (not SSE) which is actually the newer, better protocol. OpenAI supports both, but REST is the most future-proof approach since:
+- Works with any HTTP client
+- OpenAI function calling format is stable
+- No protocol dependencies (SSE vs Streamable HTTP debate is moot)
+- Easy to test with curl
+
+## Files changed
+
+- `src/httpServer.ts` - Added `getOpenAITools()` helper and two new endpoints
+
+## Next steps
+
+1. Deploy to Render
+2. Test against `senken.pro/api/tools`
+3. Write example Python client using OpenAI SDK with these endpoints
+
+---

@@ -1,0 +1,11 @@
+event_id: PROV-20260115T061158-669
+timestamp: 2026-01-15T06:11:58.669Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - learnings:entry:decibel-tools-mcp:14
+reason_code: initial_creation
+summary: "Appended learning: Added REST API layer for OpenAI SDK compatibility"
+fingerprint_before: null
+fingerprint_after: sha256:b48e1dabacf91890

@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
-import { toolSuccess, toolError, requireFields, requireOneOf } from '../shared/index.js';
+import { toolSuccess, toolError, requireFields, requireOneOf, withRunTracking, summaryGenerators } from '../shared/index.js';
 import {
   createProposal,
   CreateProposalInput,
@@ -117,18 +117,25 @@ export const dojoCreateProposalTool: ToolSpec = {
       required: ['title', 'problem', 'hypothesis'],
     },
   },
-  handler: async (args) => {
-    try {
-      requireFields(args, 'title', 'problem', 'hypothesis');
-      const result = await createProposal(args as CreateProposalInput);
-      if (isDojoError(result)) {
-        return toolError(JSON.stringify(result));
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        requireFields(args, 'title', 'problem', 'hypothesis');
+        const result = await createProposal(args as CreateProposalInput);
+        if (isDojoError(result)) {
+          return toolError(JSON.stringify(result));
+        }
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
       }
-      return toolSuccess(result);
-    } catch (err) {
-      return toolError(err instanceof Error ? err.message : String(err));
+    },
+    {
+      toolName: 'dojo_create_proposal',
+      getProjectId: (args) => args.project_id as string | undefined,
+      getSummary: summaryGenerators.proposal,
     }
-  },
+  ),
 };
 
 export const dojoScaffoldExperimentTool: ToolSpec = {
@@ -175,22 +182,29 @@ export const dojoScaffoldExperimentTool: ToolSpec = {
       required: ['proposal_id'],
     },
   },
-  handler: async (args) => {
-    try {
-      requireFields(args, 'proposal_id');
-      if (args.experiment_type) {
-        const validTypes: ExperimentType[] = ['script', 'tool', 'check', 'prompt'];
-        requireOneOf(args.experiment_type, 'experiment_type', validTypes);
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        requireFields(args, 'proposal_id');
+        if (args.experiment_type) {
+          const validTypes: ExperimentType[] = ['script', 'tool', 'check', 'prompt'];
+          requireOneOf(args.experiment_type, 'experiment_type', validTypes);
+        }
+        const result = await scaffoldExperiment(args as ScaffoldExperimentInput);
+        if (isDojoError(result)) {
+          return toolError(JSON.stringify(result));
+        }
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
       }
-      const result = await scaffoldExperiment(args as ScaffoldExperimentInput);
-      if (isDojoError(result)) {
-        return toolError(JSON.stringify(result));
-      }
-      return toolSuccess(result);
-    } catch (err) {
-      return toolError(err instanceof Error ? err.message : String(err));
+    },
+    {
+      toolName: 'dojo_scaffold_experiment',
+      getProjectId: (args) => args.project_id as string | undefined,
+      getSummary: summaryGenerators.scaffold,
     }
-  },
+  ),
 };
 
 export const dojoListTool: ToolSpec = {
@@ -521,18 +535,25 @@ export const dojoAddWishTool: ToolSpec = {
       required: ['capability', 'reason', 'inputs', 'outputs'],
     },
   },
-  handler: async (args) => {
-    try {
-      requireFields(args, 'capability', 'reason');
-      const result = await addWish(args as AddWishInput);
-      if (isDojoError(result)) {
-        return toolError(JSON.stringify(result));
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        requireFields(args, 'capability', 'reason');
+        const result = await addWish(args as AddWishInput);
+        if (isDojoError(result)) {
+          return toolError(JSON.stringify(result));
+        }
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
       }
-      return toolSuccess(result);
-    } catch (err) {
-      return toolError(err instanceof Error ? err.message : String(err));
+    },
+    {
+      toolName: 'dojo_add_wish',
+      getProjectId: (args) => args.project_id as string | undefined,
+      getSummary: summaryGenerators.wish,
     }
-  },
+  ),
 };
 
 export const dojoListWishesTool: ToolSpec = {

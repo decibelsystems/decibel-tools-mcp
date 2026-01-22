@@ -1,0 +1,38 @@
+id: ISS-0040
+title: "Vector: Dual stores (jsonl vs runs/) need reconciliation"
+project: decibel-tools-mcp
+status: open
+priority: high
+tags:
+  - vector
+  - architecture
+  - data-model
+created_at: 2026-01-13T20:36:51.480Z
+updated_at: 2026-01-13T20:36:51.480Z
+description: |-
+  Two places events get written:
+
+  1. Shell hook → ~/.decibel/events.jsonl
+     - Global file, append-only
+     - Simple: {ts, tool, project, cwd}
+     - No run_id, no event typing
+     - Fast, works without MCP running
+
+  2. MCP tools → .decibel/runs/{run_id}/events.jsonl
+     - Per-project, per-run
+     - Rich: {ts, run_id, agent, type, payload}
+     - Full event schema
+
+  Problem: They don't talk to each other. Hook events invisible to Vector MCP.
+
+  Options:
+  A. Pick one - MCP runs/ is the richer model, deprecate global jsonl
+  B. Hook calls MCP - shell hook triggers vector_log_event (loses offline benefit)
+  C. Sync layer - periodically merge global jsonl into runs/
+  D. Import on run start - vector_create_run ingests recent hook events for context
+
+  Recommendation: Option D - keeps hooks fast/offline, gives Vector complete picture
+
+## Resolution
+
+Implemented Option D: vector_create_run now imports recent hook events from ~/.decibel/events.jsonl. Filters by project name and last 5 minutes. Events are converted to Vector format with source: 'hook_import' marker.

@@ -1,0 +1,16 @@
+id: ISS-0043
+title: "Vector: Add batch event logging"
+project: decibel-tools-mcp
+status: open
+priority: low
+tags:
+  - vector
+  - api
+  - performance
+created_at: 2026-01-13T20:36:51.893Z
+updated_at: 2026-01-13T20:36:51.893Z
+description: |-
+  Add vector_log_batch tool for logging multiple events in one call. Useful when an agent performs several actions before reporting.
+
+  Input: { run_id, events: Array<{type, payload}> }
+  Output: { success: true, event_count: N }
