@@ -3,6 +3,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { getAllTools } from './tools/index.js';
 import { ToolSpec } from './tools/types.js';
+import { trackToolUse } from './tools/shared/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
@@ -72,6 +73,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Check modular tools first (from src/tools/*)
     const modularTool = toolMap.get(name);
     if (modularTool) {
+      trackToolUse(name);  // Track for feedback prompts
       const result = await modularTool.handler(args);
       // Cast to match MCP SDK expected return type
       return result as { content: Array<{ type: 'text'; text: string }>; isError?: boolean };

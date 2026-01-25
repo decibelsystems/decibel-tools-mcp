@@ -1,0 +1,22 @@
+objectives:
+  - id: OBJ-0001
+    title: Example Objective
+    timeframe: 2026-Q1
+    owner: team
+    key_results:
+      - metric: example_metric
+        target: ">90%"
+        current: ~70%
+themes:
+  - id: foundations
+    label: Foundations
+    description: Core infrastructure and tooling
+  - id: features
+    label: Features
+    description: User-facing functionality
+milestones:
+  - id: M-0001
+    label: v1.0 - Initial Release
+    target_date: 2026-03-01
+    epics: []
+epic_context: {}

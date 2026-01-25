@@ -1,0 +1,11 @@
+event_id: PROV-20260125T065451-175
+timestamp: 2026-01-25T06:54:51.175Z
+actor_id: human:hiro
+actor_type: human
+action: create
+artifact_refs:
+  - feedback:submit:2026-01-25T06-54-51Z-tool-feedback-submit
+reason_code: initial_creation
+summary: "Submitted feedback: tool (feedback_submit)"
+fingerprint_before: null
+fingerprint_after: sha256:34e7f6a41382901a

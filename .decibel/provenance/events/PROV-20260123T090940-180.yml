@@ -1,0 +1,11 @@
+event_id: PROV-20260123T090940-180
+timestamp: 2026-01-23T09:09:40.180Z
+actor_id: human:hiro
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:epic:EPIC-0025
+reason_code: initial_creation
+summary: "Created epic: Codebase Modular Architecture Refactoring"
+fingerprint_before: null
+fingerprint_after: sha256:ce8d084a85a911d4

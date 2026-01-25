@@ -1,0 +1,11 @@
+event_id: PROV-20260125T070235-659
+timestamp: 2026-01-25T07:02:35.659Z
+actor_id: human:hiro
+actor_type: human
+action: create
+artifact_refs:
+  - feedback:submit:2026-01-25T07-02-35Z-tool-workflow-preflight
+reason_code: initial_creation
+summary: "Submitted feedback: tool (workflow_preflight)"
+fingerprint_before: null
+fingerprint_after: sha256:5534afd7f70538b4
