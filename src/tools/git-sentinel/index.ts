@@ -12,10 +12,12 @@ import {
   sentinelLinkCommit,
   sentinelGetLinkedCommits,
   gitFindLinkedIssues,
+  autoLinkCommit,
   isLinkError,
   SentinelLinkCommitInput,
   SentinelGetCommitsInput,
   GitFindIssueInput,
+  AutoLinkInput,
 } from '../git-sentinel.js';
 
 // ============================================================================
@@ -160,6 +162,44 @@ export const gitFindLinkedIssuesTool: ToolSpec = {
 };
 
 // ============================================================================
+// sentinel_auto_link
+// ============================================================================
+
+export const sentinelAutoLinkTool: ToolSpec = {
+  definition: {
+    name: 'sentinel_auto_link',
+    description:
+      'Auto-link a commit to issues/epics referenced in its message. Parses patterns like "fixes ISS-0042", "closes EPIC-0001", or standalone "ISS-0042" references. Call after commits to automatically create links.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description:
+            'Project identifier. Uses current project if not specified.',
+        },
+        commitSha: {
+          type: 'string',
+          description:
+            'Commit SHA to process (default: HEAD). Parses commit message for issue/epic references.',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const result = await autoLinkCommit(args as AutoLinkInput);
+      if (isLinkError(result)) {
+        return toolError(result.error, result.details);
+      }
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -167,4 +207,5 @@ export const gitSentinelTools: ToolSpec[] = [
   sentinelLinkCommitTool,
   sentinelGetLinkedCommitsTool,
   gitFindLinkedIssuesTool,
+  sentinelAutoLinkTool,
 ];

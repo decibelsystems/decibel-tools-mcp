@@ -68,6 +68,28 @@ export interface LinkError {
   details?: string;
 }
 
+// Auto-link types
+export interface ParsedReference {
+  artifactId: string;
+  relationship: LinkedCommit['relationship'];
+}
+
+export interface AutoLinkInput {
+  projectId?: string;
+  commitSha?: string;  // If not provided, uses HEAD
+}
+
+export interface AutoLinkOutput {
+  commitSha: string;
+  commitMessage: string;
+  referencesFound: ParsedReference[];
+  linked: Array<{
+    artifactId: string;
+    relationship: string;
+    status: 'linked' | 'already_linked' | 'not_found';
+  }>;
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -336,6 +358,184 @@ export async function gitFindLinkedIssues(
   return {
     commitSha: input.commitSha,
     linkedArtifacts,
+  };
+}
+
+// ============================================================================
+// parseCommitMessage - Extract issue/epic references from commit message
+// ============================================================================
+
+/**
+ * Parse commit message for issue/epic references.
+ * Supports patterns:
+ *   - ISS-0042, EPIC-0001 (standalone references -> 'related')
+ *   - fixes ISS-0042, closes EPIC-0001 (action + reference)
+ *   - fix: ISS-0042, close: EPIC-0001 (conventional commit style)
+ *   - implements EPIC-0001, reverts ISS-0042
+ */
+export function parseCommitMessage(message: string): ParsedReference[] {
+  const refs: ParsedReference[] = [];
+  const seen = new Set<string>();
+
+  // Pattern: action + artifact (fixes ISS-0042, closes EPIC-0001, etc.)
+  const actionPatterns: Array<{ pattern: RegExp; relationship: LinkedCommit['relationship'] }> = [
+    { pattern: /(?:fix(?:es|ed)?|fixing)[:\s]+((iss|epic|issue)-?\d+)/gi, relationship: 'fixes' },
+    { pattern: /(?:close[sd]?|closing)[:\s]+((iss|epic|issue)-?\d+)/gi, relationship: 'closes' },
+    { pattern: /(?:implement[sd]?|implementing)[:\s]+((iss|epic|issue)-?\d+)/gi, relationship: 'implements' },
+    { pattern: /(?:revert[sd]?|reverting)[:\s]+((iss|epic|issue)-?\d+)/gi, relationship: 'reverts' },
+    { pattern: /(?:break[sd]?|breaking)[:\s]+((iss|epic|issue)-?\d+)/gi, relationship: 'breaks' },
+  ];
+
+  for (const { pattern, relationship } of actionPatterns) {
+    let match;
+    while ((match = pattern.exec(message)) !== null) {
+      const artifactId = normalizeArtifactId(match[1]);
+      if (!seen.has(artifactId)) {
+        seen.add(artifactId);
+        refs.push({ artifactId, relationship });
+      }
+    }
+  }
+
+  // Pattern: standalone artifact references (ISS-0042, EPIC-0001)
+  // Only add as 'related' if not already captured with a specific relationship
+  const standalonePattern = /\b(iss(?:ue)?-?\d+|epic-?\d+)\b/gi;
+  let match;
+  while ((match = standalonePattern.exec(message)) !== null) {
+    const artifactId = normalizeArtifactId(match[1]);
+    if (!seen.has(artifactId)) {
+      seen.add(artifactId);
+      refs.push({ artifactId, relationship: 'related' });
+    }
+  }
+
+  return refs;
+}
+
+/**
+ * Normalize artifact ID to standard format (ISS-0042, EPIC-0001)
+ */
+function normalizeArtifactId(raw: string): string {
+  const upper = raw.toUpperCase();
+
+  // Handle ISSUE -> ISS
+  if (upper.startsWith('ISSUE')) {
+    const num = upper.replace(/[^0-9]/g, '');
+    return `ISS-${num.padStart(4, '0')}`;
+  }
+
+  // Handle ISS0042 -> ISS-0042
+  if (upper.startsWith('ISS') && !upper.includes('-')) {
+    const num = upper.replace(/[^0-9]/g, '');
+    return `ISS-${num.padStart(4, '0')}`;
+  }
+
+  // Handle EPIC0001 -> EPIC-0001
+  if (upper.startsWith('EPIC') && !upper.includes('-')) {
+    const num = upper.replace(/[^0-9]/g, '');
+    return `EPIC-${num.padStart(4, '0')}`;
+  }
+
+  // Already normalized
+  return upper;
+}
+
+// ============================================================================
+// autoLinkCommit - Auto-link commit to referenced issues/epics
+// ============================================================================
+
+export async function autoLinkCommit(
+  input: AutoLinkInput
+): Promise<AutoLinkOutput | LinkError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeError('Failed to resolve project path');
+  }
+
+  // Get commit info (HEAD if not specified)
+  const logResult = await gitLogRecent({ projectId: input.projectId, count: 1 });
+
+  if (isGitErrorResult(logResult) || logResult.commits.length === 0) {
+    return makeError('Failed to get commit info');
+  }
+
+  // If SHA specified, find it; otherwise use HEAD (first commit)
+  let commit = logResult.commits[0];
+  if (input.commitSha) {
+    const fullLog = await gitLogRecent({ projectId: input.projectId, count: 100 });
+    if (!isGitErrorResult(fullLog)) {
+      const found = fullLog.commits.find(
+        c => c.sha.startsWith(input.commitSha!) || c.shortSha === input.commitSha
+      );
+      if (found) commit = found;
+    }
+  }
+
+  // Parse commit message for references
+  const refs = parseCommitMessage(commit.message);
+
+  if (refs.length === 0) {
+    return {
+      commitSha: commit.sha,
+      commitMessage: commit.message,
+      referencesFound: [],
+      linked: [],
+    };
+  }
+
+  // Try to link each reference
+  const linked: AutoLinkOutput['linked'] = [];
+
+  for (const ref of refs) {
+    const artifact = await findArtifactFile(resolved, ref.artifactId);
+
+    if (!artifact) {
+      linked.push({
+        artifactId: ref.artifactId,
+        relationship: ref.relationship,
+        status: 'not_found',
+      });
+      continue;
+    }
+
+    // Try to link
+    const linkResult = await sentinelLinkCommit({
+      projectId: input.projectId,
+      artifactId: ref.artifactId,
+      commitSha: commit.sha,
+      relationship: ref.relationship,
+    });
+
+    if (isLinkError(linkResult)) {
+      if (linkResult.error === 'Commit already linked') {
+        linked.push({
+          artifactId: ref.artifactId,
+          relationship: ref.relationship,
+          status: 'already_linked',
+        });
+      } else {
+        linked.push({
+          artifactId: ref.artifactId,
+          relationship: ref.relationship,
+          status: 'not_found',
+        });
+      }
+    } else {
+      linked.push({
+        artifactId: ref.artifactId,
+        relationship: ref.relationship,
+        status: 'linked',
+      });
+    }
+  }
+
+  return {
+    commitSha: commit.sha,
+    commitMessage: commit.message,
+    referencesFound: refs,
+    linked,
   };
 }
 
