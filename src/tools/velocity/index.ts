@@ -13,10 +13,14 @@ import {
   listSnapshots,
   getTrends,
   getContributorReport,
+  installHook,
+  uninstallHook,
   VelocitySnapshotInput,
   VelocityListInput,
   VelocityTrendsInput,
   VelocityContributorInput,
+  InstallHookInput,
+  UninstallHookInput,
   VelocityPeriod,
   isVelocityError,
 } from '../velocity.js';
@@ -228,6 +232,108 @@ export const velocityContributorTool: ToolSpec = {
 };
 
 // ============================================================================
+// velocity_install_hook - Install auto-capture git hook
+// ============================================================================
+
+const VALID_HOOK_TYPES = ['post-commit', 'post-push'];
+
+export const velocityInstallHookTool: ToolSpec = {
+  definition: {
+    name: 'velocity_install_hook',
+    description: 'Install a git hook to auto-capture velocity snapshots. The hook runs after commits and captures a daily snapshot if one doesn\'t exist for today. Idempotent - safe to run multiple times.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Project identifier. Uses default project if not specified.',
+        },
+        hookType: {
+          type: 'string',
+          enum: ['post-commit', 'post-push'],
+          description: 'Git hook type to install (default: post-commit)',
+        },
+        periods: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['daily', 'weekly', 'quarterly'],
+          },
+          description: 'Which snapshot periods to auto-capture (default: [\'daily\'])',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as InstallHookInput;
+
+      if (input.hookType && !VALID_HOOK_TYPES.includes(input.hookType)) {
+        throw new Error(`Invalid hookType. Must be one of: ${VALID_HOOK_TYPES.join(', ')}`);
+      }
+
+      if (input.periods) {
+        for (const period of input.periods) {
+          if (!VALID_PERIODS.includes(period as VelocityPeriod)) {
+            throw new Error(`Invalid period "${period}". Must be one of: ${VALID_PERIODS.join(', ')}`);
+          }
+        }
+      }
+
+      const result = await installHook(input);
+      if (isVelocityError(result)) {
+        return toolError(JSON.stringify(result, null, 2));
+      }
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// velocity_uninstall_hook - Remove auto-capture git hook
+// ============================================================================
+
+export const velocityUninstallHookTool: ToolSpec = {
+  definition: {
+    name: 'velocity_uninstall_hook',
+    description: 'Remove the velocity auto-capture git hook. Preserves other hooks if present.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Project identifier. Uses default project if not specified.',
+        },
+        hookType: {
+          type: 'string',
+          enum: ['post-commit', 'post-push'],
+          description: 'Git hook type to remove (default: post-commit)',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as UninstallHookInput;
+
+      if (input.hookType && !VALID_HOOK_TYPES.includes(input.hookType)) {
+        throw new Error(`Invalid hookType. Must be one of: ${VALID_HOOK_TYPES.join(', ')}`);
+      }
+
+      const result = await uninstallHook(input);
+      if (isVelocityError(result)) {
+        return toolError(JSON.stringify(result, null, 2));
+      }
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -236,4 +342,6 @@ export const velocityTools: ToolSpec[] = [
   velocityListTool,
   velocityTrendsTool,
   velocityContributorTool,
+  velocityInstallHookTool,
+  velocityUninstallHookTool,
 ];

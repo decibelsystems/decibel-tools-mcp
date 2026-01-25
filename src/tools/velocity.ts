@@ -687,3 +687,218 @@ export async function getContributorReport(
 export function isVelocityError(result: unknown): result is VelocityError {
   return typeof result === 'object' && result !== null && 'error' in result && !('snapshots' in result) && !('snapshotId' in result);
 }
+
+// ============================================================================
+// Hook Installation Types
+// ============================================================================
+
+export interface InstallHookInput {
+  projectId?: string;
+  hookType?: 'post-commit' | 'post-push';  // Default: post-commit
+  periods?: VelocityPeriod[];              // Default: ['daily']
+}
+
+export interface InstallHookOutput {
+  installed: boolean;
+  hookPath: string;
+  hookType: string;
+  periods: VelocityPeriod[];
+  message: string;
+}
+
+export interface UninstallHookInput {
+  projectId?: string;
+  hookType?: 'post-commit' | 'post-push';
+}
+
+export interface UninstallHookOutput {
+  removed: boolean;
+  hookPath: string;
+  message: string;
+}
+
+// ============================================================================
+// velocity_install_hook - Install auto-capture git hook
+// ============================================================================
+
+const HOOK_MARKER = '# DECIBEL-VELOCITY-HOOK';
+
+function generateHookScript(periods: VelocityPeriod[], decibelPath: string): string {
+  const periodChecks = periods.map(period => `
+  # Check if ${period} snapshot exists for today
+  SNAPSHOT_FILE="$DECIBEL_DIR/velocity/snapshots/$TODAY-${period}.yml"
+  if [ ! -f "$SNAPSHOT_FILE" ]; then
+    echo "[decibel] Capturing ${period} velocity snapshot..."
+    node -e "
+      import('${decibelPath}/dist/tools/velocity.js').then(m => {
+        m.captureSnapshot({ period: '${period}' }).then(r => {
+          if (r.error) console.error('[decibel] Error:', r.message);
+          else console.log('[decibel] Captured:', r.snapshotId);
+        });
+      });
+    " 2>/dev/null || true
+  fi`).join('\n');
+
+  return `#!/bin/bash
+${HOOK_MARKER}
+# Auto-capture velocity snapshots after commits
+# Installed by: decibel-tools-mcp velocity_install_hook
+
+# Get the repo root and .decibel directory
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+DECIBEL_DIR="$REPO_ROOT/.decibel"
+TODAY="$(date +%Y-%m-%d)"
+
+# Only run if .decibel directory exists
+if [ -d "$DECIBEL_DIR" ]; then
+${periodChecks}
+fi
+
+# Exit successfully (don't block commits on snapshot failures)
+exit 0
+`;
+}
+
+export async function installHook(
+  input: InstallHookInput
+): Promise<InstallHookOutput | VelocityError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectResolutionError('install velocity hook');
+  }
+
+  const hookType = input.hookType || 'post-commit';
+  const periods = input.periods || ['daily'];
+  const gitHooksDir = path.join(resolved.projectPath, '.git', 'hooks');
+  const hookPath = path.join(gitHooksDir, hookType);
+
+  // Check if .git/hooks exists
+  try {
+    await fs.access(gitHooksDir);
+  } catch {
+    return makeError('git_not_found', 'No .git/hooks directory found. Is this a git repository?');
+  }
+
+  // Check if hook already exists
+  let existingHook = '';
+  try {
+    existingHook = await fs.readFile(hookPath, 'utf-8');
+    if (existingHook.includes(HOOK_MARKER)) {
+      return {
+        installed: true,
+        hookPath,
+        hookType,
+        periods,
+        message: `Velocity hook already installed at ${hookPath}`,
+      };
+    }
+  } catch {
+    // Hook doesn't exist yet, that's fine
+  }
+
+  // Find the decibel-tools-mcp installation path (for the hook to import from)
+  // Use a relative approach - the hook will use the project's node_modules or global
+  const decibelPath = 'decibel-tools-mcp';
+
+  // Generate hook script
+  const hookScript = generateHookScript(periods, decibelPath);
+
+  // If there's an existing hook, append to it
+  let finalScript: string;
+  if (existingHook && !existingHook.includes(HOOK_MARKER)) {
+    // Append our hook to existing hook
+    finalScript = existingHook.trimEnd() + '\n\n' + hookScript;
+  } else {
+    finalScript = hookScript;
+  }
+
+  // Write the hook
+  await fs.writeFile(hookPath, finalScript, { mode: 0o755 });
+
+  log(`Velocity: Installed ${hookType} hook at ${hookPath}`);
+
+  return {
+    installed: true,
+    hookPath,
+    hookType,
+    periods,
+    message: `Velocity auto-capture hook installed. Will capture ${periods.join(', ')} snapshots on ${hookType}.`,
+  };
+}
+
+// ============================================================================
+// velocity_uninstall_hook - Remove auto-capture git hook
+// ============================================================================
+
+export async function uninstallHook(
+  input: UninstallHookInput
+): Promise<UninstallHookOutput | VelocityError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectResolutionError('uninstall velocity hook');
+  }
+
+  const hookType = input.hookType || 'post-commit';
+  const hookPath = path.join(resolved.projectPath, '.git', 'hooks', hookType);
+
+  try {
+    const existingHook = await fs.readFile(hookPath, 'utf-8');
+
+    if (!existingHook.includes(HOOK_MARKER)) {
+      return {
+        removed: false,
+        hookPath,
+        message: 'No velocity hook found in this file',
+      };
+    }
+
+    // Remove the velocity hook section
+    const lines = existingHook.split('\n');
+    const newLines: string[] = [];
+    let inVelocitySection = false;
+
+    for (const line of lines) {
+      if (line.includes(HOOK_MARKER)) {
+        inVelocitySection = true;
+        continue;
+      }
+      if (inVelocitySection && line.startsWith('exit 0')) {
+        inVelocitySection = false;
+        continue;
+      }
+      if (!inVelocitySection) {
+        newLines.push(line);
+      }
+    }
+
+    const newContent = newLines.join('\n').trim();
+
+    if (newContent === '' || newContent === '#!/bin/bash') {
+      // Hook file is now empty, remove it
+      await fs.unlink(hookPath);
+      return {
+        removed: true,
+        hookPath,
+        message: `Removed velocity hook and deleted empty ${hookType} file`,
+      };
+    } else {
+      // Write back the remaining hook content
+      await fs.writeFile(hookPath, newContent + '\n', { mode: 0o755 });
+      return {
+        removed: true,
+        hookPath,
+        message: `Removed velocity hook from ${hookType}, preserved other hooks`,
+      };
+    }
+  } catch {
+    return {
+      removed: false,
+      hookPath,
+      message: `No ${hookType} hook file found`,
+    };
+  }
+}
