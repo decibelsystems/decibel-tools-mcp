@@ -32,6 +32,38 @@ export interface GitLogInput {
   grep?: string;        // Search commit messages
 }
 
+// Extended commit with line statistics
+export interface GitCommitWithStats {
+  sha: string;
+  shortSha: string;
+  message: string;
+  author: string;
+  email: string;
+  date: string;
+  linesAdded: number;
+  linesDeleted: number;
+  filesChanged: number;
+}
+
+export interface GitLogWithStatsInput {
+  projectId?: string;
+  count?: number;       // Default: 20
+  since?: string;       // e.g., "2 weeks ago", "2025-01-01"
+  until?: string;
+  author?: string;
+  path?: string;        // Filter to specific path
+}
+
+export interface GitLogWithStatsOutput {
+  commits: GitCommitWithStats[];
+  total: number;
+  totals: {
+    linesAdded: number;
+    linesDeleted: number;
+    filesChanged: number;
+  };
+}
+
 export interface GitLogOutput {
   commits: GitCommit[];
   total: number;
@@ -215,6 +247,102 @@ export async function gitLogRecent(
     });
 
   return { commits, total: commits.length };
+}
+
+// ============================================================================
+// Git Log With Stats (includes line counts)
+// ============================================================================
+
+export async function gitLogWithStats(
+  input: GitLogWithStatsInput
+): Promise<GitLogWithStatsOutput | GitError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeGitError('Failed to resolve project path');
+  }
+
+  const count = input.count || 20;
+  // Format includes email for contributor identification
+  const format = '---COMMIT---%H|%h|%s|%an|%ae|%aI';
+
+  const args = ['log', `--format=${format}`, '--numstat', `-${count}`];
+
+  if (input.since) args.push(`--since=${input.since}`);
+  if (input.until) args.push(`--until=${input.until}`);
+  if (input.author) args.push(`--author=${input.author}`);
+  if (input.path) args.push('--', input.path);
+
+  const result = await execGit(args, resolved.projectPath);
+
+  if (isGitError(result)) {
+    return makeGitError('Failed to get git log with stats', result);
+  }
+
+  const commits: GitCommitWithStats[] = [];
+  let totalLinesAdded = 0;
+  let totalLinesDeleted = 0;
+  let totalFilesChanged = 0;
+
+  // Parse output: each commit starts with ---COMMIT--- marker
+  // followed by numstat lines (added\tdeleted\tfilename)
+  const chunks = result.stdout.split('---COMMIT---').filter(Boolean);
+
+  for (const chunk of chunks) {
+    const lines = chunk.trim().split('\n');
+    if (lines.length === 0) continue;
+
+    // First line is the formatted commit info
+    const [sha, shortSha, message, author, email, date] = lines[0].split('|');
+    if (!sha) continue;
+
+    // Remaining lines are numstat (added\tdeleted\tfilename)
+    let linesAdded = 0;
+    let linesDeleted = 0;
+    let filesChanged = 0;
+
+    for (let i = 1; i < lines.length; i++) {
+      const statLine = lines[i].trim();
+      if (!statLine) continue;
+
+      const parts = statLine.split('\t');
+      if (parts.length >= 2) {
+        // Handle binary files (shows '-' instead of numbers)
+        const added = parts[0] === '-' ? 0 : parseInt(parts[0], 10) || 0;
+        const deleted = parts[1] === '-' ? 0 : parseInt(parts[1], 10) || 0;
+        linesAdded += added;
+        linesDeleted += deleted;
+        filesChanged++;
+      }
+    }
+
+    commits.push({
+      sha,
+      shortSha,
+      message,
+      author,
+      email,
+      date,
+      linesAdded,
+      linesDeleted,
+      filesChanged,
+    });
+
+    totalLinesAdded += linesAdded;
+    totalLinesDeleted += linesDeleted;
+    totalFilesChanged += filesChanged;
+  }
+
+  return {
+    commits,
+    total: commits.length,
+    totals: {
+      linesAdded: totalLinesAdded,
+      linesDeleted: totalLinesDeleted,
+      filesChanged: totalFilesChanged,
+    },
+  };
 }
 
 // ============================================================================

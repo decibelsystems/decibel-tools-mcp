@@ -23,6 +23,7 @@ import { gitTools } from './git/index.js';
 import { auditorTools } from './auditor/index.js';
 import { workflowTools } from './workflow/index.js';
 import { gitSentinelTools } from './git-sentinel/index.js';
+import { velocityTools } from './velocity/index.js';
 
 // Pro tier tools (require DECIBEL_PRO=1)
 const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
@@ -50,6 +51,7 @@ const coreTools: ToolSpec[] = [
   ...auditorTools,
   ...workflowTools,
   ...gitSentinelTools,
+  ...velocityTools,
 ];
 
 // Pro tools (only when DECIBEL_PRO=1)
