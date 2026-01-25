@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
+import { execSync } from 'child_process';
 import { log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
@@ -97,13 +98,41 @@ export function hashContent(content: string): string {
 }
 
 /**
+ * Get git user identity (name <email>) from git config.
+ * Returns null if git is not available or not configured.
+ */
+function getGitUser(): string | null {
+  try {
+    const name = execSync('git config user.name', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    const email = execSync('git config user.email', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    if (name && email) {
+      return `${name} <${email}>`;
+    }
+    if (name) {
+      return name;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Get the default actor ID from environment or fallback.
- * Checks DECIBEL_ACTOR_ID env var, falls back to human:$USER
+ * Priority: DECIBEL_ACTOR_ID env var > git config > $USER
  */
 export function getDefaultActorId(): string {
   if (process.env.DECIBEL_ACTOR_ID) {
     return process.env.DECIBEL_ACTOR_ID;
   }
+
+  // Try git user identity
+  const gitUser = getGitUser();
+  if (gitUser) {
+    return `human:${gitUser}`;
+  }
+
+  // Fallback to OS username
   const username = process.env.USER || process.env.USERNAME || 'unknown';
   return `human:${username}`;
 }
