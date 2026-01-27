@@ -29,3 +29,6 @@ npm-debug.log*
 coverage/
 package-lock.json
 package.json
+
+# Project registry (user-specific, each dev has their own)
+projects.json

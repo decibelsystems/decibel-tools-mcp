@@ -19,6 +19,10 @@ import { agenticTools } from './agentic/index.js';
 import { roadmapTools } from './roadmap/index.js';
 import { architectTools } from './architect/index.js';
 import { deckTools } from './deck.js';
+import { gitTools } from './git/index.js';
+import { auditorTools } from './auditor/index.js';
+import { workflowTools } from './workflow/index.js';
+import { gitSentinelTools } from './git-sentinel/index.js';
 
 // Pro tier tools (require DECIBEL_PRO=1)
 const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
@@ -42,6 +46,10 @@ const coreTools: ToolSpec[] = [
   ...roadmapTools,
   ...architectTools,
   ...deckTools,
+  ...gitTools,
+  ...auditorTools,
+  ...workflowTools,
+  ...gitSentinelTools,
 ];
 
 // Pro tools (only when DECIBEL_PRO=1)
