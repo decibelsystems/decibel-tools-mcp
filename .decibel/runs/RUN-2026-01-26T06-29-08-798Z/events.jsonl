@@ -1,0 +1,2 @@
+{"ts":"2026-01-26T06:29:08.799Z","run_id":"RUN-2026-01-26T06-29-08-798Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-01-26T06:29:08.822Z","run_id":"RUN-2026-01-26T06-29-08-798Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"sentinel_createIssue","result":"success","summary":"Created issue ISS-0046: Improve MCP tools documentation"}}

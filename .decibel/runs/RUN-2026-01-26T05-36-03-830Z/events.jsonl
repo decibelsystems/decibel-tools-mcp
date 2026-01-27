@@ -1,0 +1,2 @@
+{"ts":"2026-01-26T05:36:03.831Z","run_id":"RUN-2026-01-26T05-36-03-830Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-01-26T05:36:03.852Z","run_id":"RUN-2026-01-26T05-36-03-830Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"sentinel_createIssue","result":"success","summary":"Created issue ISS-0045: MCP server times out with SSE transport on remote connections"}}

@@ -112,6 +112,15 @@
         "echo-realms",
         "mud"
       ]
+    },
+    {
+      "id": "decibel-agent",
+      "name": "Decibel Agent Core",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/decibel-agent",
+      "aliases": [
+        "agent",
+        "agent-core"
+      ]
     }
   ]
 }

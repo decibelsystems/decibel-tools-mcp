@@ -1,0 +1,35 @@
+id: DOJO-PROP-0005
+title: Decibel Agent Core - Transport-agnostic AI agent with CarbonVoice
+problem: No way to interact with decibel-tools via voice/chat platforms. Current
+  voice_inbox requires sync + manual processing. Users want conversational
+  access from mobile, watch, messaging apps.
+hypothesis: A clean core + transports architecture lets us ship CarbonVoice
+  fast, add Slack/Discord/etc later, and own the memory layer (learning from
+  clawdbot patterns without depending on it).
+owner: human
+state: draft
+created_at: 2026-01-25T02:24:17.211Z
+project_id: decibel-tools-mcp
+target_module: tools
+scope_in:
+  - "New repo: decibel-agent"
+  - Core orchestrator with memory/policy/tool-router interfaces
+  - CarbonVoice transport adapter
+  - MCP tool bridge to decibel-tools
+  - Dual memory (daily log + durable facts)
+  - Basic policy layer
+scope_out:
+  - Clawdbot fork or dependency
+  - Slack/Discord transports (future)
+  - Embeddings/hybrid search (v1 uses BM25)
+  - Multi-tenant/team features
+acceptance:
+  - Gateway receives CV webhook, routes to AgentCore
+  - AgentCore calls voice_command tool via MCP bridge
+  - Reply sent back to CV channel
+  - Daily log persisted per user
+  - Policy can block tools by transport/user
+risks:
+  - CV API changes break transport
+  - Memory search quality with BM25-only
+  - Token/auth management complexity

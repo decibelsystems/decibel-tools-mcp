@@ -1,0 +1,19 @@
+id: ISS-0046
+title: Improve MCP tools documentation
+project: decibel-tools-mcp
+status: open
+priority: medium
+tags:
+  - docs
+  - mcp
+  - dx
+created_at: 2026-01-26T06:29:08.791Z
+updated_at: 2026-01-26T06:29:08.791Z
+description: |-
+  The current MCP tools documentation needs improvement to help consumers (like decibel-agent) understand how to integrate and direct tool usage effectively. Areas to cover:
+
+  - Tool catalog with descriptions, parameters, and example usage
+  - Integration guide for connecting via stdio/HTTP
+  - Auto-injected parameters (e.g. projectId) and how they work
+  - Taxonomy decision tree (when to use which tool)
+  - System prompt snippets for directing agents to use the right tools

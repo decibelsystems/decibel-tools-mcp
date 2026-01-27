@@ -1,0 +1,2 @@
+{"ts":"2026-01-25T02:24:17.222Z","run_id":"RUN-2026-01-25T02-24-17-221Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-01-25T02:24:17.242Z","run_id":"RUN-2026-01-25T02-24-17-221Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"dojo_create_proposal","result":"success","summary":"Created proposal DOJO-PROP-0005: Decibel Agent Core - Transport-agnostic AI agent with CarbonVoice"}}

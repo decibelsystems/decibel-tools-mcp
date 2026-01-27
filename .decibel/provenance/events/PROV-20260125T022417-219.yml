@@ -1,0 +1,11 @@
+event_id: PROV-20260125T022417-219
+timestamp: 2026-01-25T02:24:17.219Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:proposal:DOJO-PROP-0005
+reason_code: initial_creation
+summary: "Created proposal: Decibel Agent Core - Transport-agnostic AI agent with CarbonVoice"
+fingerprint_before: null
+fingerprint_after: sha256:be50d0077ce51660

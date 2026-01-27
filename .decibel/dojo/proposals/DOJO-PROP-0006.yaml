@@ -1,0 +1,32 @@
+id: DOJO-PROP-0006
+title: Feedback Tool for Decibel Tools
+problem: No built-in way to collect user/AI feedback on tools and workflows,
+  making it hard to know what's useful and what needs improvement.
+hypothesis: A lightweight feedback tool that captures thumbs up/down, tags, and
+  optional context will surface patterns about tool quality, enable iterative
+  improvement, and help prioritize Dojo wishlist items.
+owner: human
+state: draft
+created_at: 2026-01-25T05:06:55.588Z
+project_id: decibel-tools-mcp
+target_module: tools
+scope_in:
+  - feedback_log tool - captures tool name, sentiment (+1/-1), optional tags and
+    context
+  - feedback_list tool - surfaces feedback patterns
+  - Agent feedback - AI can flag when a tool result was unhelpful
+  - User feedback - humans can rate tool outputs
+  - Integration with Dojo wishes - link feedback to capability gaps
+scope_out:
+  - Complex analytics dashboard
+  - Real-time feedback aggregation
+  - A/B testing infrastructure
+acceptance:
+  - Agent can call feedback_log after tool invocations
+  - feedback_list shows top complaints and praises
+  - Feedback can reference specific tool calls or general workflows
+  - Feedback can optionally link to a Dojo wish
+risks:
+  - Feedback fatigue if agents log too much
+  - Storage growth if not pruned
+  - Unclear signal if feedback is too sparse
