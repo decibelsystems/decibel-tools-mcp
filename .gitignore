@@ -30,3 +30,6 @@ coverage/
 package-lock.json
 package.json
 projects.json
+
+# Project registry (user-specific, each dev has their own)
+projects.json
