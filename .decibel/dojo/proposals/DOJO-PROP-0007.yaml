@@ -1,0 +1,37 @@
+id: DOJO-PROP-0007
+title: Forecasting Engine for Capacity Planning
+problem: "Engineering managers need to accurately estimate future work capacity
+  and timelines. Currently there's no way to: (1) break down PRDs into
+  engineer-sized tasks, (2) estimate complexity per task, (3) predict completion
+  based on team velocity, (4) plan sprints/quarters with confidence."
+hypothesis: By combining PRD decomposition (via LLM), complexity estimation, and
+  historical velocity data, we can provide accurate capacity forecasts. The
+  velocity tracking tool provides the foundation - we need to layer planning
+  intelligence on top.
+owner: human
+state: draft
+created_at: 2026-01-27T21:27:00.860Z
+project_id: decibel-tools-mcp
+target_module: oracle
+scope_in:
+  - PRD/feature decomposition into tasks
+  - Complexity estimation (t-shirt sizing or story points)
+  - Time-per-worker estimates using velocity history
+  - Sprint/quarter capacity planning
+  - Confidence intervals on estimates
+scope_out:
+  - Real-time project tracking (use Sentinel)
+  - Resource allocation/assignment
+  - Calendar/scheduling integration
+  - Budget forecasting
+acceptance:
+  - Can break down a PRD into 5-15 engineer tasks
+  - Each task has complexity estimate
+  - Uses velocity data to predict completion time
+  - Provides capacity plan with confidence levels
+  - Works without historical data (cold start) using heuristics
+risks:
+  - Estimates without historical data may be unreliable
+  - PRD quality affects decomposition accuracy
+  - Individual velocity varies significantly
+  - Complexity estimation is inherently uncertain

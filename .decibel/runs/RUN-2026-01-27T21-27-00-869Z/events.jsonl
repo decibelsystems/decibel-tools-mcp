@@ -1,0 +1,31 @@
+{"ts":"2026-01-27T21:27:00.870Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-01-27T21:22:06Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-01-27T21:22:06Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-01-27T21:22:17Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:22:23Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:22:29Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:22:39Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:22:49Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:23:01Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:23:16Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:23:29Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:23:39Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:23:47Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:24:01Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:24:15Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Read","source":"hook_import"}}
+{"ts":"2026-01-27T21:24:15Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Read","source":"hook_import"}}
+{"ts":"2026-01-27T21:25:01Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-01-27T21:25:01Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-01-27T21:25:01Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-01-27T21:25:11Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:25:20Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:25:37Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:25:54Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Read","source":"hook_import"}}
+{"ts":"2026-01-27T21:26:00Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-01-27T21:26:09Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Read","source":"hook_import"}}
+{"ts":"2026-01-27T21:26:14Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-01-27T21:26:20Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:26:30Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:26:41Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:26:43Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-01-27T21:27:00.910Z","run_id":"RUN-2026-01-27T21-27-00-869Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"dojo_create_proposal","result":"success","summary":"Created proposal DOJO-PROP-0007: Forecasting Engine for Capacity Planning"}}

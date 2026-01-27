@@ -1,0 +1,11 @@
+event_id: PROV-20260127T212700-868
+timestamp: 2026-01-27T21:27:00.868Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:proposal:DOJO-PROP-0007
+reason_code: initial_creation
+summary: "Created proposal: Forecasting Engine for Capacity Planning"
+fingerprint_before: null
+fingerprint_after: sha256:1e63e2d27827707c
