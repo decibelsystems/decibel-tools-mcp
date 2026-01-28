@@ -1,0 +1,45 @@
+id: DOJO-PROP-0008
+title: AI-Driven Forecasting from Observed Data (replaces manual estimation)
+problem: "DOJO-PROP-0007 (Forecasting Engine) has solid math — the calibration
+  loop and confidence intervals are great. This proposal evolves the input model
+  to lean into Decibel's strength: rather than asking humans to estimate upfront,
+  the AI should derive forecasts from data already flowing through the system.
+  The goal is the same (accurate timelines), but with zero added friction for
+  the developer."
+hypothesis: "Rich's calibration engine can be repurposed to learn from observed
+  data instead of manual input. By analyzing git history, velocity snapshots,
+  issue close rates, and Vector session patterns, the AI can offer forecasts
+  proactively — e.g. 'this looks like a 2-week effort based on similar past
+  work' — without requiring story points or estimation ceremonies."
+owner: human
+state: draft
+created_at: 2026-01-28T06:19:51.223Z
+project_id: decibel-tools-mcp
+target_module: oracle
+scope_in:
+  - AI analyzes git history + velocity snapshots to find similar past work
+  - AI correlates Vector session patterns (backtrack rate, iteration count) with
+    actual effort
+  - AI uses Sentinel issue close rates to estimate throughput
+  - Forecasts surfaced proactively by Oracle — no human input required
+  - Confidence derived from data density rather than upfront estimation
+scope_out:
+  - Story points or manual estimation of any kind
+  - Sprint planning workflows
+  - Human-facing estimation forms or decomposition prompts
+  - Jira-style capacity planning rituals
+  - Anything that creates work instead of observing it
+acceptance:
+  - AI can answer 'how long will this take?' using only existing Decibel data
+  - No new human input required beyond the task description
+  - Accuracy improves automatically as more work is tracked
+  - Oracle surfaces forecasts proactively when relevant (e.g. new epic created)
+risks:
+  - Cold start — new projects have no historical data to learn from
+  - Correlation between past and future work may be weak for novel tasks
+  - Over-reliance on AI estimates could create false confidence
+follows: DOJO-PROP-0007
+insight: "Rich's forecasting math is solid — the evolution is shifting the input
+  from human estimation to AI observation. Decibel already captures the data
+  needed across Velocity, Vector, and Sentinel. The calibration loop from
+  DOJO-PROP-0007 can power this directly."

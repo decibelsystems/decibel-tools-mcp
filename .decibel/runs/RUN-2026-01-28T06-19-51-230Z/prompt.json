@@ -1,0 +1,12 @@
+{
+  "run_id": "RUN-2026-01-28T06-19-51-230Z",
+  "agent": {
+    "type": "claude-code",
+    "version": "auto-tracked"
+  },
+  "raw_prompt": "[Auto-tracked session via MCP tool calls]",
+  "intent": {
+    "goal": "Tool usage session tracked automatically"
+  },
+  "created_at": "2026-01-28T06:19:51.230Z"
+}

@@ -1,0 +1,2 @@
+{"ts":"2026-01-28T06:19:51.231Z","run_id":"RUN-2026-01-28T06-19-51-230Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-01-28T06:19:51.273Z","run_id":"RUN-2026-01-28T06-19-51-230Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"dojo_create_proposal","result":"success","summary":"Created proposal DOJO-PROP-0008: AI-Driven Forecasting from Observed Data (replaces manual estimation)"}}

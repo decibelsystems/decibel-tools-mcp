@@ -1,0 +1,11 @@
+event_id: PROV-20260128T061951-228
+timestamp: 2026-01-28T06:19:51.228Z
+actor_id: human:ben
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:proposal:DOJO-PROP-0008
+reason_code: initial_creation
+summary: "Created proposal: AI-Driven Forecasting from Observed Data (replaces manual estimation)"
+fingerprint_before: null
+fingerprint_after: sha256:78805b2e6ca13282
