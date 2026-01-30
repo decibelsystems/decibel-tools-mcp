@@ -585,6 +585,10 @@ export interface HttpServerOptions {
   port: number;
   authToken?: string;
   host?: string;
+  // SSE/Connection settings
+  sseKeepaliveMs?: number;      // Heartbeat interval (default: 30000)
+  timeoutMs?: number;            // Request timeout (default: 120000)
+  retryIntervalMs?: number;      // SSE retry interval for clients (default: 3000)
 }
 
 /**
@@ -597,16 +601,53 @@ export async function startHttpServer(
   server: Server,
   options: HttpServerOptions
 ): Promise<void> {
-  const { port, authToken, host = '0.0.0.0' } = options;
+  const {
+    port,
+    authToken,
+    host = '0.0.0.0',
+    sseKeepaliveMs = 30000,     // Send keepalive every 30s
+    timeoutMs = 120000,         // 2 minute default timeout
+    retryIntervalMs = 3000,     // 3s retry for SSE clients
+  } = options;
 
   // Create transport in STATELESS mode (better for ChatGPT compatibility)
   // Setting sessionIdGenerator to undefined disables session tracking
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // Stateless mode
+    enableJsonResponse: true,      // Enable JSON fallback for non-streaming clients
+    retryInterval: retryIntervalMs, // Tell clients how long to wait before retry
   });
 
   // Connect the MCP server to the transport
   await server.connect(transport);
+
+  // Track active SSE connections for keepalive
+  const activeSseConnections = new Set<ServerResponse>();
+
+  // Start SSE keepalive heartbeat
+  const keepaliveInterval = setInterval(() => {
+    if (activeSseConnections.size > 0) {
+      log(`SSE keepalive: pinging ${activeSseConnections.size} connection(s)`);
+    }
+    for (const res of activeSseConnections) {
+      try {
+        if (!res.writableEnded) {
+          // Send SSE comment as keepalive (standard pattern)
+          res.write(': keepalive\n\n');
+        } else {
+          activeSseConnections.delete(res);
+        }
+      } catch (e) {
+        // Connection likely closed
+        activeSseConnections.delete(res);
+      }
+    }
+  }, sseKeepaliveMs);
+
+  // Clean up on process exit
+  process.on('SIGTERM', () => {
+    clearInterval(keepaliveInterval);
+  });
 
   const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || '/', `http://${req.headers.host}`);
@@ -1736,10 +1777,33 @@ export async function startHttpServer(
     // Handle at /mcp, /sse, /sse/ (ChatGPT uses trailing slash), and root / for compatibility
     if (path === '/mcp' || path === '/sse' || path === '/sse/' || (path === '/' && (req.method === 'POST' || req.method === 'DELETE'))) {
       try {
+        // Track SSE connections for keepalive (GET requests establish SSE streams)
+        if (req.method === 'GET') {
+          activeSseConnections.add(res);
+          log(`HTTP: SSE stream opened via GET ${path} (${activeSseConnections.size} active) - keepalive enabled`);
+
+          // Clean up when connection closes
+          res.on('close', () => {
+            activeSseConnections.delete(res);
+            log(`HTTP: SSE stream closed (${activeSseConnections.size} active)`);
+          });
+
+          res.on('error', (err) => {
+            activeSseConnections.delete(res);
+            log(`HTTP: SSE stream error: ${err.message}`);
+          });
+        } else if (req.method === 'POST') {
+          log(`HTTP: StreamableHTTP request via POST ${path} - no keepalive needed`);
+        }
+
         await transport.handleRequest(req, res);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         log(`HTTP: Error handling MCP request: ${message}`);
+
+        // Remove from active connections on error
+        activeSseConnections.delete(res);
+
         if (!res.writableEnded) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: message }));
@@ -1752,6 +1816,10 @@ export async function startHttpServer(
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));
   });
+
+  // Configure HTTP server timeouts to prevent premature connection drops
+  httpServer.keepAliveTimeout = timeoutMs;
+  httpServer.headersTimeout = timeoutMs + 1000; // Slightly longer than keepAliveTimeout
 
   httpServer.listen(port, host, () => {
     log(`HTTP Server listening on http://${host}:${port}`);
@@ -1775,6 +1843,11 @@ export async function startHttpServer(
 ║  Base URL: http://${host}:${port}${' '.repeat(Math.max(0, 40 - port.toString().length - host.length))}║
 ${authToken ? '║  Auth:     Bearer token required                             ║' : '║  Auth:     None (use --auth-token for security)              ║'}
 ╠══════════════════════════════════════════════════════════════╣
+║  SSE Settings:                                               ║
+║    Keepalive:  ${sseKeepaliveMs}ms${' '.repeat(Math.max(0, 43 - sseKeepaliveMs.toString().length))}║
+║    Timeout:    ${timeoutMs}ms${' '.repeat(Math.max(0, 43 - timeoutMs.toString().length))}║
+║    Retry:      ${retryIntervalMs}ms${' '.repeat(Math.max(0, 43 - retryIntervalMs.toString().length))}║
+╠══════════════════════════════════════════════════════════════╣
 ║  Response format: {"status": "executed"|"error", ...}        ║
 ╚══════════════════════════════════════════════════════════════╝
 `);
@@ -1789,6 +1862,9 @@ export function parseHttpArgs(args: string[]): {
   port: number;
   authToken?: string;
   host?: string;
+  sseKeepaliveMs?: number;
+  timeoutMs?: number;
+  retryIntervalMs?: number;
 } {
   const httpMode = args.includes('--http');
   const portIndex = args.indexOf('--port');
@@ -1800,5 +1876,15 @@ export function parseHttpArgs(args: string[]): {
   const hostIndex = args.indexOf('--host');
   const host = hostIndex !== -1 ? args[hostIndex + 1] : '0.0.0.0';
 
-  return { httpMode, port, authToken, host };
+  // SSE/Connection tuning arguments
+  const keepaliveIndex = args.indexOf('--sse-keepalive');
+  const sseKeepaliveMs = keepaliveIndex !== -1 ? parseInt(args[keepaliveIndex + 1], 10) : undefined;
+
+  const timeoutIndex = args.indexOf('--timeout');
+  const timeoutMs = timeoutIndex !== -1 ? parseInt(args[timeoutIndex + 1], 10) : undefined;
+
+  const retryIndex = args.indexOf('--sse-retry');
+  const retryIntervalMs = retryIndex !== -1 ? parseInt(args[retryIndex + 1], 10) : undefined;
+
+  return { httpMode, port, authToken, host, sseKeepaliveMs, timeoutMs, retryIntervalMs };
 }
