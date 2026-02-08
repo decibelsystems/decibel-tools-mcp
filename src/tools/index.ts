@@ -28,6 +28,7 @@ import { vectorTools } from './vector/index.js';
 import { hygieneTools } from './hygiene/index.js';
 import { feedbackTools } from './feedback/index.js';
 import { forecastTools } from './forecast/index.js';
+import { coordinatorTools } from './coordinator/index.js';
 
 // Pro tier tools (require DECIBEL_PRO=1 in production, always enabled in dev)
 const PRO_ENABLED = process.env.DECIBEL_PRO === '1' || process.env.NODE_ENV !== 'production';
@@ -60,6 +61,7 @@ const coreTools: ToolSpec[] = [
   ...hygieneTools,
   ...feedbackTools,
   ...forecastTools,
+  ...coordinatorTools,
 ];
 
 // Pro tools (only when DECIBEL_PRO=1)

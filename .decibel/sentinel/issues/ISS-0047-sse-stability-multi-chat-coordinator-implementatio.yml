@@ -1,0 +1,56 @@
+id: ISS-0047
+title: SSE stability + Multi-chat coordinator implementation
+project: decibel-tools-mcp
+status: open
+priority: high
+tags:
+  - multi-chat
+  - coordinator
+  - sse
+  - adr
+created_at: 2026-01-31T06:40:21.715Z
+updated_at: 2026-02-07T21:50:00.000Z
+description: |-
+  ## Summary
+  Unblocked multi-chat agent architecture by fixing SSE timeouts and implementing minimal coordinator tools.
+
+  ## Work Completed
+
+  ### 1. SSE Timeout Fix (httpServer.ts)
+  - Added `retryInterval` to StreamableHTTPServerTransport (3s default)
+  - Implemented SSE keepalive heartbeat (30s interval, `: keepalive\n\n` comments)
+  - Configured HTTP server timeouts (`keepAliveTimeout`, `headersTimeout`)
+  - Added connection tracking for active SSE streams
+  - New CLI args: `--sse-keepalive`, `--timeout`, `--sse-retry`
+
+  ### 2. Coordinator Tools (ADR-0004)
+  Implemented 6 new MCP tools for multi-chat coordination:
+  - `coord_register` - Agent announces itself + capabilities
+  - `coord_heartbeat` - Keep-alive, stale detection, auto-release orphan locks
+  - `coord_lock` - Acquire exclusive lock (fails loud if held by other)
+  - `coord_unlock` - Release lock
+  - `coord_status` - List all agents + locks
+  - `coord_log` - Query event audit trail
+
+  Storage: `.decibel/coordinator/` (locks.yaml, agents.yaml, events.jsonl)
+
+  ### 3. ADR Cleanup (decibel-agent)
+  - Marked ADR-0001 as superseded by ADR-0003
+  - Simplified ADR-0003: removed CRDTs/vector clocks, added single-writer principle
+  - Created ADR-0004: Minimal Coordinator for Multi-Chat v1
+
+  ## Design Principles
+  - Single-writer per resource
+  - Fail loud on conflicts (no magic merging)
+  - 10-minute lock expiry, 120s stale agent threshold
+  - Append-only event log for audit
+
+  ### 4. Coordinator Unit Tests (2026-02-07)
+  Added `tests/unit/coordinator.test.ts` — 25 test cases covering all 6 coordinator functions:
+  - `coordRegister` (4): register, idempotent re-register, dir creation, event logging
+  - `coordHeartbeat` (5): last_seen update, status/task update, unregistered error, stale detection, stale lock release
+  - `coordLock` (5): acquire free, idempotent re-lock, fail loud on conflict, expired cleanup, event logging
+  - `coordUnlock` (3): release own, no-op for unheld, error for other agent's lock
+  - `coordStatus` (3): empty state, agents+locks after setup, stale identification
+  - `coordLog` (5): empty state, reverse chronological order, agent_id filter, action filter, limit
+  All 199 tests pass (`pnpm test:unit`), type-check clean (`pnpm lint`).
