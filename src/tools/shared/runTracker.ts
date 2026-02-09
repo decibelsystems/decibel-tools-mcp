@@ -242,6 +242,12 @@ export const summaryGenerators = {
   designDecision: (args: Record<string, unknown>): string => {
     return `Recorded design decision (${args.area || 'general'}): ${args.summary || 'untitled'}`;
   },
+
+  /** Summary for lateral thinking session */
+  lateralSession: (args: Record<string, unknown>, result: unknown): string => {
+    const r = result as { session_id?: string; problem?: string };
+    return `Lateral session ${r.session_id || args.session_id || ''}: ${r.problem || args.problem || 'session action'}`;
+  },
 };
 
 // ============================================================================

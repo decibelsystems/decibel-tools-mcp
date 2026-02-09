@@ -36,6 +36,7 @@ import {
 } from '../data-inspector.js';
 import {
   listIssuesForProject,
+  getIssueById,
   createIssue as createSentinelIssue,
   CreateIssueInput as CreateSentinelIssueInput,
   IssueStatus as SentinelIssueStatus,
@@ -773,6 +774,48 @@ export const sentinelCreateIssueTool2: ToolSpec = {
 };
 
 // ============================================================================
+// Get Issue Tool (YAML-based)
+// ============================================================================
+
+export const sentinelGetIssueTool: ToolSpec = {
+  definition: {
+    name: 'sentinel_getIssue',
+    description: 'Get a single issue by ID (e.g., "ISS-0005") with full content including description, tags, and metadata.',
+    annotations: {
+      title: 'Get Issue',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'The project identifier (e.g., "decibel-agent")',
+        },
+        issue_id: {
+          type: 'string',
+          description: 'Issue ID (e.g., "ISS-0005")',
+        },
+      },
+      required: ['projectId', 'issue_id'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      requireFields(args, 'projectId', 'issue_id');
+      const issue = await getIssueById(args.projectId as string, args.issue_id as string);
+      if (!issue) {
+        return toolError(`Issue ${args.issue_id} not found in project ${args.projectId}`);
+      }
+      return toolSuccess(issue);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Test Spec Tools
 // ============================================================================
 
@@ -1016,6 +1059,7 @@ export const sentinelTools: ToolSpec[] = [
   // YAML issue tools
   sentinelListIssuesTool,
   sentinelCreateIssueTool2,
+  sentinelGetIssueTool,
   // Test spec tools
   sentinelCreateTestSpecTool,
   sentinelListTestSpecsTool,

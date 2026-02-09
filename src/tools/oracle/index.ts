@@ -11,8 +11,11 @@ import {
   NextActionsInput,
   roadmapProgress,
   RoadmapInput,
+  RoadmapOutput,
+  MilestoneProgress,
   isOracleError,
 } from '../oracle.js';
+import { listProjects, type ProjectEntry } from '../../projectRegistry.js';
 
 // ============================================================================
 // Helper: Normalize project_id → projectId
@@ -112,10 +115,137 @@ export const oracleRoadmapTool: ToolSpec = {
 };
 
 // ============================================================================
+// Portfolio Summary Tool
+// ============================================================================
+
+function formatMilestoneStatus(status: MilestoneProgress['status']): string {
+  const labels: Record<string, string> = {
+    on_track: 'ON TRACK',
+    at_risk: 'AT RISK',
+    behind: 'BEHIND',
+    completed: 'COMPLETED',
+  };
+  return labels[status] ?? status.toUpperCase();
+}
+
+function formatProjectSummary(
+  project: ProjectEntry,
+  roadmap: RoadmapOutput,
+  actions?: string[],
+): string {
+  const lines: string[] = [];
+  const name = project.name ?? project.id;
+  lines.push(`### ${project.id} (${name})`);
+
+  // Epic counts by status
+  const shipped = roadmap.epics.filter(e => e.status === 'completed').length;
+  const inProgress = roadmap.epics.filter(e => e.status === 'in_progress').length;
+  const planned = roadmap.epics.filter(e => e.status === 'not_started').length;
+  lines.push(
+    `Milestones: ${roadmap.milestones.length} | Epics: ${roadmap.epics.length} (${shipped} shipped, ${inProgress} in progress, ${planned} planned)`,
+  );
+
+  // Milestone details
+  for (const ms of roadmap.milestones) {
+    const due = ms.target_date ? ` (due ${ms.target_date})` : '';
+    lines.push(`- ${ms.id} "${ms.label}" — ${ms.progress_percent}%, ${formatMilestoneStatus(ms.status)}${due}`);
+  }
+
+  // Signals
+  if (roadmap.signals) {
+    const { blocking_issues, high_severity_issues, friction_points } = roadmap.signals;
+    const parts: string[] = [];
+    if (blocking_issues > 0) parts.push(`${blocking_issues} blocking issue${blocking_issues > 1 ? 's' : ''}`);
+    if (high_severity_issues > 0) parts.push(`${high_severity_issues} high-severity`);
+    if (friction_points > 0) parts.push(`${friction_points} friction point${friction_points > 1 ? 's' : ''}`);
+    if (parts.length > 0) {
+      lines.push(`Signals: ${parts.join(', ')}`);
+    }
+  }
+
+  // Next actions (condensed)
+  if (actions && actions.length > 0) {
+    lines.push(`Next: ${actions.join('; ')}`);
+  }
+
+  return lines.join('\n');
+}
+
+export const oraclePortfolioSummaryTool: ToolSpec = {
+  definition: {
+    name: 'oracle_portfolio_summary',
+    description:
+      'Compile a cross-project portfolio digest showing roadmap health, milestone status, and next actions for all registered projects. Output is compact markdown designed for system prompt injection.',
+    annotations: {
+      title: 'Portfolio Summary',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        include_actions: {
+          type: 'boolean',
+          description: 'Include recommended next actions per project (default: true)',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const includeActions = (args as { include_actions?: boolean }).include_actions !== false;
+      const projects = listProjects();
+
+      if (projects.length === 0) {
+        return toolSuccess({ summary: 'No projects registered.' });
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const sections: string[] = [`## Portfolio Summary (${today})`];
+
+      for (const project of projects) {
+        // Get roadmap progress (dry run, include signals)
+        const roadmapResult = await roadmapProgress({
+          projectId: project.id,
+          dryRun: true,
+          noSignals: false,
+        });
+
+        // Skip projects with no roadmap
+        if (isOracleError(roadmapResult)) {
+          sections.push(`### ${project.id} (${project.name ?? project.id})\nNo roadmap configured`);
+          continue;
+        }
+
+        // Optionally get next actions
+        let actionDescriptions: string[] | undefined;
+        if (includeActions) {
+          const actionsResult = await nextActions({ projectId: project.id });
+          if (!isOracleError(actionsResult) && actionsResult.actions.length > 0) {
+            actionDescriptions = actionsResult.actions
+              .slice(0, 3)
+              .map(a => a.description);
+          }
+        }
+
+        sections.push(formatProjectSummary(project, roadmapResult, actionDescriptions));
+      }
+
+      const summary = sections.join('\n\n');
+      return toolSuccess({ summary });
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
 export const oracleTools: ToolSpec[] = [
   oracleNextActionsTool,
   oracleRoadmapTool,
+  oraclePortfolioSummaryTool,
 ];

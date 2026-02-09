@@ -277,6 +277,18 @@ export async function createIssue(
 }
 
 /**
+ * Get a single issue by ID (e.g., "ISS-0005") with full content
+ */
+export async function getIssueById(
+  projectId: string,
+  issueId: string,
+): Promise<SentinelIssue | null> {
+  const issues = await listIssuesForProject(projectId);
+  const normalizedId = issueId.toUpperCase();
+  return issues.find((i) => i.id.toUpperCase() === normalizedId) ?? null;
+}
+
+/**
  * Filter issues by status
  */
 export function filterByStatus(

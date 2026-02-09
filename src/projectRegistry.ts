@@ -187,7 +187,7 @@ export function resolveProject(projectId: string): ProjectEntry {
     return { id: path.basename(projectId), path: projectId };
   }
 
-  // Strategy 5: Discover from cwd
+  // Strategy 5: Discover from cwd (exact basename match)
   const discoveredRoot = findDecibelDir(process.cwd());
   if (discoveredRoot && path.basename(discoveredRoot) === projectId) {
     log(`ProjectRegistry: Resolved "${projectId}" via cwd discovery`);
@@ -201,7 +201,15 @@ export function resolveProject(projectId: string): ProjectEntry {
     return { id: projectId, path: envRoot };
   }
 
-  // Build helpful error message with project_init hint
+  // Strategy 7: If we discovered a project from cwd but ID didn't match, use it anyway
+  // This prevents hard failures when Claude sends a slightly wrong project ID
+  if (discoveredRoot) {
+    const discoveredId = path.basename(discoveredRoot);
+    log(`ProjectRegistry: Resolved "${projectId}" via cwd fallback (actual project: "${discoveredId}")`);
+    return { id: discoveredId, path: discoveredRoot };
+  }
+
+  // Build helpful error message
   const registeredIds = registry.projects.map((p) => p.id);
   const allAliases = registry.projects.flatMap((p) => p.aliases || []);
   const suggestions = [...registeredIds, ...allAliases].filter(Boolean);
@@ -210,10 +218,7 @@ export function resolveProject(projectId: string): ProjectEntry {
   if (suggestions.length > 0) {
     errorMsg += ` Registered projects: ${suggestions.join(', ')}.`;
   }
-  if (discoveredRoot) {
-    errorMsg += ` Current directory is in project "${path.basename(discoveredRoot)}".`;
-  }
-  errorMsg += ` HINT: Run project_init with the path to create and register a new project, or registry_add if .decibel already exists.`;
+  errorMsg += ` To fix: use the project_init tool with the absolute path to your project, or registry_add if .decibel/ already exists.`;
 
   throw new Error(errorMsg);
 }
@@ -429,10 +434,15 @@ export function resolveProjectPaths(projectId?: string): ResolvedProjectPaths {
   } else {
     const defaultProject = getDefaultProject();
     if (!defaultProject) {
-      throw new Error(
-        'No project specified and no default project found. ' +
-        'Either specify projectId or register a project with the registry.'
-      );
+      const registry = loadRegistry();
+      const registered = registry.projects.map(p => p.id);
+      let msg = 'No project specified and no default project found.';
+      if (registered.length > 0) {
+        msg += ` Registered projects: ${registered.join(', ')}. Pass one as project_id.`;
+      } else {
+        msg += ` No projects registered. Use the project_init tool to initialize a project, or registry_add to register an existing .decibel/ directory.`;
+      }
+      throw new Error(msg);
     }
     project = defaultProject;
   }

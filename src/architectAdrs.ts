@@ -1,8 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { stringify as stringifyYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { log } from './config.js';
-import { getWritePath, getAllReadPaths } from './decibelPaths.js';
+import { getWritePath, getAllReadPaths, readFilesFromBothPaths } from './decibelPaths.js';
 
 // ============================================================================
 // Types
@@ -166,4 +166,56 @@ export async function createProjectAdr(input: AdrInput): Promise<AdrOutput> {
     id,
     path: filePath,
   };
+}
+
+/**
+ * List ADRs for a project (ID + title + status)
+ */
+export async function listProjectAdrs(projectId: string): Promise<Array<{
+  id: string;
+  title: string;
+  status: string;
+  filename: string;
+}>> {
+  const files = await readFilesFromBothPaths(projectId, ADRS_SUBPATH, ['.yml', '.yaml']);
+  const adrs: Array<{ id: string; title: string; status: string; filename: string }> = [];
+
+  for (const { filePath } of files) {
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      const parsed = parseYaml(content) as Record<string, unknown>;
+      adrs.push({
+        id: (parsed.id as string) ?? path.basename(filePath, path.extname(filePath)),
+        title: (parsed.title as string) ?? '(untitled)',
+        status: (parsed.status as string) ?? 'unknown',
+        filename: path.basename(filePath),
+      });
+    } catch {
+      // Skip unparseable files
+    }
+  }
+
+  adrs.sort((a, b) => extractAdrNumber(a.id) - extractAdrNumber(b.id));
+  return adrs;
+}
+
+/**
+ * Read a single ADR by ID (e.g., "ADR-0005") or partial match
+ */
+export async function readProjectAdr(
+  projectId: string,
+  adrId: string,
+): Promise<Record<string, unknown> | null> {
+  const files = await readFilesFromBothPaths(projectId, ADRS_SUBPATH, ['.yml', '.yaml']);
+  const normalizedId = adrId.toUpperCase();
+
+  for (const { filePath } of files) {
+    const basename = path.basename(filePath).toUpperCase();
+    if (basename.startsWith(normalizedId)) {
+      const content = await fs.readFile(filePath, 'utf-8');
+      return parseYaml(content) as Record<string, unknown>;
+    }
+  }
+
+  return null;
 }

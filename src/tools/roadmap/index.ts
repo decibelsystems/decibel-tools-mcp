@@ -20,6 +20,10 @@ import {
   RoadmapListInput,
   roadmapInit,
   RoadmapInitInput,
+  getObjective,
+  GetObjectiveInput,
+  listObjectives,
+  ListObjectivesInput,
 } from '../roadmap.js';
 
 // ============================================================================
@@ -291,6 +295,88 @@ export const roadmapInitTool: ToolSpec = {
 };
 
 // ============================================================================
+// Get Objective Tool
+// ============================================================================
+
+export const roadmapGetObjectiveTool: ToolSpec = {
+  definition: {
+    name: 'roadmap_getObjective',
+    description: 'Get a single objective by ID with its key results and linked epics.',
+    annotations: {
+      title: 'Get Objective',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'The project identifier (e.g., "senken")',
+        },
+        objectiveId: {
+          type: 'string',
+          description: 'Objective ID (e.g., "OBJ-0001")',
+        },
+      },
+      required: ['projectId', 'objectiveId'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as GetObjectiveInput;
+      requireFields(input, 'projectId', 'objectiveId');
+      const result = await getObjective(input);
+      if ('error' in result) {
+        return toolError(JSON.stringify(result, null, 2));
+      }
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// List Objectives Tool
+// ============================================================================
+
+export const roadmapListObjectivesTool: ToolSpec = {
+  definition: {
+    name: 'roadmap_listObjectives',
+    description: 'List all objectives for a project with their key results and linked epics.',
+    annotations: {
+      title: 'List Objectives',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'The project identifier (e.g., "senken")',
+        },
+      },
+      required: ['projectId'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as ListObjectivesInput;
+      requireFields(input, 'projectId');
+      const result = await listObjectives(input);
+      if ('error' in result) {
+        return toolError(JSON.stringify(result, null, 2));
+      }
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -301,4 +387,6 @@ export const roadmapTools: ToolSpec[] = [
   roadmapGetHealthTool,
   roadmapLinkEpicTool,
   roadmapInitTool,
+  roadmapGetObjectiveTool,
+  roadmapListObjectivesTool,
 ];

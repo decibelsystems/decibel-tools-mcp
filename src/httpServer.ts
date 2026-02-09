@@ -33,7 +33,13 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { log } from './config.js';
 import { isSupabaseConfigured } from './lib/supabase.js';
-import { modularToolMap, modularTools } from './tools/index.js';
+import { getAllTools } from './tools/index.js';
+import type { ToolSpec } from './tools/types.js';
+
+// Module-level tool registry — populated by startHttpServer() before requests arrive
+let httpTools: ToolSpec[] = [];
+let httpToolMap: Map<string, ToolSpec> = new Map();
+let landingPageHtml = '';
 import {
   createProposal,
   scaffoldExperiment,
@@ -171,12 +177,43 @@ const PKG = getVersion();
 // Landing Page HTML
 // ============================================================================
 
-const LANDING_PAGE_HTML = `<!DOCTYPE html>
+/**
+ * Group tools by module prefix and generate the landing page HTML dynamically.
+ */
+function buildLandingPageHtml(tools: { name: string; description: string }[]): string {
+  // Group by module prefix (e.g. sentinel_createIssue → sentinel)
+  const groups = new Map<string, { name: string; description: string }[]>();
+  for (const t of tools) {
+    const prefix = t.name.includes('_') ? t.name.split('_')[0] : 'other';
+    if (!groups.has(prefix)) groups.set(prefix, []);
+    groups.get(prefix)!.push(t);
+  }
+
+  // Sort groups by name, build HTML sections
+  const sortedGroups = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+  const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const toolSections = sortedGroups.map(([prefix, groupTools]) => {
+    const rows = groupTools
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(t => {
+        const desc = t.description.length > 120 ? t.description.slice(0, 117) + '...' : t.description;
+        return `        <tr><td class="tool-name">${escHtml(t.name)}</td><td class="tool-desc">${escHtml(desc)}</td></tr>`;
+      })
+      .join('\n');
+    return `      <div class="module-section">
+        <h3>${escHtml(prefix)} <span class="tool-count">${groupTools.length}</span></h3>
+        <table>${rows}</table>
+      </div>`;
+  }).join('\n');
+
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Decibel Tools - Project Intelligence for AI Agents</title>
+  <title>Decibel Tools - ${tools.length} MCP Tools</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -189,7 +226,7 @@ const LANDING_PAGE_HTML = `<!DOCTYPE html>
       align-items: center;
       padding: 2rem;
     }
-    .container { max-width: 720px; width: 100%; }
+    .container { max-width: 900px; width: 100%; }
     h1 {
       font-size: 2.5rem;
       font-weight: 700;
@@ -198,79 +235,47 @@ const LANDING_PAGE_HTML = `<!DOCTYPE html>
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
-    .tagline { font-size: 1.25rem; color: #888; margin-bottom: 2rem; }
-    .cta {
-      background: #1a1a1a;
-      border: 1px solid #333;
-      border-radius: 12px;
-      padding: 2rem;
-      margin-bottom: 2rem;
-      text-align: center;
-    }
-    .cta h2 { font-size: 1.1rem; font-weight: 500; margin-bottom: 1rem; color: #ccc; }
-    .manual { font-size: 0.85rem; color: #666; margin-top: 1rem; }
-    .manual code { background: #222; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: 'SF Mono', Monaco, monospace; }
+    .tagline { font-size: 1.25rem; color: #888; margin-bottom: 0.5rem; }
+    .tool-total { font-size: 0.9rem; color: #555; margin-bottom: 2rem; }
     .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2rem; }
     .feature { background: #111; border: 1px solid #222; border-radius: 8px; padding: 1.25rem; }
     .feature h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: #fff; }
     .feature p { font-size: 0.85rem; color: #888; line-height: 1.5; }
-    .tools { background: #111; border: 1px solid #222; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; }
-    .tools h2 { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; }
-    .tool-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
-    .tool { font-size: 0.8rem; color: #888; padding: 0.5rem; background: #1a1a1a; border-radius: 4px; text-align: center; }
-    .tool strong { color: #ccc; display: block; margin-bottom: 0.25rem; }
-    footer { margin-top: auto; padding-top: 2rem; font-size: 0.8rem; color: #444; }
+    .module-section { background: #111; border: 1px solid #222; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+    .module-section h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.75rem; color: #fff; text-transform: capitalize; }
+    .tool-count { font-size: 0.75rem; color: #555; font-weight: 400; margin-left: 0.5rem; }
+    table { width: 100%; border-collapse: collapse; }
+    tr { border-bottom: 1px solid #1a1a1a; }
+    tr:last-child { border-bottom: none; }
+    td { padding: 0.4rem 0; vertical-align: top; font-size: 0.8rem; }
+    .tool-name { color: #ccc; font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; white-space: nowrap; padding-right: 1rem; width: 1%; }
+    .tool-desc { color: #666; }
+    footer { margin-top: 2rem; padding-top: 2rem; font-size: 0.8rem; color: #444; }
     footer a { color: #666; text-decoration: none; }
     footer a:hover { color: #888; }
-    @media (max-width: 600px) { .features, .tool-grid { grid-template-columns: 1fr; } }
-    pre { background: #0d0d0d; padding: 1rem; border-radius: 6px; overflow-x: auto; text-align: left; font-size: 0.85rem; color: #888; }
+    @media (max-width: 600px) { .features { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Decibel Tools</h1>
     <p class="tagline">Project intelligence for AI coding agents</p>
-    <div class="cta">
-      <h2>Get Started</h2>
-      <p class="manual" style="margin-bottom: 1rem; color: #aaa;">1. Clone the beta repo</p>
-      <pre><code>git clone https://github.com/decibelsystems/decibel-tools-beta.git</code></pre>
-      <p class="manual" style="margin-top: 1rem; margin-bottom: 1rem; color: #aaa;">2. Add to your MCP config</p>
-      <pre><code>{
-  "mcpServers": {
-    "decibel-tools": {
-      "command": "node",
-      "args": ["/path/to/decibel-tools-beta/server.js"]
-    }
-  }
-}</code></pre>
-      <p class="manual" style="margin-top: 1rem;">
-        Works with <strong style="color: #ccc;">Cursor</strong>, <strong style="color: #ccc;">Claude Desktop</strong>, and any MCP client
-      </p>
-    </div>
+    <p class="tool-total">${tools.length} tools across ${groups.size} modules &middot; v${PKG.version}</p>
     <div class="features">
       <div class="feature"><h3>Sentinel</h3><p>Track epics, issues, and incidents. Your agent knows what's in flight.</p></div>
       <div class="feature"><h3>Architect</h3><p>Record ADRs and decisions. Context persists across sessions.</p></div>
       <div class="feature"><h3>Dojo</h3><p>Incubate ideas with wishes, proposals, and experiments.</p></div>
       <div class="feature"><h3>Oracle</h3><p>Get AI-powered recommendations on what to work on next.</p></div>
     </div>
-    <div class="tools">
-      <h2>50+ MCP Tools</h2>
-      <div class="tool-grid">
-        <div class="tool"><strong>sentinel_log_epic</strong>Create epics</div>
-        <div class="tool"><strong>sentinel_createIssue</strong>Track issues</div>
-        <div class="tool"><strong>architect_createAdr</strong>Record decisions</div>
-        <div class="tool"><strong>dojo_add_wish</strong>Capture ideas</div>
-        <div class="tool"><strong>oracle_next_actions</strong>Get guidance</div>
-        <div class="tool"><strong>friction_log</strong>Track pain points</div>
-      </div>
-    </div>
+${toolSections}
     <footer>
-      <a href="https://github.com/decibelsystems/decibel-tools-beta">GitHub</a> ·
+      <a href="https://github.com/decibelsystems/decibel-tools-beta">GitHub</a> &middot;
       <a href="https://modelcontextprotocol.io">MCP Protocol</a>
     </footer>
   </div>
 </body>
 </html>`;
+}
 
 // ============================================================================
 // Status Envelope Types
@@ -436,7 +441,7 @@ async function executeDojoTool(
         break;
       default: {
         // Fallback to modular tools (deck, studio, etc.)
-        const modularTool = modularToolMap.get(tool);
+        const modularTool = httpToolMap.get(tool);
         if (modularTool) {
           const modularResult = await modularTool.handler(args);
           // Parse the JSON from the text result
@@ -539,7 +544,7 @@ function getAvailableTools(): { name: string; description: string }[] {
     { name: 'sentinel_compileTests', description: 'Compile test manifest' },
     { name: 'sentinel_auditPolicies', description: 'Audit policy compliance' },
     // Include modular tools (deck, studio, etc.)
-    ...modularTools.map(t => ({
+    ...httpTools.map(t => ({
       name: t.definition.name,
       description: t.definition.description,
     })),
@@ -567,7 +572,7 @@ interface OpenAIFunction {
  * This includes the full parameter schema for each tool
  */
 function getOpenAITools(): OpenAIFunction[] {
-  return modularTools.map(t => ({
+  return httpTools.map(t => ({
     type: 'function' as const,
     function: {
       name: t.definition.name,
@@ -609,6 +614,14 @@ export async function startHttpServer(
     timeoutMs = 120000,         // 2 minute default timeout
     retryIntervalMs = 3000,     // 3s retry for SSE clients
   } = options;
+
+  // Load full tool set (including pro tools when enabled)
+  httpTools = await getAllTools();
+  httpToolMap = new Map(httpTools.map(t => [t.definition.name, t]));
+  log(`HTTP: Loaded ${httpTools.length} tools for HTTP server`);
+
+  // Build landing page from actual tool list
+  landingPageHtml = buildLandingPageHtml(getAvailableTools());
 
   // Create transport in STATELESS mode (better for ChatGPT compatibility)
   // Setting sessionIdGenerator to undefined disables session tracking
@@ -696,11 +709,22 @@ export async function startHttpServer(
       return;
     }
 
-    // Landing page at /tools
-    if (path === '/tools' && req.method === 'GET') {
+    // Landing page at /docs (always HTML)
+    if (path === '/docs' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(LANDING_PAGE_HTML);
+      res.end(landingPageHtml);
       return;
+    }
+
+    // GET /tools — HTML for browsers, JSON for API clients
+    if (path === '/tools' && req.method === 'GET') {
+      const accept = req.headers.accept || '';
+      if (accept.includes('text/html')) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(landingPageHtml);
+        return;
+      }
+      // JSON response (for curl, agents, etc.) — falls through to auth + tool list below
     }
 
     // Serve OpenAPI spec for ChatGPT Actions (handle GET and POST)
@@ -807,7 +831,7 @@ export async function startHttpServer(
         log(`HTTP: /api/tools/${toolName}`);
 
         // Check if tool exists in modular tools
-        const tool = modularToolMap.get(toolName);
+        const tool = httpToolMap.get(toolName);
         if (!tool) {
           // Try executeDojoTool for non-modular tools
           const result = await executeDojoTool(toolName, body);

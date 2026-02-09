@@ -112,6 +112,128 @@ ensureDir(wishDir);                                // Create if needed
 
 ---
 
+## MCP Server Infrastructure — Critical Path
+
+The MCP server has a **dual transport architecture** and a layered tool loading system. Breaking any of these will silently disable tools for users. Read this before touching `server.ts`, `httpServer.ts`, `tools/index.ts`, or `projectRegistry.ts`.
+
+### Dual Transport: stdio vs HTTP
+
+| Mode | Entry | Transport | Used By |
+|------|-------|-----------|---------|
+| **stdio** (default) | `server.ts` | `StdioServerTransport` | Claude Code, Cursor, Claude Desktop |
+| **HTTP** (`--http`) | `server.ts` → `httpServer.ts` | `StreamableHTTPServerTransport` + REST | ChatGPT, Mother, iOS app, external agents |
+
+Both modes must expose the **exact same tool set**. If you add a tool and it only appears in one transport, it's a bug.
+
+### Tool Loading: Sync vs Async
+
+```
+tools/index.ts exports:
+  modularTools (sync)  → core tools only (always loaded)
+  getAllTools() (async) → core + pro tools (voice, studio, corpus)
+```
+
+- `server.ts` calls `getAllTools()` at startup — correct, gets everything
+- `httpServer.ts` calls `getAllTools()` at startup — correct, gets everything
+- **Never import `modularTools` directly if you need the full set.** Use `getAllTools()`.
+
+Pro tools are gated by `DECIBEL_PRO=1` in production, always enabled in dev.
+
+### Project Discovery
+
+`projectRegistry.ts` resolves project IDs through 7 strategies in order:
+
+1. Exact ID match in `projects.json`
+2. Alias match in `projects.json`
+3. `DECIBEL_PROJECT_ROOT` env var (basename match)
+4. Absolute path with `.decibel/`
+5. Walk up from cwd (basename match)
+6. `DECIBEL_PROJECT_ROOT` fallback (any ID treated as label)
+7. cwd fallback (use discovered project even if ID doesn't match)
+
+When all fail, the error message tells the user to run `project_init` or `registry_add`.
+
+### Rules for MCP Infrastructure
+
+1. **Both transports must stay in sync.** If you add a tool to `tools/index.ts`, it automatically appears in both stdio and HTTP. If you add a REST shorthand endpoint in `httpServer.ts`, the tool must also be in the modular registry.
+
+2. **Never eagerly connect to external services at import time.** Tools that need databases (senken → Postgres), APIs (studio → Together/Kling), or Supabase must lazy-init. The server must boot even when env vars are missing.
+
+3. **The `executeDojoTool` switch statement in httpServer.ts is legacy.** New tools should go through the modular `httpToolMap` fallback (the `default` case). Don't add new cases to that switch — register tools properly in `tools/index.ts` instead.
+
+4. **Project resolution errors must be actionable.** Never throw a bare "project not found." Always include: what was tried, what projects exist, and what tool to run to fix it (`project_init` or `registry_add`).
+
+5. **The plugin cache entry point is `dist/server.js`.** Not `dist/index.js`. If you rename or move the entry point, update `.claude/plugins/cache/decibel-tools-marketplace/decibel-tools/0.1.0/.mcp.json` and the project-level `.mcp.json`.
+
+### What You MUST NOT Do
+
+- ❌ Import `modularTools` (sync) when you need pro tools — use `getAllTools()`
+- ❌ Add tool registration in `httpServer.ts` only — add to `tools/index.ts`
+- ❌ Make project resolution throw without actionable hints
+- ❌ Add eager connections that break boot when env vars are missing
+- ❌ Add new cases to the `executeDojoTool` switch — use the modular tool map
+
+---
+
+## Senken Module — Handle With Care
+
+**Senken** (`src/tools/senken.ts`) is the trade analysis module for the Mother trading system. Unlike every other module in this codebase, senken talks to **Postgres** (not local YAML files). This makes it high-risk for logic errors.
+
+### Architecture Difference
+
+| Other Modules | Senken |
+|---------------|--------|
+| Local `.decibel/` YAML files | Remote Postgres via `SENKEN_DATABASE_URL` |
+| `resolveProjectPaths()` + `fs` | `pg.Pool` with lazy init |
+| Idempotent file writes | SQL queries against live trade data |
+| Safe to test locally | Requires a running database |
+
+### The 5 Tools
+
+| Tool | Type | Risk | What It Does |
+|------|------|------|-------------|
+| `senken_trade_summary` | READ | Low | Aggregates trades by strategy (count, win rate, avg R, PnL) |
+| `senken_giveback_report` | READ | Low | MFE capture analysis — how much profit was left on the table |
+| `senken_trade_review` | READ | Low | Individual trade grading (A–F) with counterfactual exits |
+| `senken_list_overrides` | READ | Low | Shows active parameter overrides |
+| `senken_apply_override` | WRITE | **HIGH** | Modifies live strategy parameters — rolls back previous, inserts new |
+
+### Rules for Modifying Senken
+
+1. **Never change SQL query logic without the user explicitly asking.** The queries join `mother_trades` ↔ `signal_outcomes` and use specific column names (`r_multiple`, `max_favorable_excursion`, `exit_reason`, etc.). Changing a column name or join condition silently breaks everything.
+
+2. **Never add `ON DELETE CASCADE` or destructive SQL.** The `senken_apply_override` tool already does a careful rollback-then-insert pattern. Don't simplify this — the changelog matters.
+
+3. **Preserve the grading logic exactly.** `senken_trade_review` grades trades A–F based on MFE capture percentage:
+   - A: ≥80%, B: ≥60%, C: ≥40%, D: ≥20%, F: <20%
+   - These thresholds are deliberate. Don't "improve" them.
+
+4. **Preserve the giveback calculation.** Giveback = `MFE - realized R`. The percentage is `(MFE - realized) / MFE * 100`. Don't invert this or change the denominator.
+
+5. **The `applied_by` field is always `'agent'`.** This is intentional — it marks that an AI made the override. Don't change this to a dynamic value.
+
+6. **All SQL is parameterized.** Keep it that way. Never interpolate user input into query strings.
+
+7. **The Pool is lazy-initialized.** If `SENKEN_DATABASE_URL` is not set, the tools error at call time, not at boot. This is correct — don't eagerly connect.
+
+### What You CAN Do
+
+- Add new READ-only query tools (following the existing pattern)
+- Improve error messages
+- Add input validation before queries execute
+- Add new columns to SELECT clauses (if the schema has them)
+
+### What You MUST NOT Do
+
+- ❌ Change the grading thresholds or giveback formula
+- ❌ Modify the override rollback-then-insert pattern
+- ❌ Add DELETE or TRUNCATE statements
+- ❌ Change parameterized queries to string interpolation
+- ❌ Make the Pool connect eagerly at import time
+- ❌ Add write operations without explicit user request
+
+---
+
 ## Debugging Protocol
 
 When investigating issues, bugs, or unexpected behavior:

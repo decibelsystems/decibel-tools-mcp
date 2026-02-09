@@ -519,3 +519,69 @@ export async function roadmapInit(input: RoadmapInitInput): Promise<Record<strin
     milestones: roadmap.milestones.length,
   };
 }
+
+// =============================================================================
+// Objective Tools
+// =============================================================================
+
+export interface GetObjectiveInput {
+  projectId: string;
+  objectiveId: string;
+}
+
+export interface ListObjectivesInput {
+  projectId: string;
+}
+
+/**
+ * Get a single objective by ID with resolved linked epics
+ */
+export async function getObjective(input: GetObjectiveInput): Promise<Record<string, unknown>> {
+  const roadmapDir = await getReadPath(input.projectId, ROADMAP_SUBPATH);
+
+  if (!roadmapExists(roadmapDir)) {
+    return {
+      error: 'Roadmap not initialized',
+      suggestion: "Run 'roadmap_init' to create roadmap.yaml",
+    };
+  }
+
+  const roadmap = loadRoadmap(roadmapDir);
+  const objective = roadmap.objectives.find((o) => o.id === input.objectiveId);
+
+  if (!objective) {
+    return { objective: null, error: `Objective not found: ${input.objectiveId}` };
+  }
+
+  // Find epics linked to this objective
+  const linkedEpics = Object.values(roadmap.epic_context)
+    .filter((ec) => ec.objectives?.includes(input.objectiveId))
+    .map((ec) => ec.epic_id);
+
+  return { objective, linkedEpics };
+}
+
+/**
+ * List all objectives with summary of linked epics
+ */
+export async function listObjectives(input: ListObjectivesInput): Promise<Record<string, unknown>> {
+  const roadmapDir = await getReadPath(input.projectId, ROADMAP_SUBPATH);
+
+  if (!roadmapExists(roadmapDir)) {
+    return {
+      error: 'Roadmap not initialized',
+      suggestion: "Run 'roadmap_init' to create roadmap.yaml",
+    };
+  }
+
+  const roadmap = loadRoadmap(roadmapDir);
+
+  const objectives = roadmap.objectives.map((obj) => {
+    const linkedEpics = Object.values(roadmap.epic_context)
+      .filter((ec) => ec.objectives?.includes(obj.id))
+      .map((ec) => ec.epic_id);
+    return { ...obj, linkedEpics };
+  });
+
+  return { objectives, count: objectives.length };
+}

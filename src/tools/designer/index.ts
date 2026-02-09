@@ -25,6 +25,7 @@ import {
   listCrits,
   ListCritsInput,
 } from '../crit.js';
+import { lateralTools } from './lateral-tools.js';
 
 // ============================================================================
 // Types
@@ -442,4 +443,5 @@ export const designerTools: ToolSpec[] = [
   designerReviewFigmaTool,
   designerUpsertPrincipleTool,
   designerListPrinciplesTool,
+  ...lateralTools,
 ];

@@ -12,6 +12,8 @@ import {
 } from '../architect.js';
 import {
   createProjectAdr,
+  readProjectAdr,
+  listProjectAdrs,
   AdrInput,
 } from '../../architectAdrs.js';
 import {
@@ -461,12 +463,96 @@ export const architectCompileOversightTool: ToolSpec = {
 };
 
 // ============================================================================
+// Get ADR Tool
+// ============================================================================
+
+export const architectGetAdrTool: ToolSpec = {
+  definition: {
+    name: 'architect_getAdr',
+    description: 'Read an existing Architecture Decision Record (ADR) by ID. Returns the full YAML content including context, decision, consequences, and review notes.',
+    annotations: {
+      title: 'Get ADR',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'The project identifier (e.g., "decibel-agent")',
+        },
+        adr_id: {
+          type: 'string',
+          description: 'ADR ID (e.g., "ADR-0005")',
+        },
+      },
+      required: ['projectId', 'adr_id'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      const projectId = (rawInput.projectId ?? rawInput.project_id) as string;
+      const adrId = (rawInput.adr_id ?? rawInput.adrId) as string;
+      requireFields({ projectId, adr_id: adrId }, 'projectId', 'adr_id');
+      const result = await readProjectAdr(projectId, adrId);
+      if (!result) {
+        return toolError(`ADR ${adrId} not found in project ${projectId}`);
+      }
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// List ADRs Tool
+// ============================================================================
+
+export const architectListAdrsTool: ToolSpec = {
+  definition: {
+    name: 'architect_listAdrs',
+    description: 'List all Architecture Decision Records (ADRs) for a project. Returns ID, title, and status for each ADR.',
+    annotations: {
+      title: 'List ADRs',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'The project identifier (e.g., "decibel-agent")',
+        },
+      },
+      required: ['projectId'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      const projectId = (rawInput.projectId ?? rawInput.project_id) as string;
+      requireFields({ projectId }, 'projectId');
+      const result = await listProjectAdrs(projectId);
+      return toolSuccess({ adrs: result, count: result.length });
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
 export const architectTools: ToolSpec[] = [
   architectRecordArchDecisionTool,
   architectCreateAdrTool,
+  architectGetAdrTool,
+  architectListAdrsTool,
   architectCreatePolicyTool,
   architectListPoliciesTool,
   architectGetPolicyTool,

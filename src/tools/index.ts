@@ -19,6 +19,7 @@ import { agenticTools } from './agentic/index.js';
 import { roadmapTools } from './roadmap/index.js';
 import { architectTools } from './architect/index.js';
 import { deckTools } from './deck.js';
+import { senkenTools } from './senken.js';
 import { gitTools } from './git/index.js';
 import { auditorTools } from './auditor/index.js';
 import { workflowTools } from './workflow/index.js';
@@ -52,6 +53,7 @@ const coreTools: ToolSpec[] = [
   ...roadmapTools,
   ...architectTools,
   ...deckTools,
+  ...senkenTools,
   ...gitTools,
   ...auditorTools,
   ...workflowTools,
