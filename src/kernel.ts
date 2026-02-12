@@ -14,7 +14,7 @@ import { trackToolUse } from './tools/shared/index.js';
 import { log } from './config.js';
 import type { ToolSpec, ToolResult } from './tools/types.js';
 import type { FacadeSpec, DetailTier, McpToolDefinition } from './facades/types.js';
-import { coreFacades, proFacades } from './facades/definitions.js';
+import { coreFacades, proFacades, appFacades } from './facades/definitions.js';
 import { buildMcpDefinitions, validateFacades } from './facades/index.js';
 
 // ============================================================================
@@ -39,8 +39,9 @@ export interface DispatchContext {
   scope?: string;
 }
 
-// Pro tier check (same logic as tools/index.ts)
+// Tier gating (same logic as tools/index.ts)
 const PRO_ENABLED = process.env.DECIBEL_PRO === '1' || process.env.NODE_ENV !== 'production';
+const APPS_ENABLED = process.env.DECIBEL_APPS === '1' || process.env.NODE_ENV !== 'production';
 
 // ============================================================================
 // Tool Kernel
@@ -82,10 +83,12 @@ export async function createKernel(): Promise<ToolKernel> {
   const tools = await getAllTools();
   const toolMap = new Map(tools.map(t => [t.definition.name, t]));
 
-  // Build facade registry (core + pro if enabled)
-  const facades = PRO_ENABLED
-    ? [...coreFacades, ...proFacades]
-    : [...coreFacades];
+  // Build facade registry (core + pro if enabled + apps if enabled)
+  const facades = [
+    ...coreFacades,
+    ...(PRO_ENABLED ? proFacades : []),
+    ...(APPS_ENABLED ? appFacades : []),
+  ];
   const facadeMap = new Map(facades.map(f => [f.name, f]));
 
   // Validate all facade actions point to real tools

@@ -38,8 +38,9 @@ import {
   graduatedToolsToMcpDefinitions,
 } from './dojoGraduated.js';
 
-// Pro tier tools (require DECIBEL_PRO=1 in production, always enabled in dev)
+// Tier gating (in production, require explicit env vars; in dev, always enabled)
 const PRO_ENABLED = process.env.DECIBEL_PRO === '1' || process.env.NODE_ENV !== 'production';
+const APPS_ENABLED = process.env.DECIBEL_APPS === '1' || process.env.NODE_ENV !== 'production';
 
 // ============================================================================
 // Aggregate All Tools
@@ -59,8 +60,6 @@ const coreTools: ToolSpec[] = [
   ...agenticTools,
   ...roadmapTools,
   ...architectTools,
-  ...deckTools,
-  ...senkenTools,
   ...gitTools,
   ...auditorTools,
   ...workflowTools,
@@ -73,6 +72,12 @@ const coreTools: ToolSpec[] = [
   ...coordinatorTools,
   ...benchTools,
 ];
+
+// App tools — Decibel internal (only when DECIBEL_APPS=1)
+function loadAppTools(): ToolSpec[] {
+  if (!APPS_ENABLED) return [];
+  return [...deckTools, ...senkenTools];
+}
 
 // Pro tools (only when DECIBEL_PRO=1)
 async function loadProTools(): Promise<ToolSpec[]> {
@@ -125,8 +130,9 @@ function loadGraduatedToolSpecs(): ToolSpec[] {
 // Async loader for full tool set (core + pro + graduated)
 export async function getAllTools(): Promise<ToolSpec[]> {
   const proTools = await loadProTools();
+  const appTools = loadAppTools();
   const graduatedToolSpecs = loadGraduatedToolSpecs();
-  return [...coreTools, ...proTools, ...graduatedToolSpecs];
+  return [...coreTools, ...proTools, ...appTools, ...graduatedToolSpecs];
 }
 
 // ============================================================================

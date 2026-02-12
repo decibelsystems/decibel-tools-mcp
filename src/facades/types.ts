@@ -22,8 +22,8 @@ export interface FacadeSpec {
   /** Whether to include in micro tier (tiny SLMs, edge, mobile) */
   microEligible: boolean;
 
-  /** Whether this is a Pro-tier facade (gated by DECIBEL_PRO) */
-  pro: boolean;
+  /** Availability tier: core (public), pro (DECIBEL_PRO), apps (DECIBEL_APPS — internal only) */
+  tier: 'core' | 'pro' | 'apps';
 
   /**
    * Action name → internal tool name mapping.

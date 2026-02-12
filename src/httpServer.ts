@@ -557,7 +557,7 @@ export async function startHttpServer(
             name: f.name,
             description: tier === 'compact' ? f.compactDescription : f.description,
             actions: Object.keys(f.actions),
-            pro: f.pro,
+            tier: f.tier,
           })),
         tier,
         facade_count: kernel.facadeCount,
