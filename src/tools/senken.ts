@@ -1,5 +1,5 @@
 /**
- * Senken Trade Tools — Mother/Senken trade database
+ * Senken Trade Tools — trade database integration
  *
  * Tools for querying trade performance, giveback analysis, trade review,
  * and parameter override management.
@@ -50,7 +50,7 @@ const senkenTradeSummary: ToolSpec = {
   definition: {
     name: 'senken_trade_summary',
     description:
-      'Aggregate trade performance from the Mother system. Returns count, win rate, avg R-multiple, total PnL grouped by strategy.',
+      'Aggregate trade performance. Returns count, win rate, avg R-multiple, total PnL grouped by strategy.',
     annotations: {
       title: 'Trade Summary',
       readOnlyHint: true,
@@ -380,7 +380,7 @@ const senkenListOverrides: ToolSpec = {
   definition: {
     name: 'senken_list_overrides',
     description:
-      'List active parameter overrides for Mother strategies. Shows current value, previous value, who applied, and when.',
+      'List active parameter overrides for trading strategies. Shows current value, previous value, who applied, and when.',
     annotations: {
       title: 'List Overrides',
       readOnlyHint: true,
@@ -432,7 +432,7 @@ const senkenApplyOverride: ToolSpec = {
   definition: {
     name: 'senken_apply_override',
     description:
-      'Apply a parameter override to a Mother strategy. Records the change with changelog (previous value, timestamp, reason). This action is routed through the approval gate.',
+      'Apply a parameter override to a trading strategy. Records the change with changelog (previous value, timestamp, reason). This action is routed through the approval gate.',
     annotations: {
       title: 'Apply Override',
       readOnlyHint: false,

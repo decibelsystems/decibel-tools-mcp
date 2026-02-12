@@ -15,7 +15,7 @@ export function getConfig(): Config {
 
   return {
     env: process.env.DECIBEL_ENV || 'dev',
-    org: process.env.DECIBEL_ORG || 'mediareason',
+    org: process.env.DECIBEL_ORG || 'default',
     rootDir: process.env.DECIBEL_MCP_ROOT || path.join(projectRoot, 'data'),
   };
 }

@@ -277,12 +277,12 @@ export const vectorListRunsTool: ToolSpec = {
 // Get Run Tool
 // ============================================================================
 
-export const vectorGetRunTool: ToolSpec = {
+export const vectorReadRunTool: ToolSpec = {
   definition: {
-    name: 'vector_get_run',
-    description: 'Get details of a specific run including prompt and optionally all events. Use this to analyze a session for drift and assumptions.',
+    name: 'vector_read_run',
+    description: 'Read details of a specific run including prompt and optionally all events. Use this to analyze a session for drift and assumptions.',
     annotations: {
-      title: 'Get Run',
+      title: 'Read Run',
       readOnlyHint: true,
       destructiveHint: false,
     },
@@ -587,7 +587,7 @@ export const vectorTools: ToolSpec[] = [
   vectorLogEventTool,
   vectorCompleteRunTool,
   vectorListRunsTool,
-  vectorGetRunTool,
+  vectorReadRunTool,
   vectorScorePromptTool,
   vectorAgentContextPackTool,
   vectorAgentCheckpointTool,

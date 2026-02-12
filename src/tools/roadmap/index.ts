@@ -30,12 +30,12 @@ import {
 // Roadmap Get Tool
 // ============================================================================
 
-export const roadmapGetTool: ToolSpec = {
+export const roadmapReadTool: ToolSpec = {
   definition: {
-    name: 'roadmap_get',
-    description: 'Get the strategic roadmap - objectives, themes, milestones, and epic context. Returns the full roadmap structure with summary stats.',
+    name: 'roadmap_read',
+    description: 'Read the strategic roadmap - objectives, themes, milestones, and epic context. Returns the full roadmap structure with summary stats.',
     annotations: {
-      title: 'Get Roadmap',
+      title: 'Read Roadmap',
       readOnlyHint: true,
       destructiveHint: false,
     },
@@ -298,12 +298,12 @@ export const roadmapInitTool: ToolSpec = {
 // Get Objective Tool
 // ============================================================================
 
-export const roadmapGetObjectiveTool: ToolSpec = {
+export const roadmapReadObjectiveTool: ToolSpec = {
   definition: {
-    name: 'roadmap_getObjective',
-    description: 'Get a single objective by ID with its key results and linked epics.',
+    name: 'roadmap_read_objective',
+    description: 'Read a single objective by ID with its key results and linked epics.',
     annotations: {
-      title: 'Get Objective',
+      title: 'Read Objective',
       readOnlyHint: true,
       destructiveHint: false,
     },
@@ -381,12 +381,12 @@ export const roadmapListObjectivesTool: ToolSpec = {
 // ============================================================================
 
 export const roadmapTools: ToolSpec[] = [
-  roadmapGetTool,
+  roadmapReadTool,
   roadmapListTool,
   roadmapGetEpicContextTool,
   roadmapGetHealthTool,
   roadmapLinkEpicTool,
   roadmapInitTool,
-  roadmapGetObjectiveTool,
+  roadmapReadObjectiveTool,
   roadmapListObjectivesTool,
 ];

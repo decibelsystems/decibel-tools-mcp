@@ -306,12 +306,12 @@ export const dojoRunExperimentTool: ToolSpec = {
   },
 };
 
-export const dojoGetResultsTool: ToolSpec = {
+export const dojoReadResultsTool: ToolSpec = {
   definition: {
-    name: 'dojo_get_results',
-    description: 'Get results from a previous experiment run. Use to examine what an experiment produced.',
+    name: 'dojo_read_results',
+    description: 'Read results from a previous experiment run. Use to examine what an experiment produced.',
     annotations: {
-      title: 'Get Results',
+      title: 'Read Results',
       readOnlyHint: true,
       destructiveHint: false,
     },
@@ -640,7 +640,7 @@ export const dojoTools: ToolSpec[] = [
   dojoListTool,
   // Experiment tools
   dojoRunExperimentTool,
-  dojoGetResultsTool,
+  dojoReadResultsTool,
   dojoReadArtifactTool,
   dojoCanGraduateTool,
   // Wish tools

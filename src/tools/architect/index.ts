@@ -376,12 +376,12 @@ export const architectListPoliciesTool: ToolSpec = {
 // Get Policy Tool
 // ============================================================================
 
-export const architectGetPolicyTool: ToolSpec = {
+export const architectReadPolicyTool: ToolSpec = {
   definition: {
-    name: 'architect_getPolicy',
-    description: 'Get details of a specific policy by ID.',
+    name: 'architect_read_policy',
+    description: 'Read details of a specific policy by ID.',
     annotations: {
-      title: 'Get Policy',
+      title: 'Read Policy',
       readOnlyHint: true,
       destructiveHint: false,
     },
@@ -466,9 +466,9 @@ export const architectCompileOversightTool: ToolSpec = {
 // Get ADR Tool
 // ============================================================================
 
-export const architectGetAdrTool: ToolSpec = {
+export const architectReadAdrTool: ToolSpec = {
   definition: {
-    name: 'architect_getAdr',
+    name: 'architect_readAdr',
     description: 'Read an existing Architecture Decision Record (ADR) by ID. Returns the full YAML content including context, decision, consequences, and review notes.',
     annotations: {
       title: 'Get ADR',
@@ -551,10 +551,10 @@ export const architectListAdrsTool: ToolSpec = {
 export const architectTools: ToolSpec[] = [
   architectRecordArchDecisionTool,
   architectCreateAdrTool,
-  architectGetAdrTool,
+  architectReadAdrTool,
   architectListAdrsTool,
   architectCreatePolicyTool,
   architectListPoliciesTool,
-  architectGetPolicyTool,
+  architectReadPolicyTool,
   architectCompileOversightTool,
 ];

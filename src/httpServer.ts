@@ -1,7 +1,7 @@
 /**
  * HTTP Server Mode for Decibel MCP
  *
- * Exposes the MCP server over HTTP for remote access (e.g., ChatGPT, Mother).
+ * Exposes the MCP server over HTTP for remote access (e.g., ChatGPT, external agents).
  *
  * Usage:
  *   node dist/server.js --http --port 8787
@@ -771,7 +771,7 @@ export async function startHttpServer(
     }
 
     // ========================================================================
-    // Simple REST Endpoints (for Mother and other AI agents)
+    // Simple REST Endpoints (for external AI agents)
     // ========================================================================
 
     // GET /tools - List available tools

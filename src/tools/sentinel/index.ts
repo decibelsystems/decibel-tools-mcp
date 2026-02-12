@@ -39,6 +39,8 @@ import {
   getIssueById,
   createIssue as createSentinelIssue,
   CreateIssueInput as CreateSentinelIssueInput,
+  updateIssue as updateSentinelIssue,
+  UpdateIssueInput as UpdateSentinelIssueInput,
   IssueStatus as SentinelIssueStatus,
   IssuePriority as SentinelIssuePriority,
   filterByStatus,
@@ -371,12 +373,12 @@ export const sentinelListEpicsTool: ToolSpec = {
   },
 };
 
-export const sentinelGetEpicTool: ToolSpec = {
+export const sentinelReadEpicTool: ToolSpec = {
   definition: {
-    name: 'sentinel_get_epic',
-    description: 'Get details of a specific epic by ID.',
+    name: 'sentinel_read_epic',
+    description: 'Read details of a specific epic by ID.',
     annotations: {
-      title: 'Get Epic',
+      title: 'Read Epic',
       readOnlyHint: true,
       destructiveHint: false,
     },
@@ -414,12 +416,12 @@ export const sentinelGetEpicTool: ToolSpec = {
   },
 };
 
-export const sentinelGetEpicIssuesTool: ToolSpec = {
+export const sentinelListEpicIssuesTool: ToolSpec = {
   definition: {
-    name: 'sentinel_get_epic_issues',
-    description: 'Get all issues linked to a specific epic.',
+    name: 'sentinel_list_epic_issues',
+    description: 'List all issues linked to a specific epic.',
     annotations: {
-      title: 'Get Epic Issues',
+      title: 'List Epic Issues',
       readOnlyHint: true,
       destructiveHint: false,
     },
@@ -777,12 +779,12 @@ export const sentinelCreateIssueTool2: ToolSpec = {
 // Get Issue Tool (YAML-based)
 // ============================================================================
 
-export const sentinelGetIssueTool: ToolSpec = {
+export const sentinelReadIssueTool: ToolSpec = {
   definition: {
-    name: 'sentinel_getIssue',
-    description: 'Get a single issue by ID (e.g., "ISS-0005") with full content including description, tags, and metadata.',
+    name: 'sentinel_read_issue',
+    description: 'Read a single issue by ID (e.g., "ISS-0005") with full content including description, tags, and metadata.',
     annotations: {
-      title: 'Get Issue',
+      title: 'Read Issue',
       readOnlyHint: true,
       destructiveHint: false,
     },
@@ -809,6 +811,76 @@ export const sentinelGetIssueTool: ToolSpec = {
         return toolError(`Issue ${args.issue_id} not found in project ${args.projectId}`);
       }
       return toolSuccess(issue);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// Update Issue Tool (YAML-based)
+// ============================================================================
+
+export const sentinelUpdateIssueTool: ToolSpec = {
+  definition: {
+    name: 'sentinel_updateIssue',
+    description: 'Update an existing issue. Can change status (open/in_progress/done/blocked), priority (low/medium/high), add tags, and append timestamped notes. Returns the updated issue with a list of changes made.',
+    annotations: {
+      title: 'Update Issue',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'The project identifier',
+        },
+        issue_id: {
+          type: 'string',
+          description: 'Issue ID (e.g., "ISS-0048")',
+        },
+        status: {
+          type: 'string',
+          enum: ['open', 'in_progress', 'done', 'blocked'],
+          description: 'New status for the issue',
+        },
+        priority: {
+          type: 'string',
+          enum: ['low', 'medium', 'high'],
+          description: 'New priority for the issue',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Tags to add (merged with existing, not replaced)',
+        },
+        note: {
+          type: 'string',
+          description: 'Note to append to the description (auto-timestamped)',
+        },
+      },
+      required: ['projectId', 'issue_id'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      const projectId = (rawInput.projectId ?? rawInput.project_id) as string;
+      const issueId = (rawInput.issue_id ?? rawInput.issueId) as string;
+      requireFields({ projectId, issue_id: issueId }, 'projectId', 'issue_id');
+
+      const result = await updateSentinelIssue({
+        projectId,
+        issueId,
+        status: rawInput.status as UpdateSentinelIssueInput['status'],
+        priority: rawInput.priority as UpdateSentinelIssueInput['priority'],
+        tags: rawInput.tags as string[] | undefined,
+        note: rawInput.note as string | undefined,
+      });
+      return toolSuccess(result);
     } catch (err) {
       return toolError(err instanceof Error ? err.message : String(err));
     }
@@ -1050,8 +1122,8 @@ export const sentinelTools: ToolSpec[] = [
   // Epic tools
   sentinelLogEpicTool,
   sentinelListEpicsTool,
-  sentinelGetEpicTool,
-  sentinelGetEpicIssuesTool,
+  sentinelReadEpicTool,
+  sentinelListEpicIssuesTool,
   sentinelResolveEpicTool,
   // Data inspector tools
   sentinelScanTool,
@@ -1059,7 +1131,8 @@ export const sentinelTools: ToolSpec[] = [
   // YAML issue tools
   sentinelListIssuesTool,
   sentinelCreateIssueTool2,
-  sentinelGetIssueTool,
+  sentinelReadIssueTool,
+  sentinelUpdateIssueTool,
   // Test spec tools
   sentinelCreateTestSpecTool,
   sentinelListTestSpecsTool,

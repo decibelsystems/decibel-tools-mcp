@@ -288,6 +288,117 @@ export async function getIssueById(
   return issues.find((i) => i.id.toUpperCase() === normalizedId) ?? null;
 }
 
+// ============================================================================
+// Update Issue
+// ============================================================================
+
+export interface UpdateIssueInput {
+  projectId: string;
+  issueId: string;
+  status?: IssueStatus;
+  priority?: IssuePriority;
+  tags?: string[];
+  note?: string;
+}
+
+export interface UpdateIssueOutput extends SentinelIssue {
+  filePath: string;
+  changes: string[];
+}
+
+/**
+ * Update an existing issue — status, priority, tags, and/or append a note.
+ * Reads the YAML file, applies changes, writes back.
+ */
+export async function updateIssue(
+  input: UpdateIssueInput
+): Promise<UpdateIssueOutput> {
+  const { projectId, issueId, status, priority, tags, note } = input;
+
+  // Find the issue file
+  const files = await readFilesFromBothPaths(projectId, ISSUES_SUBPATH);
+  const normalizedId = issueId.toUpperCase();
+
+  let matchedFile: { filePath: string } | undefined;
+  for (const f of files) {
+    const basename = path.basename(f.filePath).toUpperCase();
+    if (basename.startsWith(normalizedId)) {
+      matchedFile = f;
+      break;
+    }
+  }
+
+  if (!matchedFile) {
+    throw new Error(`Issue ${issueId} not found in project ${projectId}`);
+  }
+
+  // Read and parse
+  const content = await fs.readFile(matchedFile.filePath, 'utf-8');
+  const parsed = safeParseYaml(content);
+  const changes: string[] = [];
+
+  // Apply changes
+  if (status && status !== parsed.status) {
+    changes.push(`status: ${parsed.status} → ${status}`);
+    parsed.status = status;
+  }
+
+  if (priority && priority !== parsed.priority) {
+    changes.push(`priority: ${parsed.priority ?? 'unset'} → ${priority}`);
+    parsed.priority = priority;
+  }
+
+  if (tags) {
+    const oldTags = (parsed.tags as string[]) || [];
+    const merged = [...new Set([...oldTags, ...tags])];
+    if (merged.length !== oldTags.length) {
+      changes.push(`tags: added ${tags.filter(t => !oldTags.includes(t)).join(', ')}`);
+      parsed.tags = merged;
+    }
+  }
+
+  if (note) {
+    const existing = (parsed.description as string) || '';
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const appendedNote = `\n\n[${timestamp}] ${note}`;
+    parsed.description = existing + appendedNote;
+    changes.push(`note appended`);
+  }
+
+  if (changes.length === 0) {
+    throw new Error(`No changes to apply to ${issueId}`);
+  }
+
+  // Update timestamp
+  parsed.updated_at = new Date().toISOString();
+
+  // Write back
+  const yamlContent = stringifyYaml(parsed, { lineWidth: 0 });
+
+  // Write to the primary (.decibel) path
+  const writeDir = await getWritePath(projectId, ISSUES_SUBPATH);
+  await ensureDir(writeDir);
+  const writePath = path.join(writeDir, path.basename(matchedFile.filePath));
+  await fs.writeFile(writePath, yamlContent, 'utf-8');
+  log(`sentinelIssues: Updated issue ${issueId} at ${writePath} — ${changes.join(', ')}`);
+
+  // Build return object
+  const issue: SentinelIssue = {
+    id: parsed.id as string,
+    title: parsed.title as string,
+    project: (parsed.project as string) || projectId,
+    status: parsed.status as IssueStatus,
+    priority: parsed.priority as IssuePriority | undefined,
+    epicId: (parsed.epic_id as string) || (parsed.epicId as string),
+    tags: parsed.tags as string[] | undefined,
+    created_at: parsed.created_at as string | undefined,
+    updated_at: parsed.updated_at as string | undefined,
+    description: parsed.description as string | undefined,
+  };
+
+  return { ...issue, filePath: writePath, changes };
+}
+
 /**
  * Filter issues by status
  */

@@ -17,6 +17,8 @@ import {
   WorkflowPreflightInput,
   WorkflowShipInput,
   WorkflowInvestigateInput,
+  projectSnapshot,
+  ProjectSnapshotInput,
 } from '../workflow.js';
 
 // ============================================================================
@@ -160,6 +162,52 @@ export const workflowInvestigateTool: ToolSpec = {
 };
 
 // ============================================================================
+// project_snapshot — compact briefing for agent sessions
+// ============================================================================
+
+export const projectSnapshotTool: ToolSpec = {
+  definition: {
+    name: 'project_snapshot',
+    description:
+      'Get a compact project briefing optimized for AI agent context. Returns markdown with open issues, active epics, roadmap risks, friction points, recommended next actions, and recent activity. Use this at the start of a session to quickly understand project state in one call.',
+    annotations: {
+      title: 'Project Snapshot',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: {
+          type: 'string',
+          description: 'Project identifier. Uses default project if not specified.',
+        },
+        depth: {
+          type: 'string',
+          enum: ['quick', 'full'],
+          description: 'quick = priorities + actions only (~15 lines). full = everything including roadmap health, friction, and recent activity (default: full).',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      const projectId = (rawInput.projectId ?? rawInput.project_id) as string | undefined;
+      const depth = (rawInput.depth as 'quick' | 'full') || 'full';
+      const result = await projectSnapshot({ projectId, depth });
+      if (isWorkflowError(result)) {
+        return toolError(result.error, result.details);
+      }
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -168,4 +216,5 @@ export const workflowTools: ToolSpec[] = [
   workflowPreflightTool,
   workflowShipTool,
   workflowInvestigateTool,
+  projectSnapshotTool,
 ];

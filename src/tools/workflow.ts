@@ -7,10 +7,12 @@
 
 import path from 'path';
 import { resolveProjectPaths, ResolvedProjectPaths } from '../projectRegistry.js';
-import { listRepoIssues, listEpics } from './sentinel.js';
+import { listRepoIssues, listEpics, isProjectResolutionError } from './sentinel.js';
 import { getRoadmapHealth } from './roadmap.js';
 import { listFriction } from './friction.js';
-import { nextActions } from './oracle.js';
+import { nextActions, roadmapProgress, isOracleError } from './oracle.js';
+import { listIssuesForProject, type SentinelIssue } from '../sentinelIssues.js';
+import { listProvenance } from './provenance.js';
 import { listLearnings } from './learnings.js';
 import { scanData } from './sentinel-scan-data.js';
 import { auditorTriage, auditorLogHealth, auditorHealthHistory, isAuditorError } from './auditor.js';
@@ -661,6 +663,155 @@ export async function workflowInvestigate(
     relatedFriction,
     recentLearnings,
     suggestions,
+  };
+}
+
+// ============================================================================
+// project_snapshot — compact briefing for agent session start
+// ============================================================================
+
+export interface ProjectSnapshotInput {
+  projectId?: string;
+  depth?: 'quick' | 'full';
+}
+
+export interface ProjectSnapshotOutput {
+  briefing: string;
+  project_id: string;
+  generated_at: string;
+}
+
+export async function projectSnapshot(
+  input: ProjectSnapshotInput
+): Promise<ProjectSnapshotOutput | WorkflowError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeError('Failed to resolve project path');
+  }
+
+  const projectId = resolved.id;
+  const depth = input.depth ?? 'full';
+  const lines: string[] = [];
+  const today = new Date().toISOString().slice(0, 10);
+
+  lines.push(`## Briefing: ${projectId} (${today})`);
+
+  // ---- Issues ----
+  try {
+    const issues = await listIssuesForProject(projectId);
+    const open = issues.filter(i => i.status === 'open');
+    const inProgress = issues.filter(i => i.status === 'in_progress');
+    const blocked = issues.filter(i => i.status === 'blocked');
+
+    lines.push(`Issues: ${open.length} open, ${inProgress.length} in progress, ${blocked.length} blocked`);
+
+    // Show high priority and blocked issues
+    const urgent = [
+      ...blocked,
+      ...open.filter(i => i.priority === 'high'),
+      ...inProgress.filter(i => i.priority === 'high'),
+    ];
+
+    if (urgent.length > 0) {
+      lines.push('');
+      lines.push('### Priorities');
+      for (const issue of urgent.slice(0, 5)) {
+        const badge = issue.status === 'blocked' ? 'BLOCKED' : issue.priority ?? 'med';
+        lines.push(`- ${issue.id} [${badge}] ${issue.title}`);
+      }
+    }
+  } catch {
+    lines.push('Issues: (unavailable)');
+  }
+
+  // ---- Epics ----
+  try {
+    const epicsResult = await listEpics({ projectId });
+    if (!isProjectResolutionError(epicsResult) && epicsResult.epics.length > 0) {
+      const active = epicsResult.epics.filter(e => e.status === 'in_progress');
+      const planned = epicsResult.epics.filter(e => e.status === 'planned');
+      const shipped = epicsResult.epics.filter(e => e.status === 'shipped');
+
+      lines.push('');
+      lines.push(`### Epics (${active.length} active, ${planned.length} planned, ${shipped.length} shipped)`);
+      for (const epic of active) {
+        lines.push(`- ${epic.id} "${epic.title}" — ${epic.status}`);
+      }
+    }
+  } catch { /* optional */ }
+
+  // ---- Roadmap Health ----
+  if (depth === 'full') {
+    try {
+      const roadmap = await roadmapProgress({ projectId, dryRun: true, noSignals: false });
+      if (!isOracleError(roadmap) && roadmap.milestones.length > 0) {
+        const atRisk = roadmap.milestones.filter(m => m.status === 'at_risk' || m.status === 'behind');
+        if (atRisk.length > 0) {
+          lines.push('');
+          lines.push('### Milestones at Risk');
+          for (const ms of atRisk) {
+            lines.push(`- ${ms.id} "${ms.label}" — ${ms.progress_percent}% (${ms.status.replace('_', ' ')})`);
+          }
+        }
+        if (roadmap.signals) {
+          const { blocking_issues, high_severity_issues, friction_points } = roadmap.signals;
+          if (blocking_issues > 0 || high_severity_issues > 0 || friction_points > 0) {
+            const parts: string[] = [];
+            if (blocking_issues > 0) parts.push(`${blocking_issues} blocking`);
+            if (high_severity_issues > 0) parts.push(`${high_severity_issues} high-severity`);
+            if (friction_points > 0) parts.push(`${friction_points} friction`);
+            lines.push(`Signals: ${parts.join(', ')}`);
+          }
+        }
+      }
+    } catch { /* optional */ }
+  }
+
+  // ---- Friction ----
+  try {
+    const frictionResult = await listFriction({ projectId, status: 'open', limit: 3 });
+    if (!('error' in frictionResult) && frictionResult.friction.length > 0) {
+      lines.push('');
+      lines.push('### Friction');
+      for (const f of frictionResult.friction) {
+        lines.push(`- ${f.id} "${f.context}" (${f.impact}, ${f.signal_count}x)`);
+      }
+    }
+  } catch { /* optional */ }
+
+  // ---- Next Actions ----
+  try {
+    const actionsResult = await nextActions({ projectId });
+    if (!('error' in actionsResult) && actionsResult.actions.length > 0) {
+      lines.push('');
+      lines.push('### Recommended Next');
+      for (const action of actionsResult.actions.slice(0, 3)) {
+        lines.push(`- ${action.description}`);
+      }
+    }
+  } catch { /* optional */ }
+
+  // ---- Recent Activity (full depth only) ----
+  if (depth === 'full') {
+    try {
+      const provResult = await listProvenance({ projectId, limit: 5 });
+      if (!('error' in provResult) && provResult.events.length > 0) {
+        lines.push('');
+        lines.push('### Recent Activity');
+        for (const evt of provResult.events.slice(0, 5)) {
+          const ts = evt.timestamp.slice(0, 10);
+          lines.push(`- [${ts}] ${evt.action}: ${evt.summary || evt.artifact_refs.join(', ')}`);
+        }
+      }
+    } catch { /* optional */ }
+  }
+
+  return {
+    briefing: lines.join('\n'),
+    project_id: projectId,
+    generated_at: new Date().toISOString(),
   };
 }
 

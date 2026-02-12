@@ -160,12 +160,12 @@ export const studioCreateProjectTool: ToolSpec = {
   },
 };
 
-export const studioGetProjectTool: ToolSpec = {
+export const studioReadProjectTool: ToolSpec = {
   definition: {
-    name: 'studio_get_project',
-    description: 'Get details of a specific Decibel Studio project.',
+    name: 'studio_read_project',
+    description: 'Read details of a specific Decibel Studio project.',
     annotations: {
-      title: 'Get Project',
+      title: 'Read Project',
       readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: true,
@@ -918,7 +918,7 @@ export const studioCloudSpineTools: ToolSpec[] = [
   // Projects
   studioListProjectsTool,
   studioCreateProjectTool,
-  studioGetProjectTool,
+  studioReadProjectTool,
   // Artifacts
   studioListArtifactsTool,
   studioCreateArtifactTool,

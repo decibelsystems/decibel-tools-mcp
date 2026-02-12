@@ -4,7 +4,7 @@
         "command": "npx",
         "args": ["-y", "decibel-tools-mcp"],
         "env": {
-          "TOGETHER_API_KEY": "tgp_v1_c9OTmBy80I59jBJ5w8vINeJDhEgN3_PwD9ABVFvL1W0"
+          "TOGETHER_API_KEY": "${TOGETHER_API_KEY}"
         }
       }
     }

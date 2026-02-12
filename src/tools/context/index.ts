@@ -97,7 +97,7 @@ export const contextRefreshTool: ToolSpec = {
 export const contextPinTool: ToolSpec = {
   definition: {
     name: 'decibel_context_pin',
-    description: 'Pin a fact to persistent memory. Mother uses this to remember important insights.',
+    description: 'Pin a fact to persistent memory. AI agents use this to remember important insights.',
     annotations: {
       title: 'Pin Context',
       readOnlyHint: false,

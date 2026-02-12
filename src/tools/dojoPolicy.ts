@@ -2,7 +2,7 @@
  * Dojo Policy Enforcement
  *
  * Loads and enforces role-based access control for Dojo tools.
- * Ensures Mother and other AI callers can only access sandbox-safe operations.
+ * Ensures AI callers can only access sandbox-safe operations.
  */
 
 import fs from 'fs';
@@ -66,7 +66,7 @@ const DEFAULT_POLICY: DojoPolicy = {
       },
     },
     mother: {
-      description: 'Mother AI - sandbox-only',
+      description: 'AI agent role - sandbox-only',
       allowed_tools: [
         'dojo_add_wish',
         'dojo_list_wishes',

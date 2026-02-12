@@ -86,11 +86,11 @@ export const sentinelLinkCommitTool: ToolSpec = {
 // sentinel_get_linked_commits
 // ============================================================================
 
-export const sentinelGetLinkedCommitsTool: ToolSpec = {
+export const sentinelListLinkedCommitsTool: ToolSpec = {
   definition: {
-    name: 'sentinel_get_linked_commits',
+    name: 'sentinel_list_linked_commits',
     description:
-      'Get all git commits linked to a Sentinel artifact (issue or epic). Shows commit SHAs, messages, relationships, and when they were linked.',
+      'List all git commits linked to a Sentinel artifact (issue or epic). Shows commit SHAs, messages, relationships, and when they were linked.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -205,7 +205,7 @@ export const sentinelAutoLinkTool: ToolSpec = {
 
 export const gitSentinelTools: ToolSpec[] = [
   sentinelLinkCommitTool,
-  sentinelGetLinkedCommitsTool,
+  sentinelListLinkedCommitsTool,
   gitFindLinkedIssuesTool,
   sentinelAutoLinkTool,
 ];

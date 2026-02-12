@@ -1,6 +1,6 @@
-# Mother Integration Guide
+# HTTP Integration Guide
 
-How to integrate Senken's Mother AI with Decibel MCP tools via HTTP.
+How to integrate external AI agents with Decibel MCP tools via HTTP.
 
 **Current Version:** 0.3.0
 **API Version:** v1
