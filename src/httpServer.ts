@@ -94,42 +94,35 @@ const PKG = getVersion();
 // ============================================================================
 
 /**
- * Group tools by module prefix and generate the landing page HTML dynamically.
+ * Generate landing page HTML from facade definitions.
  */
-function buildLandingPageHtml(tools: { name: string; description: string }[]): string {
-  // Group by module prefix (e.g. sentinel_createIssue → sentinel)
-  const groups = new Map<string, { name: string; description: string }[]>();
-  for (const t of tools) {
-    const prefix = t.name.includes('_') ? t.name.split('_')[0] : 'other';
-    if (!groups.has(prefix)) groups.set(prefix, []);
-    groups.get(prefix)!.push(t);
-  }
-
-  // Sort groups by name, build HTML sections
-  const sortedGroups = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-
+function buildLandingPageHtml(facades: { name: string; description: string; actions: string[] }[]): string {
   const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const toolSections = sortedGroups.map(([prefix, groupTools]) => {
-    const rows = groupTools
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(t => {
-        const desc = t.description.length > 120 ? t.description.slice(0, 117) + '...' : t.description;
-        return `        <tr><td class="tool-name">${escHtml(t.name)}</td><td class="tool-desc">${escHtml(desc)}</td></tr>`;
-      })
-      .join('\n');
-    return `      <div class="module-section">
-        <h3>${escHtml(prefix)} <span class="tool-count">${groupTools.length}</span></h3>
+  const totalActions = facades.reduce((sum, f) => sum + f.actions.length, 0);
+
+  const toolSections = facades
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(f => {
+      const rows = f.actions
+        .sort()
+        .map(action => {
+          return `        <tr><td class="tool-name">${escHtml(f.name)}(${escHtml(action)})</td><td class="tool-desc"></td></tr>`;
+        })
+        .join('\n');
+      return `      <div class="module-section">
+        <h3>${escHtml(f.name)} <span class="tool-count">${f.actions.length} actions</span></h3>
+        <p style="color:#888;font-size:0.85rem;margin-bottom:0.75rem">${escHtml(f.description.split('.')[0])}</p>
         <table>${rows}</table>
       </div>`;
-  }).join('\n');
+    }).join('\n');
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Decibel Tools - ${tools.length} MCP Tools</title>
+  <title>Decibel Tools - ${facades.length} Facades</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -176,7 +169,7 @@ function buildLandingPageHtml(tools: { name: string; description: string }[]): s
   <div class="container">
     <h1>Decibel Tools</h1>
     <p class="tagline">Project intelligence for AI coding agents</p>
-    <p class="tool-total">${tools.length} tools across ${groups.size} modules &middot; v${PKG.version}</p>
+    <p class="tool-total">${facades.length} facades, ${totalActions} actions &middot; v${PKG.version}</p>
     <div class="features">
       <div class="feature"><h3>Sentinel</h3><p>Track epics, issues, and incidents. Your agent knows what's in flight.</p></div>
       <div class="feature"><h3>Architect</h3><p>Record ADRs and decisions. Context persists across sessions.</p></div>
@@ -312,12 +305,13 @@ async function executeTool(
 }
 
 /**
- * Get list of available tools — single source of truth from kernel
+ * Get list of available facades — public API for tool discovery
  */
-function getAvailableTools(): { name: string; description: string }[] {
-  return kernel.tools.map(t => ({
-    name: t.definition.name,
-    description: t.definition.description,
+function getAvailableTools(): { name: string; description: string; actions: string[] }[] {
+  return kernel.facades.map(f => ({
+    name: f.name,
+    description: f.description,
+    actions: Object.keys(f.actions),
   }));
 }
 
@@ -338,19 +332,18 @@ interface OpenAIFunction {
 }
 
 /**
- * Get tools in OpenAI function calling format
- * This includes the full parameter schema for each tool
+ * Get tools in OpenAI function calling format (facade-based)
  */
 function getOpenAITools(): OpenAIFunction[] {
-  return kernel.tools.map(t => ({
+  return kernel.getMcpToolDefinitions('full').map(def => ({
     type: 'function' as const,
     function: {
-      name: t.definition.name,
-      description: t.definition.description,
+      name: def.name,
+      description: def.description,
       parameters: {
         type: 'object' as const,
-        properties: t.definition.inputSchema.properties,
-        required: t.definition.inputSchema.required,
+        properties: def.inputSchema.properties,
+        required: def.inputSchema.required,
       },
     },
   }));
@@ -550,6 +543,25 @@ export async function startHttpServer(
         version: PKG.version,
         api_version: 'v1',
         tools: getAvailableTools(),
+      }));
+      return;
+    }
+
+    // GET /facades - Facade registry for agent bootstrap
+    if (path === '/facades' && req.method === 'GET') {
+      const tier = (url.searchParams.get('tier') || 'full') as 'full' | 'compact' | 'micro';
+      sendJson(res, 200, wrapSuccess({
+        facades: kernel.facades
+          .filter(f => tier !== 'micro' || f.microEligible)
+          .map(f => ({
+            name: f.name,
+            description: tier === 'compact' ? f.compactDescription : f.description,
+            actions: Object.keys(f.actions),
+            pro: f.pro,
+          })),
+        tier,
+        facade_count: kernel.facadeCount,
+        internal_tool_count: kernel.toolCount,
       }));
       return;
     }

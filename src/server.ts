@@ -34,10 +34,14 @@ const server = new Server(
   }
 );
 
-// Define available tools — kernel is the single source of truth
-server.setRequestHandler(ListToolsRequestSchema, async () => {
+// Define available tools — facades are the public API, kernel dispatches internally
+server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+  // Support detail tier hint via _meta (for SLM clients)
+  const meta = (request.params as Record<string, unknown> | undefined)?._meta as Record<string, unknown> | undefined;
+  const tier = (meta?.detailTier as 'full' | 'compact' | 'micro') || 'full';
+
   return {
-    tools: kernel.tools.map(t => t.definition),
+    tools: kernel.getMcpToolDefinitions(tier),
   };
 });
 
