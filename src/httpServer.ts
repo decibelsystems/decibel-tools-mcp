@@ -360,6 +360,14 @@ export interface HttpServerOptions {
 }
 
 /**
+ * Handle returned by startHttpServer for lifecycle management.
+ * Used by the HttpAdapter to implement TransportAdapter.stop().
+ */
+export interface HttpServerHandle {
+  stop(): Promise<void>;
+}
+
+/**
  * Start an HTTP server that handles MCP requests
  *
  * Note: This creates a single stateless transport. Each request is handled
@@ -369,7 +377,7 @@ export async function startHttpServer(
   server: Server,
   kernelInstance: ToolKernel,
   options: HttpServerOptions
-): Promise<void> {
+): Promise<HttpServerHandle> {
   const {
     port,
     authToken,
@@ -1630,6 +1638,21 @@ ${authToken ? '║  Auth:     Bearer token required                             
 ╚══════════════════════════════════════════════════════════════╝
 `);
   });
+
+  // Return lifecycle handle for TransportAdapter.stop()
+  return {
+    async stop() {
+      clearInterval(keepaliveInterval);
+      for (const conn of activeSseConnections) {
+        try { if (!conn.writableEnded) conn.end(); } catch { /* ignore */ }
+      }
+      activeSseConnections.clear();
+      await new Promise<void>((resolve, reject) => {
+        httpServer.close((err) => err ? reject(err) : resolve());
+      });
+      log('HTTP server stopped');
+    },
+  };
 }
 
 /**
