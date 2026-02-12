@@ -10,13 +10,6 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { getConfig, log } from './config.js';
-import {
-  loadGraduatedTools,
-  graduatedToolsToMcpDefinitions,
-  executeGraduatedTool,
-  findGraduatedTool,
-  GraduatedTool,
-} from './tools/dojoGraduated.js';
 import { startHttpServer, parseHttpArgs } from './httpServer.js';
 
 const config = getConfig();
@@ -29,11 +22,7 @@ if (process.env.DECIBEL_PRO === '1') {
   log(`Pro features: ENABLED`);
 }
 
-// Load graduated Dojo tools
-const graduatedTools: GraduatedTool[] = loadGraduatedTools();
-log(`Loaded ${graduatedTools.length} graduated Dojo tools`);
-
-// Tools loaded async at startup
+// Tools loaded async at startup (includes core + pro + graduated)
 let allTools: ToolSpec[] = [];
 let toolMap: Map<string, ToolSpec> = new Map();
 
@@ -49,20 +38,14 @@ const server = new Server(
   }
 );
 
-// Define available tools
+// Define available tools — single source of truth from getAllTools()
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: [
-      // Modular tools (from src/tools/*)
-      ...allTools.map(t => t.definition),
-
-      // Dynamically add graduated Dojo tools
-      ...graduatedToolsToMcpDefinitions(graduatedTools),
-    ],
+    tools: allTools.map(t => t.definition),
   };
 });
 
-// Handle tool calls
+// Handle tool calls — unified dispatch through toolMap
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
@@ -70,28 +53,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   log(`Arguments:`, JSON.stringify(args, null, 2));
 
   try {
-    // Check modular tools first (from src/tools/*)
-    const modularTool = toolMap.get(name);
-    if (modularTool) {
-      trackToolUse(name);  // Track for feedback prompts
-      const result = await modularTool.handler(args);
-      // Cast to match MCP SDK expected return type
-      return result as { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
+    const tool = toolMap.get(name);
+    if (!tool) {
+      throw new Error(`Unknown tool: ${name}`);
     }
 
-    // Only handle graduated dojo tools here
-    if (name.startsWith('graduated_')) {
-      const tool = findGraduatedTool(graduatedTools, name);
-      if (tool) {
-        log(`Executing graduated tool: ${tool.tool_name}`);
-        const result = await executeGraduatedTool(tool, args as Record<string, unknown>);
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-          isError: !result.success,
-        };
-      }
-    }
-    throw new Error(`Unknown tool: ${name}`);
+    trackToolUse(name);
+    const result = await tool.handler(args);
+    return result as { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     log(`Error in tool ${name}:`, errorMessage);

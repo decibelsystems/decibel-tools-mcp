@@ -35,123 +35,41 @@ import { log } from './config.js';
 import { isSupabaseConfigured } from './lib/supabase.js';
 import { getAllTools } from './tools/index.js';
 import type { ToolSpec } from './tools/types.js';
-
-// Module-level tool registry — populated by startHttpServer() before requests arrive
-let httpTools: ToolSpec[] = [];
-let httpToolMap: Map<string, ToolSpec> = new Map();
-let landingPageHtml = '';
+import { listProjects } from './projectRegistry.js';
 import {
-  createProposal,
-  scaffoldExperiment,
-  listDojo,
-  runExperiment,
-  getExperimentResults,
-  addWish,
-  listWishes,
-  canGraduate,
-  readArtifact,
-  isDojoError,
-  CreateProposalInput,
-  ScaffoldExperimentInput,
-  ListDojoInput,
-  RunExperimentInput,
-  GetResultsInput,
-  AddWishInput,
-  ListWishesInput,
-  CanGraduateInput,
-  ReadArtifactInput,
-} from './tools/dojo.js';
-import {
-  dojoBench,
-  isDojoBenchError,
-  DojoBenchInput,
-} from './tools/dojoBench.js';
-import {
-  decibelBench,
-  decibelBenchCompare,
-  isDecibelBenchError,
-  isBenchCompareError,
-  DecibelBenchInput,
-  BenchCompareInput,
-} from './tools/bench.js';
-import {
-  contextRefresh,
-  ContextRefreshInput,
-  contextPin,
-  ContextPinInput,
-  contextUnpin,
-  ContextUnpinInput,
-  contextList,
-  ContextListInput,
-  eventAppend,
-  EventAppendInput,
-  eventSearch,
-  EventSearchInput,
-  artifactList,
-  ArtifactListInput,
-  artifactRead,
-  ArtifactReadInput,
-  isContextError,
-} from './tools/context.js';
-import {
-  createPolicy,
-  CreatePolicyInput,
-  listPolicies,
-  ListPoliciesInput,
-  getPolicy,
-  GetPolicyInput,
-  compileOversight,
-  CompileOversightInput,
-  isPolicyError,
-} from './tools/policy.js';
-import {
-  createTestSpec,
-  CreateTestSpecInput,
-  listTestSpecs,
-  ListTestSpecsInput,
-  compileTests,
-  CompileTestsInput,
-  auditPolicies,
-  AuditPoliciesInput,
-  isTestSpecError,
-} from './tools/testSpec.js';
+  listEpics,
+  listRepoIssues,
+  isProjectResolutionError,
+} from './tools/sentinel.js';
 import {
   voiceInboxAdd,
   VoiceInboxAddInput,
 } from './tools/voice.js';
 import {
-  // Image
   generateImage,
   getImageStatus,
   GenerateImageInput,
-  // Meshy 3D
   meshyGenerate,
   getMeshyStatus,
   meshyDownload,
   MeshyGenerateInput,
-  // Tripo 3D
   tripoGenerate,
   getTripoStatus,
   tripoDownload,
   TripoGenerateInput,
-  // Kling Video
   klingGenerateVideo,
   klingGenerateTextVideo,
   klingGenerateAvatar,
   getKlingStatus,
   KlingVideoInput,
   KlingAvatarInput,
-  // Utility
   listTasks,
 } from './tools/studio/index.js';
-import { listProjects } from './projectRegistry.js';
-import {
-  listEpics,
-  ListEpicsInput,
-  listRepoIssues,
-  ListRepoIssuesInput,
-  isProjectResolutionError,
-} from './tools/sentinel.js';
+
+// Module-level tool registry — populated by startHttpServer() before requests arrive
+let httpTools: ToolSpec[] = [];
+let httpToolMap: Map<string, ToolSpec> = new Map();
+let landingPageHtml = '';
 
 // ============================================================================
 // Version Info
@@ -337,164 +255,47 @@ async function parseBody(req: IncomingMessage): Promise<Record<string, unknown>>
 }
 
 // ============================================================================
-// Tool Executor
+// Tool Executor — unified dispatch through modular tool registry
 // ============================================================================
 
 /**
- * Execute a Dojo tool and return normalized result
+ * Execute any tool via the modular httpToolMap.
+ * All tools (dojo, context, bench, sentinel, architect, etc.) go through
+ * the same dispatch path — no more per-domain switch statements.
  */
-async function executeDojoTool(
+async function executeTool(
   tool: string,
   args: Record<string, unknown>
 ): Promise<StatusEnvelope> {
   try {
-    let result: unknown;
+    const toolSpec = httpToolMap.get(tool);
+    if (!toolSpec) {
+      return wrapError(`Unknown tool: ${tool}. Use GET /tools to see available tools.`, 'UNKNOWN_TOOL');
+    }
 
-    switch (tool) {
-      case 'dojo_add_wish':
-        result = await addWish(args as unknown as AddWishInput);
-        break;
-      case 'dojo_create_proposal':
-        result = await createProposal(args as unknown as CreateProposalInput);
-        break;
-      case 'dojo_scaffold_experiment':
-        result = await scaffoldExperiment(args as unknown as ScaffoldExperimentInput);
-        break;
-      case 'dojo_run_experiment':
-        result = await runExperiment(args as unknown as RunExperimentInput);
-        break;
-      case 'dojo_get_results':
-        result = await getExperimentResults(args as unknown as GetResultsInput);
-        break;
-      case 'dojo_list':
-        result = await listDojo(args as unknown as ListDojoInput);
-        break;
-      case 'dojo_list_wishes':
-        result = await listWishes(args as unknown as ListWishesInput);
-        break;
-      case 'dojo_can_graduate':
-        result = await canGraduate(args as unknown as CanGraduateInput);
-        break;
-      case 'dojo_read_artifact':
-        result = await readArtifact(args as unknown as ReadArtifactInput);
-        break;
-      case 'dojo_bench':
-        result = await dojoBench(args as unknown as DojoBenchInput);
-        break;
-      // Benchmark tools (ISS-0014)
-      case 'decibel_bench':
-        result = await decibelBench(args as unknown as DecibelBenchInput);
-        break;
-      case 'decibel_bench_compare':
-        result = await decibelBenchCompare(args as unknown as BenchCompareInput);
-        break;
-      // Context Pack tools
-      case 'decibel_context_refresh':
-        result = await contextRefresh(args as unknown as ContextRefreshInput);
-        break;
-      case 'decibel_context_pin':
-        result = await contextPin(args as unknown as ContextPinInput);
-        break;
-      case 'decibel_context_unpin':
-        result = await contextUnpin(args as unknown as ContextUnpinInput);
-        break;
-      case 'decibel_context_list':
-        result = await contextList(args as unknown as ContextListInput);
-        break;
-      case 'decibel_event_append':
-        result = await eventAppend(args as unknown as EventAppendInput);
-        break;
-      case 'decibel_event_search':
-        result = await eventSearch(args as unknown as EventSearchInput);
-        break;
-      case 'decibel_artifact_list':
-        result = await artifactList(args as unknown as ArtifactListInput);
-        break;
-      case 'decibel_artifact_read':
-        result = await artifactRead(args as unknown as ArtifactReadInput);
-        break;
-      // Architect Policy tools (ADR-004 Oversight Pack)
-      case 'architect_createPolicy':
-        result = await createPolicy(args as unknown as CreatePolicyInput);
-        break;
-      case 'architect_listPolicies':
-        result = await listPolicies(args as unknown as ListPoliciesInput);
-        break;
-      case 'architect_getPolicy':
-        result = await getPolicy(args as unknown as GetPolicyInput);
-        break;
-      case 'architect_compileOversight':
-        result = await compileOversight(args as unknown as CompileOversightInput);
-        break;
-      // Sentinel Test tools (ADR-004 Oversight Pack)
-      case 'sentinel_createTestSpec':
-        result = await createTestSpec(args as unknown as CreateTestSpecInput);
-        break;
-      case 'sentinel_listTestSpecs':
-        result = await listTestSpecs(args as unknown as ListTestSpecsInput);
-        break;
-      case 'sentinel_compileTests':
-        result = await compileTests(args as unknown as CompileTestsInput);
-        break;
-      case 'sentinel_auditPolicies':
-        result = await auditPolicies(args as unknown as AuditPoliciesInput);
-        break;
-      default: {
-        // Fallback to modular tools (deck, studio, etc.)
-        const modularTool = httpToolMap.get(tool);
-        if (modularTool) {
-          const modularResult = await modularTool.handler(args);
-          // Parse the JSON from the text result
-          const text = modularResult.content[0]?.text;
-          if (text) {
-            try {
-              result = JSON.parse(text);
-            } catch {
-              result = { message: text };
-            }
-          } else {
-            result = { success: true };
-          }
-          break;
-        }
-        return wrapError(`Unknown tool: ${tool}`, 'UNKNOWN_TOOL');
+    const toolResult = await toolSpec.handler(args);
+    const text = toolResult.content[0]?.text;
+
+    if (toolResult.isError) {
+      return wrapError(text || 'Tool execution failed', 'TOOL_ERROR');
+    }
+
+    // Parse JSON result or wrap as message
+    let result: Record<string, unknown>;
+    if (text) {
+      try {
+        result = JSON.parse(text);
+      } catch {
+        result = { message: text };
       }
+    } else {
+      result = { success: true };
     }
 
-    // Check for Dojo error response
-    if (isDojoError(result)) {
-      return wrapError(result.error, `EXIT_${result.exitCode}`);
-    }
-    // Check for Bench error response
-    if (isDojoBenchError(result)) {
-      return wrapError(result.error, `EXIT_${result.exitCode}`);
-    }
-    // Check for Decibel Bench error response
-    if (isDecibelBenchError(result)) {
-      return wrapError(result.error, `EXIT_${result.exitCode}`);
-    }
-    // Check for Bench Compare error response
-    if (isBenchCompareError(result)) {
-      return wrapError(result.error, `EXIT_${result.exitCode}`);
-    }
-    // Check for Context error response
-    if (isContextError(result)) {
-      return wrapError(result.error, 'CONTEXT_ERROR');
-    }
-    // Check for Policy error response
-    if (isPolicyError(result)) {
-      return wrapError(result.message, result.error);
-    }
-    // Check for TestSpec error response
-    if (isTestSpecError(result)) {
-      return wrapError(result.message, result.error);
-    }
-
-    return wrapSuccess(result as Record<string, unknown>);
+    return wrapSuccess(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    // Check for specific error types
     if (message.includes('Rate limit')) {
       return wrapError(message, 'RATE_LIMITED');
     }
@@ -510,45 +311,13 @@ async function executeDojoTool(
 }
 
 /**
- * Get list of available tools
+ * Get list of available tools — single source of truth from modular registry
  */
 function getAvailableTools(): { name: string; description: string }[] {
-  return [
-    { name: 'dojo_add_wish', description: 'Log a capability wish with optional context' },
-    { name: 'dojo_create_proposal', description: 'Create a proposal (can link to wish_id)' },
-    { name: 'dojo_scaffold_experiment', description: 'Create experiment from proposal' },
-    { name: 'dojo_run_experiment', description: 'Run experiment in sandbox mode' },
-    { name: 'dojo_get_results', description: 'Get experiment results' },
-    { name: 'dojo_list', description: 'List proposals, experiments, wishes' },
-    { name: 'dojo_list_wishes', description: 'List wishes' },
-    { name: 'dojo_can_graduate', description: 'Check graduation eligibility' },
-    { name: 'dojo_read_artifact', description: 'Read artifact from experiment results' },
-    { name: 'dojo_bench', description: 'Run benchmark on a Dojo experiment' },
-    // Context Pack tools (ADR-002)
-    { name: 'decibel_context_refresh', description: 'Compile full context pack' },
-    { name: 'decibel_context_pin', description: 'Pin a fact to persistent memory' },
-    { name: 'decibel_context_unpin', description: 'Remove a pinned fact' },
-    { name: 'decibel_context_list', description: 'List pinned facts' },
-    { name: 'decibel_event_append', description: 'Append event to journal' },
-    { name: 'decibel_event_search', description: 'Search events' },
-    { name: 'decibel_artifact_list', description: 'List artifacts for a run' },
-    { name: 'decibel_artifact_read', description: 'Read artifact by run_id and name' },
-    // Architect Policy tools (ADR-004 Oversight Pack)
-    { name: 'architect_createPolicy', description: 'Create a policy atom' },
-    { name: 'architect_listPolicies', description: 'List policies (filter by severity/tags)' },
-    { name: 'architect_getPolicy', description: 'Get a specific policy by ID' },
-    { name: 'architect_compileOversight', description: 'Compile policies into documentation' },
-    // Sentinel Test tools (ADR-004 Oversight Pack)
-    { name: 'sentinel_createTestSpec', description: 'Create a test specification' },
-    { name: 'sentinel_listTestSpecs', description: 'List test specifications' },
-    { name: 'sentinel_compileTests', description: 'Compile test manifest' },
-    { name: 'sentinel_auditPolicies', description: 'Audit policy compliance' },
-    // Include modular tools (deck, studio, etc.)
-    ...httpTools.map(t => ({
-      name: t.definition.name,
-      description: t.definition.description,
-    })),
-  ];
+  return httpTools.map(t => ({
+    name: t.definition.name,
+    description: t.definition.description,
+  }));
 }
 
 /**
@@ -797,7 +566,7 @@ export async function startHttpServer(
         }
 
         log(`HTTP: /call tool=${tool}`);
-        const result = await executeDojoTool(tool, args);
+        const result = await executeTool(tool, args);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -830,36 +599,8 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log(`HTTP: /api/tools/${toolName}`);
 
-        // Check if tool exists in modular tools
-        const tool = httpToolMap.get(toolName);
-        if (!tool) {
-          // Try executeDojoTool for non-modular tools
-          const result = await executeDojoTool(toolName, body);
-          sendJson(res, result.status === 'error' ? 400 : 200, result);
-          return;
-        }
-
-        // Execute the modular tool
-        const toolResult = await tool.handler(body);
-        const text = toolResult.content[0]?.text;
-
-        // Parse JSON result or wrap as message
-        let result: Record<string, unknown>;
-        if (text) {
-          try {
-            result = JSON.parse(text);
-          } catch {
-            result = { message: text };
-          }
-        } else {
-          result = { success: true };
-        }
-
-        if (toolResult.isError) {
-          sendJson(res, 400, wrapError(text || 'Tool execution failed', 'TOOL_ERROR'));
-        } else {
-          sendJson(res, 200, wrapSuccess(result));
-        }
+        const result = await executeTool(toolName, body);
+        sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'EXECUTION_ERROR'));
@@ -876,7 +617,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /dojo/wish');
-        const result = await executeDojoTool('dojo_add_wish', body);
+        const result = await executeTool('dojo_add_wish', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -890,7 +631,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /dojo/propose');
-        const result = await executeDojoTool('dojo_create_proposal', body);
+        const result = await executeTool('dojo_create_proposal', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -904,7 +645,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /dojo/scaffold');
-        const result = await executeDojoTool('dojo_scaffold_experiment', body);
+        const result = await executeTool('dojo_scaffold_experiment', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -918,7 +659,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /dojo/run');
-        const result = await executeDojoTool('dojo_run_experiment', body);
+        const result = await executeTool('dojo_run_experiment', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -932,7 +673,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /dojo/results');
-        const result = await executeDojoTool('dojo_get_results', body);
+        const result = await executeTool('dojo_read_results', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -953,7 +694,7 @@ export async function startHttpServer(
           }
         }
         log('HTTP: /dojo/list');
-        const result = await executeDojoTool('dojo_list', body);
+        const result = await executeTool('dojo_list', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -973,7 +714,7 @@ export async function startHttpServer(
           }
         }
         log('HTTP: /dojo/wishes');
-        const result = await executeDojoTool('dojo_list_wishes', body);
+        const result = await executeTool('dojo_list_wishes', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -987,7 +728,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /dojo/can-graduate');
-        const result = await executeDojoTool('dojo_can_graduate', body);
+        const result = await executeTool('dojo_can_graduate', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1001,7 +742,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /dojo/artifact');
-        const result = await executeDojoTool('dojo_read_artifact', body);
+        const result = await executeTool('dojo_read_artifact', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1015,7 +756,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /dojo/bench');
-        const result = await executeDojoTool('dojo_bench', body);
+        const result = await executeTool('dojo_bench', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1033,7 +774,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /bench/run');
-        const result = await executeDojoTool('decibel_bench', body);
+        const result = await executeTool('decibel_bench', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1047,7 +788,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /bench/compare');
-        const result = await executeDojoTool('decibel_bench_compare', body);
+        const result = await executeTool('decibel_bench_compare', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1065,7 +806,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /context/refresh');
-        const result = await executeDojoTool('decibel_context_refresh', body);
+        const result = await executeTool('decibel_context_refresh', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1079,7 +820,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /context/pin');
-        const result = await executeDojoTool('decibel_context_pin', body);
+        const result = await executeTool('decibel_context_pin', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1093,7 +834,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /context/unpin');
-        const result = await executeDojoTool('decibel_context_unpin', body);
+        const result = await executeTool('decibel_context_unpin', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1113,7 +854,7 @@ export async function startHttpServer(
           }
         }
         log('HTTP: /context/list');
-        const result = await executeDojoTool('decibel_context_list', body);
+        const result = await executeTool('decibel_context_list', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1127,7 +868,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /event/append');
-        const result = await executeDojoTool('decibel_event_append', body);
+        const result = await executeTool('decibel_event_append', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1155,7 +896,7 @@ export async function startHttpServer(
           }
         }
         log('HTTP: /event/search');
-        const result = await executeDojoTool('decibel_event_search', body);
+        const result = await executeTool('decibel_event_search', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1169,7 +910,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /artifact/list');
-        const result = await executeDojoTool('decibel_artifact_list', body);
+        const result = await executeTool('decibel_artifact_list', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1183,7 +924,7 @@ export async function startHttpServer(
       try {
         const body = await parseBody(req);
         log('HTTP: /artifact/read');
-        const result = await executeDojoTool('decibel_artifact_read', body);
+        const result = await executeTool('decibel_artifact_read', body);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
