@@ -20,6 +20,12 @@ import {
   CoordStatusInput,
   coordLog,
   CoordLogInput,
+  coordSend,
+  CoordSendInput,
+  coordInbox,
+  CoordInboxInput,
+  coordAck,
+  CoordAckInput,
   isCoordError,
 } from './coordinator.js';
 
@@ -316,6 +322,120 @@ export const coordLogTool: ToolSpec = {
 };
 
 // ============================================================================
+// coord_send (4a: agent messaging)
+// ============================================================================
+
+export const coordSendTool: ToolSpec = {
+  definition: {
+    name: 'coord_send',
+    description: 'Send a message to another agent\'s persistent inbox. Messages persist across restarts. Use reply_to for request-reply patterns.',
+    annotations: {
+      title: 'Send Message',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Target agent ID' },
+        from: { type: 'string', description: 'Sender agent ID' },
+        intent: { type: 'string', description: 'Message intent (e.g., "delegate_task", "request_review", "notify")' },
+        payload: { type: 'object', description: 'Message payload (action-specific data)', additionalProperties: true },
+        reply_to: { type: 'string', description: 'Message ID this is replying to (for request-reply)' },
+        ttl_ms: { type: 'number', description: 'Time-to-live in ms (default: 24 hours)' },
+        project_id: { type: 'string', description: 'Optional project identifier' },
+      },
+      required: ['to', 'from', 'intent', 'payload'],
+    },
+  },
+  handler: withRunTracking(
+    async (args) => {
+      const input = args as CoordSendInput;
+      requireFields(input, 'to', 'from', 'intent', 'payload');
+      const result = await coordSend(input);
+      if (isCoordError(result)) return toolError(result.error, result.message);
+      return toolSuccess(result);
+    },
+    { toolName: 'coord_send' }
+  ),
+};
+
+// ============================================================================
+// coord_inbox (4a: agent messaging)
+// ============================================================================
+
+export const coordInboxTool: ToolSpec = {
+  definition: {
+    name: 'coord_inbox',
+    description: 'Check an agent\'s message inbox. Returns pending messages by default. Filter by status to see acked or completed messages.',
+    annotations: {
+      title: 'Check Inbox',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agent_id: { type: 'string', description: 'Agent whose inbox to check' },
+        status: { type: 'string', enum: ['pending', 'acked', 'completed'], description: 'Filter by message status' },
+        limit: { type: 'number', description: 'Max messages to return (default: 20)' },
+        project_id: { type: 'string', description: 'Optional project identifier' },
+      },
+      required: ['agent_id'],
+    },
+  },
+  handler: withRunTracking(
+    async (args) => {
+      const input = args as CoordInboxInput;
+      requireFields(input, 'agent_id');
+      const result = await coordInbox(input);
+      if (isCoordError(result)) return toolError(result.error, result.message);
+      return toolSuccess(result);
+    },
+    { toolName: 'coord_inbox' }
+  ),
+};
+
+// ============================================================================
+// coord_ack (4a: agent messaging)
+// ============================================================================
+
+export const coordAckTool: ToolSpec = {
+  definition: {
+    name: 'coord_ack',
+    description: 'Acknowledge a message and optionally post a result. Status goes pending→acked (no result) or pending→completed (with result). Can also complete a previously acked message.',
+    annotations: {
+      title: 'Acknowledge Message',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'string', description: 'ID of the message to acknowledge' },
+        agent_id: { type: 'string', description: 'Agent acknowledging the message' },
+        result: { type: 'object', description: 'Optional result to attach (marks message as completed)', additionalProperties: true },
+        project_id: { type: 'string', description: 'Optional project identifier' },
+      },
+      required: ['message_id', 'agent_id'],
+    },
+  },
+  handler: withRunTracking(
+    async (args) => {
+      const input = args as CoordAckInput;
+      requireFields(input, 'message_id', 'agent_id');
+      const result = await coordAck(input);
+      if (isCoordError(result)) return toolError(result.error, result.message);
+      return toolSuccess(result);
+    },
+    { toolName: 'coord_ack' }
+  ),
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -326,4 +446,7 @@ export const coordinatorTools: ToolSpec[] = [
   coordUnlockTool,
   coordStatusTool,
   coordLogTool,
+  coordSendTool,
+  coordInboxTool,
+  coordAckTool,
 ];

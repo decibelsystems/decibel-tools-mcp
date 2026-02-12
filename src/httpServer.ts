@@ -513,6 +513,53 @@ export async function startHttpServer(
       return;
     }
 
+    // GET /events — query dispatch event log (dispatch.jsonl)
+    if (path === '/events' && req.method === 'GET') {
+      const dispatchLogPath = join(
+        process.env.HOME || '~', '.decibel', 'logs', 'dispatch.jsonl'
+      );
+
+      try {
+        const content = readFileSync(dispatchLogPath, 'utf-8');
+        const lines = content.trim().split('\n').filter(Boolean);
+
+        // Parse query params from URL
+        const since = url.searchParams.get('since');
+        const agentFilter = url.searchParams.get('agent_id');
+        const limitParam = url.searchParams.get('limit');
+        const limit = limitParam ? parseInt(limitParam, 10) : 100;
+
+        let events = lines.map(line => {
+          try { return JSON.parse(line); }
+          catch { return null; }
+        }).filter(Boolean);
+
+        // Filter by timestamp
+        if (since) {
+          events = events.filter((e: Record<string, unknown>) =>
+            (e.timestamp as string) >= since
+          );
+        }
+
+        // Filter by agent
+        if (agentFilter) {
+          events = events.filter((e: Record<string, unknown>) =>
+            e.agentId === agentFilter
+          );
+        }
+
+        // Limit + return most recent
+        const recent = events.slice(-limit);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ events: recent, total: events.length }));
+      } catch {
+        // No dispatch log yet — empty response
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ events: [], total: 0 }));
+      }
+      return;
+    }
+
     // Landing page at /docs (always HTML)
     if (path === '/docs' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -625,6 +672,42 @@ export async function startHttpServer(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+      }
+      return;
+    }
+
+    // POST /batch - Dispatch multiple independent calls in parallel
+    if (path === '/batch' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        const calls = body.calls as Array<{ facade: string; action: string; params?: Record<string, unknown> }>;
+
+        if (!Array.isArray(calls) || calls.length === 0) {
+          sendJson(res, 400, wrapError('Missing or empty "calls" array', 'INVALID_BATCH'));
+          return;
+        }
+
+        if (calls.length > 20) {
+          sendJson(res, 400, wrapError('Batch limited to 20 calls', 'BATCH_TOO_LARGE'));
+          return;
+        }
+
+        // Build context from headers + optional body context
+        const bodyContext = (body.context || {}) as Record<string, string>;
+        const context: DispatchContext = {
+          agentId: (req.headers['x-agent-id'] as string) || bodyContext.agentId,
+          runId: (req.headers['x-run-id'] as string) || bodyContext.runId,
+          parentCallId: (req.headers['x-parent-call-id'] as string) || bodyContext.parentCallId,
+          scope: (req.headers['x-scope'] as string) || bodyContext.scope,
+          allowedFacades: bodyContext.allowedFacades as unknown as string[] | undefined,
+        };
+
+        log(`HTTP: /batch — ${calls.length} calls (agent=${context.agentId || 'anonymous'})`);
+        const results = await kernel.batch(calls, context);
+        sendJson(res, 200, { status: 'executed', results });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'BATCH_ERROR'));
       }
       return;
     }
@@ -1650,6 +1733,8 @@ export async function startHttpServer(
 ║    GET  /health           Health check                       ║
 ║    GET  /tools            List tools                         ║
 ║    POST /call             Execute tool (generic)             ║
+║    POST /batch            Batch dispatch (parallel)          ║
+║    GET  /events           Dispatch event log (query)         ║
 ║    POST /dojo/wish        Add wish                           ║
 ║    POST /dojo/propose     Create proposal                    ║
 ║    POST /dojo/scaffold    Scaffold experiment                ║

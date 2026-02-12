@@ -171,7 +171,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'vector',
-    description: 'Agent run tracking, drift detection, and prompt scoring. Actions: create_run, read_run, list_runs, log_event, complete_run, checkpoint, context_pack, assumptions, score_prompt',
+    description: 'Agent run tracking, drift detection, and prompt scoring. Actions: create_run, read_run, list_runs, log_event, complete_run, checkpoint, context_pack, assumptions, score_prompt, trace',
     compactDescription: 'Track agent runs, events, and drift',
     microEligible: false,
     tier: 'core',
@@ -185,6 +185,7 @@ export const coreFacades: FacadeSpec[] = [
       context_pack: 'vector_agent_context_pack',
       assumptions: 'vector_agent_assumptions',
       score_prompt: 'vector_score_prompt',
+      trace: 'vector_trace',
     },
   },
 
@@ -256,8 +257,8 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'coordinator',
-    description: 'Multi-agent coordination: locking, heartbeat, logging. Actions: register, lock, unlock, status, heartbeat, log',
-    compactDescription: 'Agent coordination and locking',
+    description: 'Multi-agent coordination: locking, heartbeat, logging, messaging. Actions: register, lock, unlock, status, heartbeat, log, send, inbox, ack',
+    compactDescription: 'Agent coordination, locking, and messaging',
     microEligible: true,
     tier: 'core',
     actions: {
@@ -267,6 +268,9 @@ export const coreFacades: FacadeSpec[] = [
       status: 'coord_status',
       heartbeat: 'coord_heartbeat',
       log: 'coord_log',
+      send: 'coord_send',
+      inbox: 'coord_inbox',
+      ack: 'coord_ack',
     },
   },
 

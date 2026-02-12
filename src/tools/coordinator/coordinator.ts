@@ -27,6 +27,7 @@ import { resolveProjectPaths, ResolvedProjectPaths } from '../../projectRegistry
 const LOCK_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 const STALE_THRESHOLD_MS = 120 * 1000; // 2 minutes (2 missed heartbeats)
 const DEFAULT_EVENT_LIMIT = 50;
+const MESSAGE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // ============================================================================
 // Types
@@ -131,6 +132,68 @@ export interface CoordLogInput {
 export interface CoordLogOutput {
   events: CoordEvent[];
   total_count: number;
+}
+
+// Message types (4a: persistent agent inbox)
+export type MessageStatus = 'pending' | 'acked' | 'completed';
+
+export interface CoordMessage {
+  id: string;
+  from: string;
+  to: string;
+  intent: string;
+  payload: Record<string, unknown>;
+  reply_to?: string;
+  status: MessageStatus;
+  created_at: string;
+  acked_at?: string;
+  completed_at?: string;
+  result?: Record<string, unknown>;
+  expires_at: string;
+}
+
+export interface CoordSendInput {
+  to: string;
+  from: string;
+  intent: string;
+  payload: Record<string, unknown>;
+  reply_to?: string;
+  ttl_ms?: number;
+  project_id?: string;
+}
+
+export interface CoordSendOutput {
+  message_id: string;
+  to: string;
+  from: string;
+  intent: string;
+  expires_at: string;
+}
+
+export interface CoordInboxInput {
+  agent_id: string;
+  status?: MessageStatus;
+  limit?: number;
+  project_id?: string;
+}
+
+export interface CoordInboxOutput {
+  messages: CoordMessage[];
+  total: number;
+}
+
+export interface CoordAckInput {
+  message_id: string;
+  agent_id: string;
+  result?: Record<string, unknown>;
+  project_id?: string;
+}
+
+export interface CoordAckOutput {
+  message_id: string;
+  status: MessageStatus;
+  from: string;
+  intent: string;
 }
 
 // Error type
@@ -564,6 +627,185 @@ export async function coordLog(
   return {
     events,
     total_count: totalCount,
+  };
+}
+
+// ============================================================================
+// Messaging (4a: persistent agent inbox)
+// ============================================================================
+
+function getMessagesDir(coordDir: string, agentId: string): string {
+  return path.join(coordDir, 'messages', agentId);
+}
+
+function makeMessageId(from: string): string {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  return `MSG-${ts}-${from}`;
+}
+
+async function readMessage(filePath: string): Promise<CoordMessage | null> {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    return YAML.parse(content) as CoordMessage;
+  } catch {
+    return null;
+  }
+}
+
+async function writeMessage(filePath: string, msg: CoordMessage): Promise<void> {
+  const content = YAML.stringify(msg);
+  await fs.writeFile(filePath, content, 'utf-8');
+}
+
+async function listMessageFiles(dir: string): Promise<string[]> {
+  try {
+    const files = await fs.readdir(dir);
+    return files.filter(f => f.startsWith('MSG-') && f.endsWith('.yaml')).sort().reverse();
+  } catch {
+    return [];
+  }
+}
+
+export async function coordSend(
+  input: CoordSendInput
+): Promise<CoordSendOutput | CoordError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.project_id);
+  } catch {
+    return makeError('PROJECT_NOT_FOUND', 'Could not resolve project.');
+  }
+
+  const coordDir = getCoordDir(resolved);
+  const inboxDir = getMessagesDir(coordDir, input.to);
+  ensureDir(inboxDir);
+
+  const now = new Date();
+  const ttl = input.ttl_ms || MESSAGE_TTL_MS;
+  const expiresAt = new Date(now.getTime() + ttl).toISOString();
+  const messageId = makeMessageId(input.from);
+
+  const msg: CoordMessage = {
+    id: messageId,
+    from: input.from,
+    to: input.to,
+    intent: input.intent,
+    payload: input.payload,
+    reply_to: input.reply_to,
+    status: 'pending',
+    created_at: now.toISOString(),
+    expires_at: expiresAt,
+  };
+
+  const filePath = path.join(inboxDir, `${messageId}.yaml`);
+  await writeMessage(filePath, msg);
+
+  await appendEvent(coordDir, {
+    ts: now.toISOString(),
+    agent: input.from,
+    action: 'message_sent',
+    details: { to: input.to, intent: input.intent, message_id: messageId },
+  });
+
+  log(`Coordinator: Message ${messageId} from ${input.from} → ${input.to} (${input.intent})`);
+
+  return {
+    message_id: messageId,
+    to: input.to,
+    from: input.from,
+    intent: input.intent,
+    expires_at: expiresAt,
+  };
+}
+
+export async function coordInbox(
+  input: CoordInboxInput
+): Promise<CoordInboxOutput | CoordError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.project_id);
+  } catch {
+    return makeError('PROJECT_NOT_FOUND', 'Could not resolve project.');
+  }
+
+  const coordDir = getCoordDir(resolved);
+  const inboxDir = getMessagesDir(coordDir, input.agent_id);
+  const limit = input.limit || 20;
+
+  const files = await listMessageFiles(inboxDir);
+  const messages: CoordMessage[] = [];
+
+  for (const file of files) {
+    if (messages.length >= limit) break;
+
+    const msg = await readMessage(path.join(inboxDir, file));
+    if (!msg) continue;
+
+    // Skip expired messages
+    if (new Date(msg.expires_at).getTime() < Date.now()) continue;
+
+    // Filter by status if requested
+    if (input.status && msg.status !== input.status) continue;
+
+    messages.push(msg);
+  }
+
+  return { messages, total: messages.length };
+}
+
+export async function coordAck(
+  input: CoordAckInput
+): Promise<CoordAckOutput | CoordError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.project_id);
+  } catch {
+    return makeError('PROJECT_NOT_FOUND', 'Could not resolve project.');
+  }
+
+  const coordDir = getCoordDir(resolved);
+  const inboxDir = getMessagesDir(coordDir, input.agent_id);
+
+  // Find the message file
+  const filePath = path.join(inboxDir, `${input.message_id}.yaml`);
+  const msg = await readMessage(filePath);
+
+  if (!msg) {
+    return makeError('MESSAGE_NOT_FOUND', `Message ${input.message_id} not found in ${input.agent_id}'s inbox.`);
+  }
+
+  const now = new Date().toISOString();
+
+  // Transition: pending → acked, or acked → completed (if result provided)
+  if (msg.status === 'pending') {
+    msg.status = input.result ? 'completed' : 'acked';
+    msg.acked_at = now;
+    if (input.result) {
+      msg.completed_at = now;
+      msg.result = input.result;
+    }
+  } else if (msg.status === 'acked' && input.result) {
+    msg.status = 'completed';
+    msg.completed_at = now;
+    msg.result = input.result;
+  }
+
+  await writeMessage(filePath, msg);
+
+  await appendEvent(coordDir, {
+    ts: now,
+    agent: input.agent_id,
+    action: `message_${msg.status}`,
+    details: { message_id: input.message_id, from: msg.from, intent: msg.intent },
+  });
+
+  log(`Coordinator: Message ${input.message_id} ${msg.status} by ${input.agent_id}`);
+
+  return {
+    message_id: input.message_id,
+    status: msg.status,
+    from: msg.from,
+    intent: msg.intent,
   };
 }
 

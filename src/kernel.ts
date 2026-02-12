@@ -6,9 +6,10 @@
 //
 // Phase 1c: Extract from server.ts and httpServer.ts
 // Phase 1d: Facade layer — ~22 public tools dispatching to ~170 internal handlers
-// Phase 4:  Will add dispatch hooks, batch, and agent messaging
+// Phase 4:  Dispatch hooks, batch, facade filtering, agent messaging
 // ============================================================================
 
+import { EventEmitter } from 'events';
 import { getAllTools } from './tools/index.js';
 import { trackToolUse } from './tools/shared/index.js';
 import { log } from './config.js';
@@ -37,6 +38,8 @@ export interface DispatchContext {
   parentCallId?: string;
   /** Project ID or "portfolio" */
   scope?: string;
+  /** Restrict dispatch to these facades only (undefined = all allowed) */
+  allowedFacades?: string[];
 }
 
 // Tier gating (same logic as tools/index.ts)
@@ -46,6 +49,39 @@ const APPS_ENABLED = process.env.DECIBEL_APPS === '1' || process.env.NODE_ENV !=
 // ============================================================================
 // Tool Kernel
 // ============================================================================
+
+// ============================================================================
+// Dispatch Events — observability seam for agent awareness
+// ============================================================================
+
+export interface DispatchEvent {
+  type: 'dispatch' | 'result' | 'error';
+  facade?: string;
+  action?: string;
+  tool?: string;
+  agentId: string;
+  runId?: string;
+  timestamp: string;
+  duration_ms?: number;
+  success?: boolean;
+  error?: string;
+}
+
+/** Single call in a batch request */
+export interface BatchCall {
+  facade: string;
+  action: string;
+  params?: Record<string, unknown>;
+}
+
+/** Result of a single call within a batch */
+export interface BatchResult {
+  facade: string;
+  action: string;
+  result?: ToolResult;
+  error?: string;
+  duration_ms: number;
+}
 
 export interface ToolKernel {
   /** All internal tool definitions (full registry, ~170 tools) */
@@ -65,10 +101,19 @@ export interface ToolKernel {
   dispatch(name: string, args: Record<string, unknown>, context?: DispatchContext): Promise<ToolResult>;
 
   /**
+   * Dispatch multiple independent calls in parallel. Returns results in same order.
+   * Errors are per-call — one failure doesn't abort others.
+   */
+  batch(calls: BatchCall[], context?: DispatchContext): Promise<BatchResult[]>;
+
+  /**
    * Get MCP tool definitions for the tools/list response.
    * Returns facade definitions filtered by detail tier.
    */
   getMcpToolDefinitions(tier?: DetailTier): McpToolDefinition[];
+
+  /** Subscribe to dispatch events (dispatch, result, error) */
+  on(event: string, listener: (evt: DispatchEvent) => void): void;
 
   /** Total internal tool count */
   toolCount: number;
@@ -102,6 +147,9 @@ export async function createKernel(): Promise<ToolKernel> {
 
   log(`Kernel: loaded ${tools.length} internal tools, ${facades.length} facades`);
 
+  // Dispatch event emitter — subscribers get notified of every dispatch
+  const emitter = new EventEmitter();
+
   // Pre-build MCP definitions for each tier (cached)
   const mcpDefCache = new Map<DetailTier, McpToolDefinition[]>();
 
@@ -121,6 +169,23 @@ export async function createKernel(): Promise<ToolKernel> {
   ): Promise<ToolResult> {
     const agentId = context?.agentId || 'anonymous';
     const runId = context?.runId;
+    const allowed = context?.allowedFacades;
+
+    // Facade filtering: reject if caller is scoped and facade not in allowlist
+    if (allowed) {
+      // For facade calls, check the facade name directly
+      // For direct calls, extract the facade prefix (e.g. "sentinel_create_issue" → "sentinel")
+      const facadeKey = facadeMap.has(name) ? name : name.split('_')[0];
+      if (!allowed.includes(facadeKey)) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({
+            error: `Facade "${facadeKey}" not in allowed scope`,
+            allowed_facades: allowed,
+          }) }],
+          isError: true,
+        };
+      }
+    }
 
     // Check if this is a facade call
     const facade = facadeMap.get(name);
@@ -161,7 +226,30 @@ export async function createKernel(): Promise<ToolKernel> {
 
       log(`Kernel: facade ${name}.${action} → ${internalName} (agent=${agentId}${runId ? ` run=${runId}` : ''})`);
       trackToolUse(internalName);
-      return tool.handler(params);
+
+      const startTime = Date.now();
+      emitter.emit('dispatch', {
+        type: 'dispatch', facade: name, action, tool: internalName,
+        agentId, runId, timestamp: new Date().toISOString(),
+      } satisfies DispatchEvent);
+
+      try {
+        const result = await tool.handler(params);
+        emitter.emit('result', {
+          type: 'result', facade: name, action, tool: internalName,
+          agentId, runId, timestamp: new Date().toISOString(),
+          duration_ms: Date.now() - startTime, success: !result.isError,
+        } satisfies DispatchEvent);
+        return result;
+      } catch (err) {
+        emitter.emit('error', {
+          type: 'error', facade: name, action, tool: internalName,
+          agentId, runId, timestamp: new Date().toISOString(),
+          duration_ms: Date.now() - startTime,
+          error: err instanceof Error ? err.message : String(err),
+        } satisfies DispatchEvent);
+        throw err;
+      }
     }
 
     // Direct tool dispatch (backward compatibility)
@@ -175,7 +263,60 @@ export async function createKernel(): Promise<ToolKernel> {
 
     log(`Kernel: dispatch ${name} (agent=${agentId}${runId ? ` run=${runId}` : ''})`);
     trackToolUse(name);
-    return tool.handler(args);
+
+    const startTime = Date.now();
+    emitter.emit('dispatch', {
+      type: 'dispatch', tool: name,
+      agentId, runId, timestamp: new Date().toISOString(),
+    } satisfies DispatchEvent);
+
+    try {
+      const result = await tool.handler(args);
+      emitter.emit('result', {
+        type: 'result', tool: name,
+        agentId, runId, timestamp: new Date().toISOString(),
+        duration_ms: Date.now() - startTime, success: !result.isError,
+      } satisfies DispatchEvent);
+      return result;
+    } catch (err) {
+      emitter.emit('error', {
+        type: 'error', tool: name,
+        agentId, runId, timestamp: new Date().toISOString(),
+        duration_ms: Date.now() - startTime,
+        error: err instanceof Error ? err.message : String(err),
+      } satisfies DispatchEvent);
+      throw err;
+    }
+  }
+
+  async function batch(calls: BatchCall[], context?: DispatchContext): Promise<BatchResult[]> {
+    log(`Kernel: batch dispatch — ${calls.length} calls (agent=${context?.agentId || 'anonymous'})`);
+
+    const promises = calls.map(async (call): Promise<BatchResult> => {
+      const start = Date.now();
+      try {
+        const result = await dispatch(
+          call.facade,
+          { action: call.action, params: call.params || {} },
+          context
+        );
+        return {
+          facade: call.facade,
+          action: call.action,
+          result,
+          duration_ms: Date.now() - start,
+        };
+      } catch (err) {
+        return {
+          facade: call.facade,
+          action: call.action,
+          error: err instanceof Error ? err.message : String(err),
+          duration_ms: Date.now() - start,
+        };
+      }
+    });
+
+    return Promise.all(promises);
   }
 
   return {
@@ -184,6 +325,8 @@ export async function createKernel(): Promise<ToolKernel> {
     facades,
     facadeMap,
     dispatch,
+    batch,
+    on: (event: string, listener: (evt: DispatchEvent) => void) => emitter.on(event, listener),
     getMcpToolDefinitions,
     toolCount: tools.length,
     facadeCount: facades.length,

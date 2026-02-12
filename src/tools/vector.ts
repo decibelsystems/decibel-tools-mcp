@@ -35,7 +35,10 @@ export type EventType =
   | 'backtrack'
   | 'error'
   | 'user_correction'
-  | 'run_completed';
+  | 'run_completed'
+  | 'delegation_sent'
+  | 'delegation_received'
+  | 'delegation_completed';
 
 /** Base event structure */
 export interface BaseEvent {
@@ -61,6 +64,12 @@ export interface PromptIntent {
   risk_posture?: 'safe' | 'moderate' | 'aggressive';
 }
 
+/** Reference to a delegating or delegated agent run */
+export interface DelegationRef {
+  agent_id: string;
+  run_id: string;
+}
+
 /** Prompt specification stored with each run */
 export interface PromptSpec {
   run_id: string;
@@ -71,6 +80,10 @@ export interface PromptSpec {
     adrs?: string[];
     memento_packs?: string[];
   };
+  /** Who asked for this run (parent agent/run) */
+  delegated_by?: DelegationRef;
+  /** Sub-runs spawned from this run */
+  delegated_to?: DelegationRef[];
   created_at: string;
 }
 
@@ -121,6 +134,8 @@ export interface CreateRunInput {
   agent: AgentInfo;
   raw_prompt: string;
   intent?: PromptIntent;
+  /** If this run was delegated from another agent */
+  delegated_by?: DelegationRef;
 }
 
 export interface LogEventInput {
@@ -174,7 +189,8 @@ const HOOK_EVENT_LOOKBACK_MS = 5 * 60 * 1000; // 5 minutes
 const VALID_EVENT_TYPES: EventType[] = [
   'prompt_received', 'plan_proposed', 'assumption_made', 'clarifying_question',
   'command_ran', 'file_touched', 'test_result', 'backtrack', 'error',
-  'user_correction', 'run_completed'
+  'user_correction', 'run_completed',
+  'delegation_sent', 'delegation_received', 'delegation_completed',
 ];
 
 // Inference scoring constants
@@ -342,6 +358,7 @@ export async function createRun(input: CreateRunInput): Promise<{ run_id: string
     agent: input.agent,
     raw_prompt: input.raw_prompt,
     intent: input.intent,
+    delegated_by: input.delegated_by,
     created_at: new Date().toISOString(),
   };
 
@@ -366,6 +383,24 @@ export async function createRun(input: CreateRunInput): Promise<{ run_id: string
     path.join(runDir, 'events.jsonl'),
     JSON.stringify(initialEvent) + '\n'
   );
+
+  // Log delegation_received if this run was delegated
+  if (input.delegated_by) {
+    const delegationEvent: VectorEvent = {
+      ts: new Date().toISOString(),
+      run_id,
+      agent: input.agent,
+      type: 'delegation_received',
+      payload: {
+        source_agent: input.delegated_by.agent_id,
+        source_run_id: input.delegated_by.run_id,
+      },
+    };
+    await fs.appendFile(
+      path.join(runDir, 'events.jsonl'),
+      JSON.stringify(delegationEvent) + '\n'
+    );
+  }
 
   // Import recent hook events from global events.jsonl (Option D reconciliation)
   const hookEvents = await importHookEvents(projectName, input.agent, run_id);
@@ -620,6 +655,109 @@ export async function getRun(input: GetRunInput): Promise<{
   }
 
   return result;
+}
+
+// ============================================================================
+// Delegation Tracing
+// ============================================================================
+
+export interface VectorTraceInput {
+  projectId?: string;
+  project_id?: string;
+  run_id: string;
+  /** Max depth to walk (default: 10) */
+  depth?: number;
+}
+
+export interface TraceNode {
+  run_id: string;
+  agent: AgentInfo;
+  created_at: string;
+  completed: boolean;
+  success?: boolean;
+  parent?: DelegationRef;
+  children: TraceNode[];
+}
+
+/**
+ * Walk delegation chain from a run_id and return the full tree.
+ * Goes up to the root parent, then down through all children.
+ */
+export async function vectorTrace(input: VectorTraceInput): Promise<{ root: TraceNode; depth: number }> {
+  const projectId = input.projectId || input.project_id;
+  const runsDir = getRunsDir(projectId);
+  const maxDepth = input.depth || 10;
+
+  // Helper to read a run's prompt.json
+  async function readPrompt(runId: string): Promise<PromptSpec | null> {
+    const promptPath = path.join(runsDir, runId, 'prompt.json');
+    if (!await fileExists(promptPath)) return null;
+    const content = await fs.readFile(promptPath, 'utf-8');
+    return JSON.parse(content) as PromptSpec;
+  }
+
+  // Helper to check completion status
+  async function isCompleted(runId: string): Promise<{ completed: boolean; success?: boolean }> {
+    const eventsPath = path.join(runsDir, runId, 'events.jsonl');
+    if (!await fileExists(eventsPath)) return { completed: false };
+    const content = await fs.readFile(eventsPath, 'utf-8');
+    const lines = content.trim().split('\n').filter(Boolean);
+    if (lines.length === 0) return { completed: false };
+    const last = JSON.parse(lines[lines.length - 1]) as VectorEvent;
+    if (last.type === 'run_completed') {
+      return { completed: true, success: last.payload?.success };
+    }
+    return { completed: false };
+  }
+
+  // Walk up to find root
+  let rootRunId = input.run_id;
+  let rootPrompt = await readPrompt(rootRunId);
+  if (!rootPrompt) throw new Error(`Run not found: ${input.run_id}`);
+
+  let upSteps = 0;
+  while (rootPrompt.delegated_by && upSteps < maxDepth) {
+    const parentPrompt = await readPrompt(rootPrompt.delegated_by.run_id);
+    if (!parentPrompt) break; // parent run not found, stop here
+    rootRunId = rootPrompt.delegated_by.run_id;
+    rootPrompt = parentPrompt;
+    upSteps++;
+  }
+
+  // Build tree downward from root
+  async function buildNode(runId: string, currentDepth: number): Promise<TraceNode> {
+    const prompt = await readPrompt(runId);
+    const status = await isCompleted(runId);
+
+    const node: TraceNode = {
+      run_id: runId,
+      agent: prompt?.agent || { type: 'custom' },
+      created_at: prompt?.created_at || '',
+      completed: status.completed,
+      success: status.success,
+      parent: prompt?.delegated_by,
+      children: [],
+    };
+
+    if (currentDepth < maxDepth && prompt?.delegated_to) {
+      for (const child of prompt.delegated_to) {
+        const childNode = await buildNode(child.run_id, currentDepth + 1);
+        node.children.push(childNode);
+      }
+    }
+
+    return node;
+  }
+
+  const root = await buildNode(rootRunId, 0);
+
+  // Calculate actual depth
+  function treeDepth(node: TraceNode): number {
+    if (node.children.length === 0) return 0;
+    return 1 + Math.max(...node.children.map(treeDepth));
+  }
+
+  return { root, depth: treeDepth(root) };
 }
 
 // ============================================================================

@@ -20,6 +20,8 @@ import {
   GetRunInput,
   scorePrompt,
   ScorePromptInput,
+  vectorTrace,
+  VectorTraceInput,
   AgentType,
   EventType,
 } from '../vector.js';
@@ -39,7 +41,8 @@ const VALID_AGENT_TYPES: AgentType[] = ['claude-code', 'cursor', 'replit', 'chat
 const VALID_EVENT_TYPES: EventType[] = [
   'prompt_received', 'plan_proposed', 'assumption_made', 'clarifying_question',
   'command_ran', 'file_touched', 'test_result', 'backtrack', 'error',
-  'user_correction', 'run_completed'
+  'user_correction', 'run_completed',
+  'delegation_sent', 'delegation_received', 'delegation_completed',
 ];
 
 // ============================================================================
@@ -94,6 +97,15 @@ export const vectorCreateRunTool: ToolSpec = {
             acceptance: { type: 'array', items: { type: 'string' }, description: 'Success criteria' },
             risk_posture: { type: 'string', enum: ['safe', 'moderate', 'aggressive'] },
           },
+        },
+        delegated_by: {
+          type: 'object',
+          description: 'If this run was delegated from another agent. Enables cross-agent tracing.',
+          properties: {
+            agent_id: { type: 'string', description: 'The delegating agent ID' },
+            run_id: { type: 'string', description: 'The delegating run ID' },
+          },
+          required: ['agent_id', 'run_id'],
         },
       },
       required: ['agent', 'raw_prompt'],
@@ -579,6 +591,51 @@ export const vectorAgentAssumptionsTool: ToolSpec = {
 };
 
 // ============================================================================
+// Trace Delegation Chain Tool
+// ============================================================================
+
+export const vectorTraceTool: ToolSpec = {
+  definition: {
+    name: 'vector_trace',
+    description: 'Walk the delegation chain for a run. Finds the root parent and all child delegations, returning the full tree. Use this to understand "Agent A asked Agent B which asked Agent C" traceability.',
+    annotations: {
+      title: 'Trace Delegation Chain',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        run_id: {
+          type: 'string',
+          description: 'The run ID to trace from (walks up to root, then down through children)',
+        },
+        depth: {
+          type: 'integer',
+          description: 'Maximum depth to walk (default: 10)',
+        },
+      },
+      required: ['run_id'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as VectorTraceInput;
+      requireFields(input, 'run_id');
+
+      const result = await vectorTrace(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -592,4 +649,5 @@ export const vectorTools: ToolSpec[] = [
   vectorAgentContextPackTool,
   vectorAgentCheckpointTool,
   vectorAgentAssumptionsTool,
+  vectorTraceTool,
 ];

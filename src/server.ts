@@ -13,8 +13,11 @@
 //   node dist/server.js --daemon status
 // ============================================================================
 
+import fs from 'fs';
+import path from 'path';
 import { getConfig, log } from './config.js';
 import { createKernel } from './kernel.js';
+import type { DispatchEvent } from './kernel.js';
 import { StdioAdapter, HttpAdapter } from './transports/index.js';
 import type { TransportAdapter, TransportConfig } from './transports/index.js';
 import { parseHttpArgs } from './httpServer.js';
@@ -73,6 +76,22 @@ async function main() {
   // Create kernel
   const kernel = await createKernel();
   const adapters: TransportAdapter[] = [];
+
+  // In daemon mode, log all dispatches to dispatch.jsonl
+  if (daemonMode) {
+    const logsDir = path.join(process.env.HOME || '~', '.decibel', 'logs');
+    fs.mkdirSync(logsDir, { recursive: true });
+    const dispatchLogPath = path.join(logsDir, 'dispatch.jsonl');
+
+    const writeEvent = (evt: DispatchEvent) => {
+      fs.appendFileSync(dispatchLogPath, JSON.stringify(evt) + '\n');
+    };
+
+    kernel.on('dispatch', writeEvent);
+    kernel.on('result', writeEvent);
+    kernel.on('error', writeEvent);
+    log(`Daemon: dispatch log at ${dispatchLogPath}`);
+  }
 
   // Start transport(s)
   if (daemonMode) {
