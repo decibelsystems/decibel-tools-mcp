@@ -33,8 +33,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { log } from './config.js';
 import { isSupabaseConfigured } from './lib/supabase.js';
-import { getAllTools } from './tools/index.js';
-import type { ToolSpec } from './tools/types.js';
+import type { ToolKernel, DispatchContext } from './kernel.js';
 import { listProjects } from './projectRegistry.js';
 import {
   listEpics,
@@ -66,9 +65,8 @@ import {
   listTasks,
 } from './tools/studio/index.js';
 
-// Module-level tool registry — populated by startHttpServer() before requests arrive
-let httpTools: ToolSpec[] = [];
-let httpToolMap: Map<string, ToolSpec> = new Map();
+// Module-level kernel reference — set by startHttpServer()
+let kernel: ToolKernel;
 let landingPageHtml = '';
 
 // ============================================================================
@@ -259,21 +257,24 @@ async function parseBody(req: IncomingMessage): Promise<Record<string, unknown>>
 // ============================================================================
 
 /**
- * Execute any tool via the modular httpToolMap.
- * All tools (dojo, context, bench, sentinel, architect, etc.) go through
- * the same dispatch path — no more per-domain switch statements.
+ * Execute any tool via the kernel's dispatch.
+ * Extracts agent context from HTTP headers when present.
  */
 async function executeTool(
   tool: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  req?: IncomingMessage
 ): Promise<StatusEnvelope> {
   try {
-    const toolSpec = httpToolMap.get(tool);
-    if (!toolSpec) {
-      return wrapError(`Unknown tool: ${tool}. Use GET /tools to see available tools.`, 'UNKNOWN_TOOL');
-    }
+    // Extract agent context from HTTP headers
+    const context: DispatchContext | undefined = req ? {
+      agentId: req.headers['x-agent-id'] as string | undefined,
+      runId: req.headers['x-run-id'] as string | undefined,
+      parentCallId: req.headers['x-parent-call-id'] as string | undefined,
+      scope: req.headers['x-scope'] as string | undefined,
+    } : undefined;
 
-    const toolResult = await toolSpec.handler(args);
+    const toolResult = await kernel.dispatch(tool, args, context);
     const text = toolResult.content[0]?.text;
 
     if (toolResult.isError) {
@@ -311,10 +312,10 @@ async function executeTool(
 }
 
 /**
- * Get list of available tools — single source of truth from modular registry
+ * Get list of available tools — single source of truth from kernel
  */
 function getAvailableTools(): { name: string; description: string }[] {
-  return httpTools.map(t => ({
+  return kernel.tools.map(t => ({
     name: t.definition.name,
     description: t.definition.description,
   }));
@@ -341,7 +342,7 @@ interface OpenAIFunction {
  * This includes the full parameter schema for each tool
  */
 function getOpenAITools(): OpenAIFunction[] {
-  return httpTools.map(t => ({
+  return kernel.tools.map(t => ({
     type: 'function' as const,
     function: {
       name: t.definition.name,
@@ -373,6 +374,7 @@ export interface HttpServerOptions {
  */
 export async function startHttpServer(
   server: Server,
+  kernelInstance: ToolKernel,
   options: HttpServerOptions
 ): Promise<void> {
   const {
@@ -384,10 +386,9 @@ export async function startHttpServer(
     retryIntervalMs = 3000,     // 3s retry for SSE clients
   } = options;
 
-  // Load full tool set (including pro tools when enabled)
-  httpTools = await getAllTools();
-  httpToolMap = new Map(httpTools.map(t => [t.definition.name, t]));
-  log(`HTTP: Loaded ${httpTools.length} tools for HTTP server`);
+  // Set module-level kernel reference (shared with executeTool, getAvailableTools, etc.)
+  kernel = kernelInstance;
+  log(`HTTP: Using kernel with ${kernel.toolCount} tools`);
 
   // Build landing page from actual tool list
   landingPageHtml = buildLandingPageHtml(getAvailableTools());
