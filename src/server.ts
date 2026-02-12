@@ -3,15 +3,29 @@
 // ============================================================================
 // Decibel MCP Server — Entry Point
 // ============================================================================
-// Parses CLI args, creates the kernel, and starts the appropriate transport(s).
-// Phase 2: Transport adapters make this file a thin orchestrator.
+// Modes:
+//   node dist/server.js              → stdio (Claude Code, Cursor)
+//   node dist/server.js --http       → HTTP only (ChatGPT, Mother)
+//   node dist/server.js --daemon     → daemon mode (HTTP + PID + graceful shutdown)
+//   node dist/server.js --daemon --stdio  → daemon + stdio from one process
+//   node dist/server.js --daemon install  → install macOS launchd plist
+//   node dist/server.js --daemon uninstall
+//   node dist/server.js --daemon status
 // ============================================================================
 
 import { getConfig, log } from './config.js';
 import { createKernel } from './kernel.js';
 import { StdioAdapter, HttpAdapter } from './transports/index.js';
-import type { TransportConfig } from './transports/index.js';
+import type { TransportAdapter, TransportConfig } from './transports/index.js';
 import { parseHttpArgs } from './httpServer.js';
+import {
+  checkRunning,
+  writePid,
+  removePid,
+  installShutdownHandlers,
+  handleDaemonSubcommand,
+  getLogPath,
+} from './daemon.js';
 
 const config = getConfig();
 
@@ -23,23 +37,75 @@ if (process.env.DECIBEL_PRO === '1') log('Pro features: ENABLED');
 if (process.env.DECIBEL_APPS === '1') log('Apps: ENABLED');
 
 async function main() {
-  const kernel = await createKernel();
-  const { httpMode, port, authToken, host, sseKeepaliveMs, timeoutMs, retryIntervalMs } = parseHttpArgs(process.argv);
+  const args = process.argv;
+  const daemonMode = args.includes('--daemon');
+
+  // Handle daemon subcommands (install, uninstall, status) — exits process
+  if (daemonMode && handleDaemonSubcommand(args)) return;
+
+  // Parse transport config
+  const { httpMode, port, authToken, host, sseKeepaliveMs, timeoutMs, retryIntervalMs } = parseHttpArgs(args);
 
   const transportConfig: TransportConfig = {
-    port, host, authToken, sseKeepaliveMs, timeoutMs, retryIntervalMs,
+    port: daemonMode ? (port || 4888) : port,  // Daemon defaults to 4888
+    host,
+    authToken,
+    sseKeepaliveMs,
+    timeoutMs,
+    retryIntervalMs,
   };
 
-  if (httpMode) {
+  // Daemon lifecycle: check lock, write PID, setup shutdown
+  if (daemonMode) {
+    const existingPid = checkRunning();
+    if (existingPid) {
+      console.error(`Daemon already running (PID ${existingPid}).`);
+      console.error(`Kill it with: kill ${existingPid}`);
+      console.error(`Or remove stale PID: rm ~/.decibel/daemon.pid`);
+      process.exit(1);
+    }
+
+    writePid();
+    log(`Daemon: mode active, PID ${process.pid}, port ${transportConfig.port}`);
+    log(`Daemon: log file at ${getLogPath()}`);
+  }
+
+  // Create kernel
+  const kernel = await createKernel();
+  const adapters: TransportAdapter[] = [];
+
+  // Start transport(s)
+  if (daemonMode) {
+    // Daemon always starts HTTP
     const http = new HttpAdapter();
     await http.start(kernel, transportConfig);
+    adapters.push(http);
+
+    // Optionally also start stdio (for dual-mode)
+    if (args.includes('--stdio')) {
+      const stdio = new StdioAdapter();
+      await stdio.start(kernel, transportConfig);
+      adapters.push(stdio);
+    }
+
+    // Install graceful shutdown handlers
+    installShutdownHandlers(async () => {
+      log('Daemon: stopping all transports...');
+      await Promise.all(adapters.map(a => a.stop()));
+    });
+  } else if (httpMode) {
+    const http = new HttpAdapter();
+    await http.start(kernel, transportConfig);
+    adapters.push(http);
   } else {
     const stdio = new StdioAdapter();
     await stdio.start(kernel, transportConfig);
+    adapters.push(stdio);
   }
 }
 
 main().catch((error) => {
   console.error('Fatal error:', error);
+  removePid(); // Clean up PID on crash
   process.exit(1);
 });

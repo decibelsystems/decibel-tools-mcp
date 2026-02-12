@@ -68,6 +68,8 @@ import {
 // Module-level kernel reference — set by startHttpServer()
 let kernel: ToolKernel;
 let landingPageHtml = '';
+let startedAt: number = 0;
+let sseConnectionCount = 0;
 
 // ============================================================================
 // Version Info
@@ -204,6 +206,21 @@ interface ErrorEnvelope extends StatusEnvelope {
 // ============================================================================
 // Response Helpers
 // ============================================================================
+
+/**
+ * Format milliseconds into human-readable uptime string.
+ */
+function formatUptime(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+  return `${seconds}s`;
+}
 
 /**
  * Wrap a successful result in status envelope
@@ -387,8 +404,9 @@ export async function startHttpServer(
     retryIntervalMs = 3000,     // 3s retry for SSE clients
   } = options;
 
-  // Set module-level kernel reference (shared with executeTool, getAvailableTools, etc.)
+  // Set module-level references
   kernel = kernelInstance;
+  startedAt = Date.now();
   log(`HTTP: Using kernel with ${kernel.toolCount} tools`);
 
   // Build landing page from actual tool list
@@ -466,16 +484,31 @@ export async function startHttpServer(
 
     // Health check at /health too
     if (path === '/health') {
+      const uptimeMs = Date.now() - startedAt;
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         status: 'ok',
         version: PKG.version,
         api_version: 'v1',
+        uptime_ms: uptimeMs,
+        uptime_human: formatUptime(uptimeMs),
+        pid: process.pid,
+        facade_count: kernel.facadeCount,
+        internal_tool_count: kernel.toolCount,
+        connected_clients: activeSseConnections.size,
         supabase_configured: isSupabaseConfigured(),
-        env_check: {
-          has_supabase_url: !!process.env.SUPABASE_URL,
-          has_supabase_service_key: !!process.env.SUPABASE_SERVICE_KEY,
-        },
+      }));
+      return;
+    }
+
+    // Readiness probe at /ready
+    if (path === '/ready') {
+      // Ready if kernel loaded and at least one facade is available
+      const ready = kernel && kernel.facadeCount > 0;
+      res.writeHead(ready ? 200 : 503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ready,
+        facade_count: kernel?.facadeCount || 0,
       }));
       return;
     }
