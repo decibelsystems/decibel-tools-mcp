@@ -1,0 +1,11 @@
+event_id: PROV-20260213T072913-390
+timestamp: 2026-02-13T07:29:13.390Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-02-13T07-29-13Z-phase-1e-separate-apps-tier-decibel-apps.md
+reason_code: initial_creation
+summary: "Created issue: Phase 1e: Separate apps tier (DECIBEL_APPS)"
+fingerprint_before: null
+fingerprint_after: sha256:4ed4f0e3df6eeabf

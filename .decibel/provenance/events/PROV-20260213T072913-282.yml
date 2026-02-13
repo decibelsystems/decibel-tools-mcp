@@ -1,0 +1,11 @@
+event_id: PROV-20260213T072913-282
+timestamp: 2026-02-13T07:29:13.282Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-02-13T07-29-13Z-phase-1c-extract-tool-kernel-as-single-dispatch-pa.md
+reason_code: initial_creation
+summary: "Created issue: Phase 1c: Extract tool kernel as single dispatch path"
+fingerprint_before: null
+fingerprint_after: sha256:2588ccc5647bb95d

@@ -1,0 +1,11 @@
+event_id: PROV-20260213T072913-715
+timestamp: 2026-02-13T07:29:13.715Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-02-13T07-29-13Z-phase-6a-rename-package-to-decibel-tools-v2-0-0.md
+reason_code: initial_creation
+summary: "Created issue: Phase 6a: Rename package to @decibel/tools v2.0.0"
+fingerprint_before: null
+fingerprint_after: sha256:303eb0b86fba3c49

@@ -1,0 +1,11 @@
+event_id: PROV-20260213T072913-551
+timestamp: 2026-02-13T07:29:13.552Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-02-13T07-29-13Z-phase-4-agent-scaffolding-messaging-delegation-bat.md
+reason_code: initial_creation
+summary: "Created issue: Phase 4: Agent scaffolding — messaging, delegation, batch, hooks"
+fingerprint_before: null
+fingerprint_after: sha256:5f81b132ab47f0f5
