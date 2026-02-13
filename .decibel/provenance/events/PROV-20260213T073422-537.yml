@@ -1,0 +1,11 @@
+event_id: PROV-20260213T073422-537
+timestamp: 2026-02-13T07:34:22.537Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - friction:log:2026-02-13T07-34-22Z-when-wrong-params-are-sent-error-says-missing-requ
+reason_code: initial_creation
+summary: "Logged friction: When wrong params are sent, error says 'Missing required fields: X' but doesn't show what fields ARE expected. The unknown-action error helpfully returns available_actions, but param errors don't return expected schema."
+fingerprint_before: null
+fingerprint_after: sha256:2f3391e344b15f25

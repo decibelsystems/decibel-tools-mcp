@@ -1,0 +1,11 @@
+event_id: PROV-20260213T073422-485
+timestamp: 2026-02-13T07:34:22.485Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - friction:log:2026-02-13T07-34-22Z-action-to-tool-mapping-mixes-conventions-sentinel-
+reason_code: initial_creation
+summary: "Logged friction: Action-to-tool mapping mixes conventions: sentinel_create_issue vs sentinel_updateIssue, architect_createAdr vs architect_record_arch_decision. Maintenance hazard."
+fingerprint_before: null
+fingerprint_after: sha256:ad80899900831dbd

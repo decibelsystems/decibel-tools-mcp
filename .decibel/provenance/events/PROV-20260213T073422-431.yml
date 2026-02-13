@@ -1,0 +1,11 @@
+event_id: PROV-20260213T073422-431
+timestamp: 2026-02-13T07:34:22.431Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - friction:log:2026-02-13T07-34-22Z-large-action-counts-defeat-the-purpose-of-facades-
+reason_code: initial_creation
+summary: "Logged friction: Large action counts defeat the purpose of facades (reducing LLM context). Sentinel could split into sentinel (issues/epics) + scanner. Studio could split into studio (generation) + studio_ops (jobs/devices)."
+fingerprint_before: null
+fingerprint_after: sha256:e7626f95d2b23663

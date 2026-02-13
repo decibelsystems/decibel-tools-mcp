@@ -95,8 +95,9 @@ export interface ToolKernel {
 
   /**
    * Dispatch a tool call. Handles both:
-   * - Facade calls: name="sentinel", args={ action: "create_issue", params: {...} }
+   * - Facade calls: name="sentinel", args={ action: "create_issue", title: "...", ... }
    * - Direct calls: name="sentinel_create_issue", args={...}  (backward compat)
+   * - Legacy nested: name="sentinel", args={ action: "create_issue", params: {...} }
    */
   dispatch(name: string, args: Record<string, unknown>, context?: DispatchContext): Promise<ToolResult>;
 
@@ -159,7 +160,7 @@ export async function createKernel(): Promise<ToolKernel> {
   function getMcpToolDefinitions(tier: DetailTier = 'full'): McpToolDefinition[] {
     let cached = mcpDefCache.get(tier);
     if (!cached) {
-      cached = buildMcpDefinitions(facades, tier);
+      cached = buildMcpDefinitions(facades, tier, toolMap);
       mcpDefCache.set(tier, cached);
     }
     return cached;
@@ -225,7 +226,10 @@ export async function createKernel(): Promise<ToolKernel> {
         };
       }
 
-      const params = (args.params || {}) as Record<string, unknown>;
+      // Flat params: action-specific fields are at root level.
+      // Backward compat: also merge args.params if present (batch API, legacy callers).
+      const { action: _action, params: legacyParams, ...flatParams } = args;
+      const params = { ...(legacyParams as Record<string, unknown> || {}), ...flatParams };
 
       log(`Kernel: facade ${name}.${action} → ${internalName} (agent=${agentId}${runId ? ` run=${runId}` : ''})`);
       trackToolUse(internalName);
@@ -316,7 +320,7 @@ export async function createKernel(): Promise<ToolKernel> {
       try {
         const result = await dispatch(
           call.facade,
-          { action: call.action, params: call.params || {} },
+          { action: call.action, ...(call.params || {}) },
           context
         );
         return {

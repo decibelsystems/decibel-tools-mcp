@@ -1,0 +1,11 @@
+event_id: PROV-20260213T073422-374
+timestamp: 2026-02-13T07:34:22.374Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - friction:log:2026-02-13T07-34-22Z-every-facade-exposes-params-as-type-object-additio
+reason_code: initial_creation
+summary: "Logged friction: Every facade exposes params as {type: object, additionalProperties: true} with no schema. LLMs guess field names wrong (description vs details, project_id vs projectId). Root cause of most facade dispatch failures."
+fingerprint_before: null
+fingerprint_after: sha256:37665848cc1abfd3
