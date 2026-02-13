@@ -5,6 +5,8 @@
 // ============================================================================
 // Modes:
 //   node dist/server.js              → stdio (Claude Code, Cursor)
+//   node dist/server.js --bridge     → stdio with daemon proxy (auto-detect)
+//   node dist/server.js --bridge http://...  → stdio with explicit daemon
 //   node dist/server.js --http       → HTTP only (ChatGPT, Mother)
 //   node dist/server.js --daemon     → daemon mode (HTTP + PID + graceful shutdown)
 //   node dist/server.js --daemon --stdio  → daemon + stdio from one process
@@ -18,7 +20,7 @@ import path from 'path';
 import { getConfig, log } from './config.js';
 import { createKernel } from './kernel.js';
 import type { DispatchEvent } from './kernel.js';
-import { StdioAdapter, HttpAdapter } from './transports/index.js';
+import { StdioAdapter, HttpAdapter, BridgeAdapter } from './transports/index.js';
 import type { TransportAdapter, TransportConfig } from './transports/index.js';
 import { parseHttpArgs } from './httpServer.js';
 import {
@@ -116,6 +118,17 @@ async function main() {
     const http = new HttpAdapter();
     await http.start(kernel, transportConfig);
     adapters.push(http);
+  } else if (args.includes('--bridge')) {
+    // Bridge mode: stdio with daemon proxy
+    const bridgeIdx = args.indexOf('--bridge');
+    const nextArg = args[bridgeIdx + 1];
+    // If next arg looks like a URL, use it; otherwise auto-detect
+    const explicitUrl = nextArg && nextArg.startsWith('http') ? nextArg : null;
+    const daemonUrl = explicitUrl || `http://127.0.0.1:${transportConfig.port || 4888}`;
+
+    const bridge = new BridgeAdapter(daemonUrl);
+    await bridge.start(kernel, transportConfig);
+    adapters.push(bridge);
   } else {
     const stdio = new StdioAdapter();
     await stdio.start(kernel, transportConfig);
