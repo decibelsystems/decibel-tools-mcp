@@ -219,7 +219,7 @@ decibel_version: "1.0"
           mcpServers: {
             'decibel-tools': {
               command: 'npx',
-              args: ['-y', 'decibel-tools-mcp'],
+              args: ['-y', '@decibel/tools'],
               env: {},
             },
           },

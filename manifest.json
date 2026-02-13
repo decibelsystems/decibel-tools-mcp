@@ -1,7 +1,7 @@
 {
-  "name": "decibel-tools-mcp",
-  "version": "1.1.1",
-  "description": "MCP server for project intelligence: epics, issues, ADRs, experiments, roadmaps, and more. 108 tools across 14 domains.",
+  "name": "@decibel/tools",
+  "version": "2.0.0",
+  "description": "MCP server for project intelligence. 26 facade tools (170+ internal handlers) across 20 domains: work tracking, architecture, experiments, design, git forensics, agent coordination, and more.",
   "author": "Decibel Systems",
   "license": "MIT",
   "repository": "https://github.com/decibelsystems/decibel-tools-mcp",
@@ -23,6 +23,6 @@
   "platforms": ["Claude Desktop", "Claude Code", "Cursor"],
   "install": {
     "command": "npx",
-    "args": ["-y", "decibel-tools-mcp"]
+    "args": ["-y", "@decibel/tools"]
   }
 }

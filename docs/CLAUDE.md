@@ -125,7 +125,7 @@ User asks "what should I work on?"
 
 ### Core Principle: Self-Contained MCP Server
 
-decibel-tools-mcp must be **self-contained**. All tools use native file operations, not external CLIs.
+@decibel/tools must be **self-contained**. All tools use native file operations, not external CLIs.
 
 **Allowed**: 
 - `git` commands (universally available)

@@ -1,6 +1,6 @@
 # New Decibel Tools - January 2026
 
-This document summarizes the new tools added to decibel-tools-mcp in the `feature/code-health-auditor` branch.
+This document summarizes the new tools added to @decibel/tools in the `feature/code-health-auditor` branch.
 
 ---
 
@@ -197,7 +197,7 @@ To test the new tools:
 npm run build
 
 # Run MCP server
-npx decibel-tools-mcp
+npx @decibel/tools
 
 # Test individual tools via MCP client
 workflow_status

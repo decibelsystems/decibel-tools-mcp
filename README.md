@@ -1,8 +1,8 @@
-# decibel-tools-mcp
+# @decibel/tools
 
-MCP server that gives AI assistants structured access to project intelligence: epics, issues, ADRs, experiments, roadmaps, and more.
+MCP server for project intelligence. 26 facade tools (170+ internal handlers) across 20 domains: work tracking, architecture, experiments, design, git forensics, agent coordination, and more.
 
-**108 tools** across 14 domains. Tested with Claude Desktop, Claude Code, and Cursor. [Learn more →](https://decibel.systems/tools)
+Tested with Claude Desktop, Claude Code, and Cursor. [Learn more →](https://decibel.systems/tools)
 
 <a href="https://github.com/decibelsystems/decibel-tools-mcp#cursor">
   <img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add to Cursor" height="32" />
@@ -31,10 +31,10 @@ MCP server that gives AI assistants structured access to project intelligence: e
 
 ```bash
 # Install globally
-npm install -g decibel-tools-mcp
+npm install -g @decibel/tools
 
 # Or run directly with npx
-npx decibel-tools-mcp
+npx @decibel/tools
 ```
 
 ## Platform Setup
@@ -48,7 +48,7 @@ Add to `~/.cursor/mcp.json`:
   "mcpServers": {
     "decibel-tools": {
       "command": "npx",
-      "args": ["-y", "decibel-tools-mcp"]
+      "args": ["-y", "@decibel/tools"]
     }
   }
 }
@@ -56,26 +56,14 @@ Add to `~/.cursor/mcp.json`:
 
 ### Claude Code
 
-**Plugin (recommended):**
-
-```bash
-# Add the marketplace
-/plugin marketplace add decibelsystems/decibel-tools-mcp
-
-# Install the plugin
-/plugin install decibel-tools@decibel-marketplace
-```
-
-This gives you slash commands like `/decibel-tools:init`, `/decibel-tools:scan`, `/decibel-tools:next`.
-
-**Manual:** Add to `~/.claude/settings.json`:
+Add to `.mcp.json` in your project root or `~/.claude/settings.json`:
 
 ```json
 {
   "mcpServers": {
     "decibel-tools": {
       "command": "npx",
-      "args": ["-y", "decibel-tools-mcp"]
+      "args": ["-y", "@decibel/tools"]
     }
   }
 }
@@ -90,7 +78,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
   "mcpServers": {
     "decibel-tools": {
       "command": "npx",
-      "args": ["-y", "decibel-tools-mcp"]
+      "args": ["-y", "@decibel/tools"]
     }
   }
 }

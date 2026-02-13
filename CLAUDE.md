@@ -77,7 +77,7 @@ User asks "what should I work on?"
 
 ### Core Principle: Self-Contained MCP Server
 
-decibel-tools-mcp must be **self-contained**. All tools use **native file operations** (fs, YAML).
+@decibel/tools must be **self-contained**. All tools use **native file operations** (fs, YAML).
 
 ```
 ✅ CORRECT: Native file operations

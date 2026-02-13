@@ -1,10 +1,10 @@
 # Decibel Tools Architecture Directive
 
-> **For AI Assistants**: Read this before implementing or modifying any tool in decibel-tools-mcp.
+> **For AI Assistants**: Read this before implementing or modifying any tool in @decibel/tools.
 
 ## Core Principle: Self-Contained MCP Server
 
-**decibel-tools-mcp is a self-contained MCP server.** It must NOT depend on external CLIs.
+**@decibel/tools is a self-contained MCP server.** It must NOT depend on external CLIs.
 
 ```
 CORRECT Architecture:
@@ -14,7 +14,7 @@ CORRECT Architecture:
                       │ MCP (stdio)
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  decibel-tools-mcp                                          │
+│  @decibel/tools                                          │
 │  ════════════════════════════════════════════════════════   │
 │  Native file operations (fs, YAML parsing)                  │
 │  NO external CLI dependencies                               │
@@ -29,7 +29,7 @@ CORRECT Architecture:
 
 WRONG Architecture (current dojo.ts bug):
 ┌─────────────────────────────────────────────────────────────┐
-│  decibel-tools-mcp                                          │
+│  @decibel/tools                                          │
 │  spawn('decibel', [...])  ← WRONG: shells out to CLI        │
 └─────────────────────┬───────────────────────────────────────┘
                       │ subprocess
@@ -103,19 +103,19 @@ export async function addWish(input: AddWishInput): Promise<...> {
 
 ## Project-Specific Extensions
 
-Project-specific tools (like senken's "mother" CLI) can build ON TOP of decibel-tools-mcp:
+Project-specific tools (like senken's "mother" CLI) can build ON TOP of @decibel/tools:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  senken's mother CLI                                        │
-│  - Can import from decibel-tools-mcp                        │
+│  - Can import from @decibel/tools                        │
 │  - Can add senken-specific commands                         │
 │  - Can extend Dojo with trading-specific experiments        │
 └─────────────────────┬───────────────────────────────────────┘
                       │ imports / extends
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  decibel-tools-mcp (self-contained)                         │
+│  @decibel/tools (self-contained)                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 

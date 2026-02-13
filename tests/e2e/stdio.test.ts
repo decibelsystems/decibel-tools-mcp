@@ -131,7 +131,7 @@ describe('MCP Server E2E (stdio)', () => {
     };
 
     expect(result.protocolVersion).toBeDefined();
-    expect(result.serverInfo.name).toBe('decibel-tools-mcp');
+    expect(result.serverInfo.name).toBe('@decibel/tools');
     expect(result.capabilities.tools).toBeDefined();
   });
 

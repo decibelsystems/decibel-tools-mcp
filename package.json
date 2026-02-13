@@ -1,21 +1,28 @@
 {
-  "name": "decibel-tools-mcp",
-  "version": "1.1.4",
+  "name": "@decibel/tools",
+  "version": "2.0.0",
   "bin": {
-    "decibel-tools-mcp": "dist/server.js"
+    "decibel-tools": "dist/server.js"
   },
-  "description": "MCP server for project intelligence: epics, issues, ADRs, experiments, roadmaps, and more. 108 tools across 14 domains.",
+  "description": "MCP server for project intelligence. 26 facade tools (170+ internal handlers) across 20 domains: work tracking, architecture, experiments, design, git forensics, agent coordination, and more.",
   "main": "dist/server.js",
   "type": "module",
   "files": [
     "dist",
+    "templates",
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/server.ts",
     "start": "node dist/server.js",
+    "start:http": "node dist/server.js --http",
+    "start:daemon": "node dist/server.js --daemon",
+    "start:bridge": "node dist/server.js --bridge",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:int": "vitest run tests/integration",

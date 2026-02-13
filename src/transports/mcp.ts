@@ -20,7 +20,7 @@ import type { ToolKernel } from '../kernel.js';
  */
 export function createMcpServer(kernel: ToolKernel): Server {
   const server = new Server(
-    { name: 'decibel-tools-mcp', version: '0.1.0' },
+    { name: '@decibel/tools', version: '2.0.0' },
     { capabilities: { tools: {} } }
   );
 

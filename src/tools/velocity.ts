@@ -742,7 +742,7 @@ function generateHookScript(periods: VelocityPeriod[], decibelPath: string): str
   return `#!/bin/bash
 ${HOOK_MARKER}
 # Auto-capture velocity snapshots after commits
-# Installed by: decibel-tools-mcp velocity_install_hook
+# Installed by: @decibel/tools velocity_install_hook
 
 # Get the repo root and .decibel directory
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
@@ -798,9 +798,9 @@ export async function installHook(
     // Hook doesn't exist yet, that's fine
   }
 
-  // Find the decibel-tools-mcp installation path (for the hook to import from)
+  // Find the @decibel/tools installation path (for the hook to import from)
   // Use a relative approach - the hook will use the project's node_modules or global
-  const decibelPath = 'decibel-tools-mcp';
+  const decibelPath = '@decibel/tools';
 
   // Generate hook script
   const hookScript = generateHookScript(periods, decibelPath);

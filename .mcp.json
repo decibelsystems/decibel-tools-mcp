@@ -2,10 +2,8 @@
     "mcpServers": {
       "decibel-tools": {
         "command": "npx",
-        "args": ["-y", "decibel-tools-mcp"],
-        "env": {
-          "TOGETHER_API_KEY": "${TOGETHER_API_KEY}"
-        }
+        "args": ["-y", "@decibel/tools"],
+        "env": {}
       }
     }
   }
