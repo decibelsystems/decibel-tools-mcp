@@ -1,0 +1,33 @@
+project_id: decibel-tools-mcp
+evaluated_at: 2026-02-13T05:59:21.506Z
+milestones:
+  - id: M-0001
+    label: v1.0 - Initial Release
+    target_date: 2026-03-01
+    epics_total: 0
+    epics_completed: 0
+    epics_in_progress: 0
+    epics_blocked: 0
+    progress_percent: 0
+    status: behind
+    days_remaining: 16
+objectives:
+  - id: OBJ-0001
+    title: Example Objective
+    timeframe: 2026-Q1
+    key_results:
+      - metric: example_metric
+        target: ">90%"
+        current: ~70%
+    overall_progress: 0
+epics: []
+signals:
+  blocking_issues: 0
+  high_severity_issues: 0
+  friction_points: 0
+summary:
+  total_milestones: 1
+  on_track: 0
+  at_risk: 0
+  behind: 1
+  completed: 0

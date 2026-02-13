@@ -1,0 +1,88 @@
+{
+  "pack_id": "pack-20260213T055922-7lzz",
+  "pack_hash": "c2ffe56e3908",
+  "compiled_at": "2026-02-13T05:59:22.037Z",
+  "content": {
+    "taxonomy": {
+      "roles": {
+        "Sensor": {
+          "emoji": "👁️",
+          "description": "Data collection and observation"
+        },
+        "Analyst": {
+          "emoji": "🧠",
+          "description": "Pattern recognition and analysis"
+        },
+        "Overmind": {
+          "emoji": "🎯",
+          "description": "Decision making and coordination"
+        },
+        "Specialist": {
+          "emoji": "🔧",
+          "description": "Domain-specific expertise"
+        }
+      },
+      "statuses": {
+        "OK": {
+          "emoji": "✓",
+          "color": "green"
+        },
+        "DEGRADED": {
+          "emoji": "⚠️",
+          "color": "yellow"
+        },
+        "BLOCKED": {
+          "emoji": "🛑",
+          "color": "red"
+        },
+        "ALERT": {
+          "emoji": "🚨",
+          "color": "magenta"
+        }
+      },
+      "loads": {
+        "GREEN": {
+          "emoji": "🟢",
+          "color": "green"
+        },
+        "YELLOW": {
+          "emoji": "🟡",
+          "color": "yellow"
+        },
+        "RED": {
+          "emoji": "🔴",
+          "color": "red"
+        }
+      }
+    },
+    "renderers": {
+      "default": {
+        "id": "default",
+        "name": "Default Renderer",
+        "description": "Basic text output with minimal formatting",
+        "template": "{{role_emoji}} {{role}} | {{status}} | Load: {{load}}\n\n{{summary}}\n\n{{#evidence}}\nEvidence:\n{{#items}}\n- {{source}}: {{value}}\n{{/items}}\n{{/evidence}}\n\n{{#missing_data}}\nMissing Data:\n{{#items}}\n- {{field}}: {{reason}}\n{{/items}}\n{{/missing_data}}\n\n{{#decision}}\nDecision: {{decision}}\n{{/decision}}",
+        "constraints": {
+          "max_emoji_count": 5,
+          "emoji_position": "header-only",
+          "max_lines": 50,
+          "banned_words": [
+            "amazing",
+            "incredible",
+            "revolutionary",
+            "game-changing"
+          ],
+          "banned_punctuation": [
+            "!"
+          ]
+        }
+      }
+    },
+    "consensus": {
+      "quorum_threshold": 0.67,
+      "dissent_highlight_threshold": 0.3,
+      "max_pending_decisions": 10
+    },
+    "avatars": {}
+  },
+  "source_files": []
+}

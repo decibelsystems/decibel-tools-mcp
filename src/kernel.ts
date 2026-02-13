@@ -148,7 +148,10 @@ export async function createKernel(): Promise<ToolKernel> {
   log(`Kernel: loaded ${tools.length} internal tools, ${facades.length} facades`);
 
   // Dispatch event emitter — subscribers get notified of every dispatch
+  // NOTE: EventEmitter throws on .emit('error') if no listener is registered.
+  // Register a no-op default so unsubscribed errors don't crash the process.
   const emitter = new EventEmitter();
+  emitter.on('error', () => {});
 
   // Pre-build MCP definitions for each tier (cached)
   const mcpDefCache = new Map<DetailTier, McpToolDefinition[]>();
@@ -242,13 +245,22 @@ export async function createKernel(): Promise<ToolKernel> {
         } satisfies DispatchEvent);
         return result;
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
         emitter.emit('error', {
           type: 'error', facade: name, action, tool: internalName,
           agentId, runId, timestamp: new Date().toISOString(),
           duration_ms: Date.now() - startTime,
-          error: err instanceof Error ? err.message : String(err),
+          error: errMsg,
         } satisfies DispatchEvent);
-        throw err;
+        return {
+          content: [{ type: 'text', text: JSON.stringify({
+            error: errMsg,
+            facade: name,
+            action,
+            tool: internalName,
+          }) }],
+          isError: true,
+        };
       }
     }
 
@@ -279,13 +291,20 @@ export async function createKernel(): Promise<ToolKernel> {
       } satisfies DispatchEvent);
       return result;
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       emitter.emit('error', {
         type: 'error', tool: name,
         agentId, runId, timestamp: new Date().toISOString(),
         duration_ms: Date.now() - startTime,
-        error: err instanceof Error ? err.message : String(err),
+        error: errMsg,
       } satisfies DispatchEvent);
-      throw err;
+      return {
+        content: [{ type: 'text', text: JSON.stringify({
+          error: errMsg,
+          tool: name,
+        }) }],
+        isError: true,
+      };
     }
   }
 
