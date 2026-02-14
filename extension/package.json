@@ -1,0 +1,173 @@
+{
+  "name": "decibel-tools",
+  "displayName": "Decibel Tools",
+  "description": "Project intelligence dashboard — epics, issues, wishes, experiments — powered by MCP",
+  "version": "0.3.4",
+  "publisher": "decibel-systems",
+  "license": "SEE LICENSE IN LICENSE",
+  "icon": "resources/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/decibel-systems/decibel-tools-mcp"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "workspaceContains:.decibel"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "decibel",
+          "title": "Decibel",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "decibel": [
+        {
+          "id": "decibel.sentinel",
+          "name": "Work"
+        },
+        {
+          "id": "decibel.dojo",
+          "name": "Incubation"
+        },
+        {
+          "id": "decibel.voice",
+          "name": "Voice",
+          "when": "decibel.isPro"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "decibel.projectStatus",
+        "title": "Project Status",
+        "category": "Decibel"
+      },
+      {
+        "command": "decibel.preflight",
+        "title": "Preflight Check",
+        "category": "Decibel"
+      },
+      {
+        "command": "decibel.createIssue",
+        "title": "Create Issue",
+        "category": "Decibel"
+      },
+      {
+        "command": "decibel.createEpic",
+        "title": "Create Epic",
+        "category": "Decibel"
+      },
+      {
+        "command": "decibel.addWish",
+        "title": "Add Wish",
+        "category": "Decibel"
+      },
+      {
+        "command": "decibel.refresh",
+        "title": "Refresh",
+        "category": "Decibel"
+      },
+      {
+        "command": "decibel.activate",
+        "title": "Activate Pro",
+        "category": "Decibel"
+      },
+      {
+        "command": "decibel.deactivate",
+        "title": "Deactivate Pro",
+        "category": "Decibel",
+        "enablement": "decibel.isPro"
+      },
+      {
+        "command": "decibel.voiceSync",
+        "title": "Sync Voice Inbox",
+        "category": "Decibel Pro",
+        "enablement": "decibel.isPro"
+      },
+      {
+        "command": "decibel.voiceCommand",
+        "title": "Voice Command",
+        "category": "Decibel Pro",
+        "enablement": "decibel.isPro"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "decibel.voiceSync", "when": "decibel.isPro" },
+        { "command": "decibel.voiceCommand", "when": "decibel.isPro" },
+        { "command": "decibel.deactivate", "when": "decibel.isPro" },
+        { "command": "decibel.activate", "when": "!decibel.isPro" }
+      ]
+    },
+    "configuration": {
+      "title": "Decibel Tools",
+      "properties": {
+        "decibel.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Decibel MCP server entry point (dist/server.js). Leave empty for auto-detection."
+        },
+        "decibel.licenseKey": {
+          "type": "string",
+          "default": "",
+          "description": "Pro license key (DCBL-XXXX-XXXX-XXXX). Unlocks voice, studio, corpus, and agentic features.",
+          "pattern": "^(DCBL-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4})?$",
+          "patternErrorMessage": "License key must be in format DCBL-XXXX-XXXX-XXXX"
+        },
+        "decibel.devMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable all pro features without a license key (development only).",
+          "scope": "machine"
+        },
+        "decibel.useDaemon": {
+          "type": "boolean",
+          "default": false,
+          "description": "Connect to a running Decibel daemon instead of spawning a child process."
+        },
+        "decibel.daemonUrl": {
+          "type": "string",
+          "default": "http://localhost:4888",
+          "description": "URL of the Decibel daemon when useDaemon is enabled."
+        },
+        "decibel.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh tree views on a timer."
+        },
+        "decibel.autoRefreshInterval": {
+          "type": "number",
+          "default": 60,
+          "description": "Auto-refresh interval in seconds.",
+          "minimum": 10,
+          "maximum": 600
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "lint": "tsc --noEmit",
+    "package": "npm run build && vsce package --no-dependencies",
+    "install-ext": "npm run package && code --install-extension decibel-tools-$(node -p \"require('./package.json').version\").vsix"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.3.0"
+  }
+}

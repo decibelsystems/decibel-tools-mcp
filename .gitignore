@@ -29,7 +29,14 @@ npm-debug.log*
 coverage/
 package-lock.json
 package.json
+!extension/package.json
+!extension/package-lock.json
 projects.json
+
+# Extension build artifacts
+extension/dist/
+extension/node_modules/
+extension/*.vsix
 
 # Project registry (user-specific, each dev has their own)
 projects.json

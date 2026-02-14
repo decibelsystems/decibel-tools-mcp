@@ -30,7 +30,11 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:quick": "tsx src/test.ts",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "ext:build": "cd extension && npm run build",
+    "ext:watch": "cd extension && npm run watch",
+    "ext:package": "cd extension && npm run package",
+    "ext:install": "cd extension && npm run install-ext"
   },
   "keywords": [
     "mcp",
