@@ -7,6 +7,10 @@
   "description": "MCP server for project intelligence. 26 facade tools (170+ internal handlers) across 20 domains: work tracking, architecture, experiments, design, git forensics, agent coordination, and more.",
   "main": "dist/server.js",
   "type": "module",
+  "exports": {
+    ".": "./dist/server.js",
+    "./client": "./dist/client/index.js"
+  },
   "files": [
     "dist",
     "templates",
