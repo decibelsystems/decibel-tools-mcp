@@ -1,0 +1,11 @@
+event_id: PROV-20260214T011202-383
+timestamp: 2026-02-14T01:12:02.383Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:wish:WISH-0013
+reason_code: initial_creation
+summary: "Created wish: Figma design token sync and parity checking for the designer facade"
+fingerprint_before: null
+fingerprint_after: sha256:df0f580c80ecfee1

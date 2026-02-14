@@ -1,0 +1,13 @@
+id: WISH-0012
+capability: Archive wishes to remove them from active list without deleting
+reason: Wishes added to the wrong project or completed wishes clutter the list
+  with no way to remove them. Hard delete is risky with LLM agents, so
+  move-to-archive is the safe middle ground.
+inputs:
+  - wish_id
+  - project_id
+outputs:
+  result: Wish YAML moved from wishes/ to wishes/_archived/, recoverable
+created_at: 2026-02-13T23:52:27.561Z
+status: open
+project_id: decibel-tools-mcp

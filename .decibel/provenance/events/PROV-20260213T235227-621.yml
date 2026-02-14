@@ -1,0 +1,11 @@
+event_id: PROV-20260213T235227-621
+timestamp: 2026-02-13T23:52:27.621Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:wish:WISH-0012
+reason_code: initial_creation
+summary: "Created wish: Archive wishes to remove them from active list without deleting"
+fingerprint_before: null
+fingerprint_after: sha256:ce08deaec28526d0

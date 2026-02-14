@@ -551,6 +551,162 @@ export interface ListPrinciplesOutput {
   path: string;
 }
 
+// ============================================================================
+// Check Token Parity (Figma drift detection)
+// ============================================================================
+
+export interface CheckParityInput {
+  projectId?: string;
+  fileKey: string;
+}
+
+export interface TokenDiff {
+  name: string;
+  collection?: string;
+  type?: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+}
+
+export interface CheckParityOutput {
+  added: TokenDiff[];
+  removed: TokenDiff[];
+  changed: TokenDiff[];
+  unchanged_count: number;
+  drift_detected: boolean;
+  timestamp: string;
+  source: string;
+}
+
+export async function checkParity(
+  input: CheckParityInput
+): Promise<CheckParityOutput | DesignerError> {
+  const token = getFigmaToken();
+  if (!token) {
+    return {
+      error: 'FIGMA_TOKEN_MISSING',
+      message: 'FIGMA_ACCESS_TOKEN environment variable is not set.',
+      hint: 'Set FIGMA_ACCESS_TOKEN to your Figma personal access token.',
+    };
+  }
+
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('check token parity');
+  }
+
+  const now = new Date();
+  const timestamp = now.toISOString();
+
+  // Load existing tokens.yaml
+  const tokensFile = path.join(resolved.subPath('designer', 'tokens'), 'tokens.yaml');
+  let existingTokens: DesignToken[];
+  try {
+    const content = await fs.readFile(tokensFile, 'utf-8');
+    const data = YAML.parse(content);
+    existingTokens = data?.tokens || [];
+  } catch {
+    return {
+      error: 'NO_SYNCED_TOKENS',
+      message: 'No tokens.yaml found. Run sync_tokens first to establish a baseline.',
+      hint: `Use designer sync_tokens with fileKey: "${input.fileKey}" to create the initial snapshot.`,
+    };
+  }
+
+  // Fetch fresh variables from Figma
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let variablesData: any;
+  try {
+    variablesData = await figmaFetch(`/files/${input.fileKey}/variables/local`, token);
+  } catch (err) {
+    return {
+      error: 'FIGMA_API_ERROR',
+      message: err instanceof Error ? err.message : 'Failed to fetch Figma variables',
+      hint: 'Check your file key and token permissions.',
+    };
+  }
+
+  // Parse fresh variables
+  const freshTokens: DesignToken[] = [];
+  const variables = variablesData?.meta?.variables || {};
+  const collections = variablesData?.meta?.variableCollections || {};
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const [, variable] of Object.entries(variables) as [string, any][]) {
+    const collectionId = variable.variableCollectionId;
+    const collection = collections[collectionId];
+    const collectionName = collection?.name || 'Unknown';
+    const modeId = collection?.modes?.[0]?.modeId;
+    const value = modeId ? variable.valuesByMode?.[modeId] : null;
+
+    freshTokens.push({
+      name: variable.name,
+      type: variable.resolvedType?.toLowerCase() || 'string',
+      value: value,
+      description: variable.description,
+      collection: collectionName,
+    });
+  }
+
+  // Build lookup maps by name
+  const existingMap = new Map(existingTokens.map(t => [t.name, t]));
+  const freshMap = new Map(freshTokens.map(t => [t.name, t]));
+
+  const added: TokenDiff[] = [];
+  const removed: TokenDiff[] = [];
+  const changed: TokenDiff[] = [];
+  let unchanged_count = 0;
+
+  // Find added and changed tokens
+  for (const [name, fresh] of freshMap) {
+    const existing = existingMap.get(name);
+    if (!existing) {
+      added.push({ name, collection: fresh.collection, type: fresh.type, newValue: fresh.value });
+    } else {
+      const valueChanged = JSON.stringify(existing.value) !== JSON.stringify(fresh.value);
+      const typeChanged = existing.type !== fresh.type;
+      if (valueChanged || typeChanged) {
+        changed.push({
+          name,
+          collection: fresh.collection,
+          type: fresh.type,
+          oldValue: existing.value,
+          newValue: fresh.value,
+        });
+      } else {
+        unchanged_count++;
+      }
+    }
+  }
+
+  // Find removed tokens
+  for (const [name, existing] of existingMap) {
+    if (!freshMap.has(name)) {
+      removed.push({ name, collection: existing.collection, type: existing.type, oldValue: existing.value });
+    }
+  }
+
+  const drift_detected = added.length > 0 || removed.length > 0 || changed.length > 0;
+
+  log(`Designer: Parity check — ${added.length} added, ${removed.length} removed, ${changed.length} changed, ${unchanged_count} unchanged`);
+
+  return {
+    added,
+    removed,
+    changed,
+    unchanged_count,
+    drift_detected,
+    timestamp,
+    source: `figma:${input.fileKey}`,
+  };
+}
+
+// ============================================================================
+// List Design Principles
+// ============================================================================
+
 export async function listPrinciples(
   input: ListPrinciplesInput
 ): Promise<ListPrinciplesOutput | DesignerError> {

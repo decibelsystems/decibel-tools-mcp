@@ -1,0 +1,11 @@
+event_id: PROV-20260214T014533-813
+timestamp: 2026-02-14T01:45:33.813Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:epic:EPIC-0027
+reason_code: initial_creation
+summary: "Created epic: Figma Facade — Medium-Level Support"
+fingerprint_before: null
+fingerprint_after: sha256:148fc2fc9e0a3c16

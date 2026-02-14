@@ -17,6 +17,8 @@ import {
   UpsertPrincipleInput,
   listPrinciples,
   ListPrinciplesInput,
+  checkParity,
+  CheckParityInput,
 } from '../designer.js';
 import {
   logCrit,
@@ -432,6 +434,51 @@ export const designerListPrinciplesTool: ToolSpec = {
 };
 
 // ============================================================================
+// Check Parity Tool (Figma drift detection)
+// ============================================================================
+
+export const designerCheckParityTool: ToolSpec = {
+  definition: {
+    name: 'designer_check_parity',
+    description: 'Compare last-synced design tokens against current Figma state to detect drift. Reports added, removed, and changed tokens without modifying tokens.yaml. Run sync_tokens first to establish a baseline.',
+    annotations: {
+      title: 'Check Token Parity',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        fileKey: {
+          type: 'string',
+          description: 'Figma file key (the part after /file/ in the URL)',
+        },
+      },
+      required: ['fileKey'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      normalizeProjectId(rawInput);
+      const input = rawInput as unknown as CheckParityInput;
+
+      requireFields(input, 'fileKey');
+
+      const result = await checkParity(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -441,6 +488,7 @@ export const designerTools: ToolSpec[] = [
   designerListCritsTool,
   designerSyncTokensTool,
   designerReviewFigmaTool,
+  designerCheckParityTool,
   designerUpsertPrincipleTool,
   designerListPrinciplesTool,
   ...lateralTools,

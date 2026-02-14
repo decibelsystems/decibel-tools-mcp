@@ -1,0 +1,20 @@
+id: WISH-0013
+capability: Figma design token sync and parity checking for the designer facade
+reason: "Designer module tracks design decisions in YAML but has no connection
+  to Figma as source of truth. Two targeted integrations: (1)
+  designer_sync_tokens pulls Figma variables into .decibel/designer/tokens/ as
+  YAML, (2) designer_check_parity compares recorded design decisions against the
+  actual Figma file. Lightweight approach — uses Figma REST API with Personal
+  Access Token, no Desktop Bridge needed. Inspired by figma-console-mcp but
+  scoped to just the two high-value operations instead of replicating 56 tools."
+inputs:
+  - figma_file_key
+  - figma_access_token
+  - project_id
+outputs:
+  sync_tokens: Design tokens written to .decibel/designer/tokens/ as YAML,
+    organized by collection/mode
+  check_parity: Diff report showing design decisions that diverge from current Figma state
+created_at: 2026-02-14T01:12:02.322Z
+status: open
+project_id: decibel-tools-mcp

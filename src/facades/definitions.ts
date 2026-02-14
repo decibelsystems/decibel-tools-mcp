@@ -88,7 +88,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'designer',
-    description: 'Design decisions, critiques, tokens, lateral thinking. Actions: record_decision, list_principles, upsert_principle, crit, review_figma, sync_tokens, lateral_session, lateral_apply, lateral_close, list_crits',
+    description: 'Design decisions, critiques, tokens, lateral thinking. Actions: record_decision, list_principles, upsert_principle, crit, review_figma, sync_tokens, check_parity, lateral_session, lateral_apply, lateral_close, list_crits',
     compactDescription: 'Design decisions, crits, and design tokens',
     microEligible: false,
     tier: 'core',
@@ -99,6 +99,7 @@ export const coreFacades: FacadeSpec[] = [
       crit: 'designer_crit',
       review_figma: 'designer_review_figma',
       sync_tokens: 'designer_sync_tokens',
+      check_parity: 'designer_check_parity',
       lateral_session: 'designer_lateral_session',
       lateral_apply: 'designer_lateral_apply',
       lateral_close: 'designer_lateral_close',

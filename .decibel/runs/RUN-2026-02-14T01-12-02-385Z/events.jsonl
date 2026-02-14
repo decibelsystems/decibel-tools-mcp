@@ -1,0 +1,2 @@
+{"ts":"2026-02-14T01:12:02.386Z","run_id":"RUN-2026-02-14T01-12-02-385Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-02-14T01:12:02.452Z","run_id":"RUN-2026-02-14T01-12-02-385Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"dojo_add_wish","result":"success","summary":"Added wish WISH-0013: Figma design token sync and parity checking for the designer facade"}}
