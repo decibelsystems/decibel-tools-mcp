@@ -2,7 +2,15 @@ import * as vscode from 'vscode';
 import { DecibelMcpClient } from '../mcpClient';
 import type { EpicSummary, IssueSummary, ListEpicsResponse, ListIssuesResponse } from '../types';
 
-type TreeItem = GroupNode | EpicNode | IssueNode;
+type TreeItem = GroupNode | EpicNode | IssueNode | MessageNode;
+
+class MessageNode extends vscode.TreeItem {
+  constructor(message: string, icon?: string) {
+    super(message, vscode.TreeItemCollapsibleState.None);
+    this.contextValue = 'message';
+    if (icon) this.iconPath = new vscode.ThemeIcon(icon);
+  }
+}
 
 class GroupNode extends vscode.TreeItem {
   constructor(
@@ -74,12 +82,14 @@ export class SentinelTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
   private epics: EpicSummary[] = [];
   private issues: IssueSummary[] = [];
+  private loadError: string | null = null;
 
   constructor(private readonly client: DecibelMcpClient) {}
 
   refresh(): void {
     this.epics = [];
     this.issues = [];
+    this.loadError = null;
     this._onDidChangeTreeData.fire(undefined);
   }
 
@@ -89,12 +99,20 @@ export class SentinelTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
   async getChildren(element?: TreeItem): Promise<TreeItem[]> {
     if (!this.client.isConnected) {
-      return [];
+      return [new MessageNode('MCP server not connected', 'warning')];
     }
 
     // Root level: Epics + Issues groups
     if (!element) {
       await this.loadData();
+
+      if (this.loadError) {
+        return [new MessageNode(this.loadError, 'warning')];
+      }
+
+      if (this.epics.length === 0 && this.issues.length === 0) {
+        return [new MessageNode('No epics or issues yet', 'info')];
+      }
 
       const epicGroups = this.buildEpicGroups();
       const issueGroups = this.buildIssueGroups();
@@ -130,8 +148,9 @@ export class SentinelTreeProvider implements vscode.TreeDataProvider<TreeItem> {
       ]);
       this.epics = epicRes.epics || [];
       this.issues = issueRes.issues || [];
-    } catch {
-      // Data stays empty on error — tree shows nothing
+      this.loadError = null;
+    } catch (err) {
+      this.loadError = err instanceof Error ? err.message : 'Failed to load work items';
     }
   }
 

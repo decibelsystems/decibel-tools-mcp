@@ -3,6 +3,7 @@ import { DecibelMcpClient } from './mcpClient';
 import { ProGate } from './proGate';
 import { SentinelTreeProvider } from './views/sentinelTree';
 import { DojoTreeProvider } from './views/dojoTree';
+import { VoiceTreeProvider } from './views/voiceTree';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -10,6 +11,7 @@ export function registerCommands(
   outputChannel: vscode.OutputChannel,
   sentinelTree: SentinelTreeProvider,
   dojoTree: DojoTreeProvider,
+  voiceTree: VoiceTreeProvider,
   proGate: ProGate,
 ): void {
   context.subscriptions.push(
@@ -32,6 +34,7 @@ export function registerCommands(
     vscode.commands.registerCommand('decibel.refresh', () => {
       sentinelTree.refresh();
       dojoTree.refresh();
+      voiceTree.refresh();
       vscode.window.showInformationMessage('Decibel: Refreshed');
     }),
 
@@ -47,7 +50,7 @@ export function registerCommands(
 
     // Pro commands
     vscode.commands.registerCommand('decibel.voiceSync', () =>
-      requirePro(proGate, () => voiceSync(client, outputChannel))),
+      requirePro(proGate, () => voiceSync(client, outputChannel, voiceTree))),
 
     vscode.commands.registerCommand('decibel.voiceCommand', () =>
       requirePro(proGate, () => voiceCommand(client, outputChannel))),
@@ -203,13 +206,14 @@ async function addWish(client: DecibelMcpClient, tree: DojoTreeProvider): Promis
 
 // --- Pro commands ---
 
-async function voiceSync(client: DecibelMcpClient, output: vscode.OutputChannel): Promise<void> {
+async function voiceSync(client: DecibelMcpClient, output: vscode.OutputChannel, voiceTree: VoiceTreeProvider): Promise<void> {
   try {
     const result = await client.callFacade<Record<string, unknown>>('voice', 'inbox_sync');
     output.clear();
     output.appendLine('=== Voice Inbox Sync ===');
     output.appendLine(JSON.stringify(result, null, 2));
     output.show(true);
+    voiceTree.refresh();
   } catch (err) {
     vscode.window.showErrorMessage(`Voice sync failed: ${(err as Error).message}`);
   }

@@ -2,7 +2,7 @@
   "name": "decibel-tools",
   "displayName": "Decibel Tools",
   "description": "Project intelligence dashboard — epics, issues, wishes, experiments — powered by MCP",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "publisher": "decibel-systems",
   "license": "SEE LICENSE IN LICENSE",
   "icon": "resources/icon.png",
@@ -13,7 +13,7 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
+  "categories": ["Data Science", "Machine Learning", "Other"],
   "activationEvents": [
     "workspaceContains:.decibel"
   ],

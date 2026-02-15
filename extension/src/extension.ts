@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { DecibelMcpClient } from './mcpClient';
 import { SentinelTreeProvider } from './views/sentinelTree';
 import { DojoTreeProvider } from './views/dojoTree';
+import { VoiceTreeProvider } from './views/voiceTree';
 import { registerCommands } from './commands';
 import { createStatusBarItem } from './statusBar';
 import { ProGate } from './proGate';
@@ -35,19 +36,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Pro gating
   const proGate = new ProGate();
-  await proGate.initialize();
+  await proGate.initialize(context);
 
   // Tree providers
   const sentinelTree = new SentinelTreeProvider(client);
   const dojoTree = new DojoTreeProvider(client);
+  const voiceTree = new VoiceTreeProvider(client);
 
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('decibel.sentinel', sentinelTree),
     vscode.window.registerTreeDataProvider('decibel.dojo', dojoTree),
+    vscode.window.registerTreeDataProvider('decibel.voice', voiceTree),
   );
 
   // Commands
-  registerCommands(context, client, outputChannel, sentinelTree, dojoTree, proGate);
+  registerCommands(context, client, outputChannel, sentinelTree, dojoTree, voiceTree, proGate);
 
   // Status bar
   const statusBarItem = createStatusBarItem(client);
@@ -60,6 +63,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     refreshTimer = setInterval(() => {
       sentinelTree.refresh();
       dojoTree.refresh();
+      voiceTree.refresh();
     }, intervalSec * 1000);
   }
 

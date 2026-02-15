@@ -2,7 +2,15 @@ import * as vscode from 'vscode';
 import { DecibelMcpClient } from '../mcpClient';
 import type { WishSummary, ProposalSummary, ExperimentSummary, DojoListResponse } from '../types';
 
-type TreeItem = GroupNode | WishNode | ProposalNode | ExperimentNode;
+type TreeItem = GroupNode | WishNode | ProposalNode | ExperimentNode | MessageNode;
+
+class MessageNode extends vscode.TreeItem {
+  constructor(message: string, icon?: string) {
+    super(message, vscode.TreeItemCollapsibleState.None);
+    this.contextValue = 'message';
+    if (icon) this.iconPath = new vscode.ThemeIcon(icon);
+  }
+}
 
 class GroupNode extends vscode.TreeItem {
   constructor(
@@ -70,6 +78,7 @@ export class DojoTreeProvider implements vscode.TreeDataProvider<TreeItem> {
   private wishes: WishSummary[] = [];
   private proposals: ProposalSummary[] = [];
   private experiments: ExperimentSummary[] = [];
+  private loadError: string | null = null;
 
   constructor(private readonly client: DecibelMcpClient) {}
 
@@ -77,6 +86,7 @@ export class DojoTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     this.wishes = [];
     this.proposals = [];
     this.experiments = [];
+    this.loadError = null;
     this._onDidChangeTreeData.fire(undefined);
   }
 
@@ -86,11 +96,19 @@ export class DojoTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
   async getChildren(element?: TreeItem): Promise<TreeItem[]> {
     if (!this.client.isConnected) {
-      return [];
+      return [new MessageNode('MCP server not connected', 'warning')];
     }
 
     if (!element) {
       await this.loadData();
+
+      if (this.loadError) {
+        return [new MessageNode(this.loadError, 'warning')];
+      }
+
+      if (this.wishes.length === 0 && this.proposals.length === 0 && this.experiments.length === 0) {
+        return [new MessageNode('No wishes, proposals, or experiments yet', 'info')];
+      }
 
       const wishGroup = new GroupNode(
         'Wishes',
@@ -123,8 +141,9 @@ export class DojoTreeProvider implements vscode.TreeDataProvider<TreeItem> {
       this.wishes = res.wishes || [];
       this.proposals = res.proposals || [];
       this.experiments = res.experiments || [];
-    } catch {
-      // Data stays empty on error
+      this.loadError = null;
+    } catch (err) {
+      this.loadError = err instanceof Error ? err.message : 'Failed to load incubation items';
     }
   }
 }
