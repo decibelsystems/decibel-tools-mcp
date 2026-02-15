@@ -27,8 +27,6 @@ Project intelligence that compounds across sessions. Agents read the roadmap, ar
 
 Pro requires a license key: `Cmd+Shift+P` > **Decibel: Activate Pro** > `DCBL-XXXX-XXXX-XXXX`.
 
-Dev override: set `decibel.devMode: true` in settings.
-
 ## Install
 
 **From VSIX:** `Cmd+Shift+P` > **Extensions: Install from VSIX...** > select the `.vsix` file.
@@ -72,7 +70,6 @@ Then in VS Code settings: `decibel.useDaemon: true`. Status bar shows **Decibel 
 | `decibel.autoRefresh` | `true` | Periodic tree refresh |
 | `decibel.autoRefreshInterval` | `60` | Seconds between refreshes (10-600) |
 | `decibel.licenseKey` | | Pro license key |
-| `decibel.devMode` | `false` | Unlock pro without key (dev only) |
 
 ## Troubleshooting
 

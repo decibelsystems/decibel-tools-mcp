@@ -1,0 +1,11 @@
+event_id: PROV-20260215T084559-664
+timestamp: 2026-02-15T08:45:59.664Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-02-15T08-45-59Z-add-screenshots-to-vs-code-marketplace-listing.md
+reason_code: initial_creation
+summary: "Created issue: Add screenshots to VS Code Marketplace listing"
+fingerprint_before: null
+fingerprint_after: sha256:0a26b97edb5ae2d2

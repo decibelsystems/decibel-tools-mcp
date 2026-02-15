@@ -1,0 +1,11 @@
+event_id: PROV-20260215T084559-880
+timestamp: 2026-02-15T08:45:59.880Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-02-15T08-45-59Z-improve-extension-marketplace-copy-and-description.md
+reason_code: initial_creation
+summary: "Created issue: Improve extension marketplace copy and description"
+fingerprint_before: null
+fingerprint_after: sha256:29ef08679aa4a1e2

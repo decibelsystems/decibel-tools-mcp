@@ -1,0 +1,11 @@
+event_id: PROV-20260215T084559-722
+timestamp: 2026-02-15T08:45:59.722Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-02-15T08-45-59Z-wire-up-stripe-webhook-for-automatic-license-key-g.md
+reason_code: initial_creation
+summary: "Created issue: Wire up Stripe webhook for automatic license key generation"
+fingerprint_before: null
+fingerprint_after: sha256:eb3b9f2007ff11dd

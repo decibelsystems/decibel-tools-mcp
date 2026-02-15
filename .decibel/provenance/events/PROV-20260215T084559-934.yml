@@ -1,0 +1,11 @@
+event_id: PROV-20260215T084559-934
+timestamp: 2026-02-15T08:45:59.934Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-02-15T08-45-59Z-add-gallery-banner-to-marketplace-listing.md
+reason_code: initial_creation
+summary: "Created issue: Add gallery banner to marketplace listing"
+fingerprint_before: null
+fingerprint_after: sha256:04b3818ea1ee2d95

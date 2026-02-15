@@ -2,7 +2,7 @@
   "name": "decibel-tools",
   "displayName": "Decibel Tools",
   "description": "Project intelligence dashboard — epics, issues, wishes, experiments — powered by MCP",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "decibel-systems",
   "license": "SEE LICENSE IN LICENSE",
   "icon": "resources/icon.png",
@@ -13,7 +13,11 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Data Science", "Machine Learning", "Other"],
+  "categories": [
+    "Data Science",
+    "Machine Learning",
+    "Other"
+  ],
   "activationEvents": [
     "workspaceContains:.decibel"
   ],
@@ -102,10 +106,22 @@
     ],
     "menus": {
       "commandPalette": [
-        { "command": "decibel.voiceSync", "when": "decibel.isPro" },
-        { "command": "decibel.voiceCommand", "when": "decibel.isPro" },
-        { "command": "decibel.deactivate", "when": "decibel.isPro" },
-        { "command": "decibel.activate", "when": "!decibel.isPro" }
+        {
+          "command": "decibel.voiceSync",
+          "when": "decibel.isPro"
+        },
+        {
+          "command": "decibel.voiceCommand",
+          "when": "decibel.isPro"
+        },
+        {
+          "command": "decibel.deactivate",
+          "when": "decibel.isPro"
+        },
+        {
+          "command": "decibel.activate",
+          "when": "!decibel.isPro"
+        }
       ]
     },
     "configuration": {

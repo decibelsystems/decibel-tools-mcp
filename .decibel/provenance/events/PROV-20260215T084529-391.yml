@@ -1,0 +1,11 @@
+event_id: PROV-20260215T084529-391
+timestamp: 2026-02-15T08:45:29.391Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:epic:EPIC-0028
+reason_code: initial_creation
+summary: "Created epic: VS Code Extension Marketplace Launch"
+fingerprint_before: null
+fingerprint_after: sha256:617db3a753073809
