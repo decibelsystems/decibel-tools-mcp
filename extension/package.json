@@ -2,7 +2,7 @@
   "name": "decibel-tools",
   "displayName": "Decibel Tools",
   "description": "Project intelligence dashboard — epics, issues, wishes, experiments — powered by MCP",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "publisher": "decibel-systems",
   "license": "SEE LICENSE IN LICENSE",
   "icon": "resources/icon.png",
