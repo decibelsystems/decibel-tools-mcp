@@ -148,9 +148,9 @@ function getVersion(): { version: string; name: string } {
     // Try to read from package.json (works in both dev and prod)
     const pkgPath = join(__dirname, '..', 'package.json');
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    return { version: pkg.version || '0.0.0', name: pkg.name || '@decibel/tools' };
+    return { version: pkg.version || '0.0.0', name: pkg.name || '@decibelsystems/tools' };
   } catch {
-    return { version: '2.0.0', name: '@decibel/tools' };
+    return { version: '2.0.0', name: '@decibelsystems/tools' };
   }
 }
 

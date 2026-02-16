@@ -1,5 +1,5 @@
 {
-  "name": "@decibel/tools",
+  "name": "@decibelsystems/tools",
   "version": "2.0.0",
   "description": "MCP server for project intelligence. 26 facade tools (170+ internal handlers) across 20 domains: work tracking, architecture, experiments, design, git forensics, agent coordination, and more.",
   "author": "Decibel Systems",
@@ -23,6 +23,6 @@
   "platforms": ["Claude Desktop", "Claude Code", "Cursor"],
   "install": {
     "command": "npx",
-    "args": ["-y", "@decibel/tools"]
+    "args": ["-y", "@decibelsystems/tools"]
   }
 }

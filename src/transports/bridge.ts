@@ -63,7 +63,7 @@ export class BridgeAdapter implements TransportAdapter {
 
     // Create MCP Server with bridge dispatch
     this.server = new Server(
-      { name: '@decibel/tools', version: '2.0.0' },
+      { name: '@decibelsystems/tools', version: '2.0.0' },
       { capabilities: { tools: {} } }
     );
 

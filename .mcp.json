@@ -2,7 +2,7 @@
     "mcpServers": {
       "decibel-tools": {
         "command": "npx",
-        "args": ["-y", "@decibel/tools"],
+        "args": ["-y", "@decibelsystems/tools"],
         "env": {}
       }
     }

@@ -1,10 +1,10 @@
 # Decibel Tools Architecture Directive
 
-> **For AI Assistants**: Read this before implementing or modifying any tool in @decibel/tools.
+> **For AI Assistants**: Read this before implementing or modifying any tool in @decibelsystems/tools.
 
 ## Core Principle: Self-Contained MCP Server
 
-**@decibel/tools is a self-contained MCP server.** It must NOT depend on external CLIs.
+**@decibelsystems/tools is a self-contained MCP server.** It must NOT depend on external CLIs.
 
 ```
 CORRECT Architecture:
@@ -14,7 +14,7 @@ CORRECT Architecture:
                       │ MCP (stdio)
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  @decibel/tools                                          │
+│  @decibelsystems/tools                                          │
 │  ════════════════════════════════════════════════════════   │
 │  Native file operations (fs, YAML parsing)                  │
 │  NO external CLI dependencies                               │
@@ -29,7 +29,7 @@ CORRECT Architecture:
 
 WRONG Architecture (current dojo.ts bug):
 ┌─────────────────────────────────────────────────────────────┐
-│  @decibel/tools                                          │
+│  @decibelsystems/tools                                          │
 │  spawn('decibel', [...])  ← WRONG: shells out to CLI        │
 └─────────────────────┬───────────────────────────────────────┘
                       │ subprocess
@@ -103,19 +103,19 @@ export async function addWish(input: AddWishInput): Promise<...> {
 
 ## Project-Specific Extensions
 
-Project-specific tools (like senken's "mother" CLI) can build ON TOP of @decibel/tools:
+Project-specific tools (like senken's "mother" CLI) can build ON TOP of @decibelsystems/tools:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  senken's mother CLI                                        │
-│  - Can import from @decibel/tools                        │
+│  - Can import from @decibelsystems/tools                        │
 │  - Can add senken-specific commands                         │
 │  - Can extend Dojo with trading-specific experiments        │
 └─────────────────────┬───────────────────────────────────────┘
                       │ imports / extends
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  @decibel/tools (self-contained)                         │
+│  @decibelsystems/tools (self-contained)                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 

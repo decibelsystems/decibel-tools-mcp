@@ -44,7 +44,7 @@ export interface TestMcpClient {
 export async function createTestMcpClient(): Promise<TestMcpClient> {
   // Create server with same configuration as production
   const server = new Server(
-    { name: '@decibel/tools-test', version: '2.0.0' },
+    { name: '@decibelsystems/tools-test', version: '2.0.0' },
     { capabilities: { tools: {} } }
   );
 

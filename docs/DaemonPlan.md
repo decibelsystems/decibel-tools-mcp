@@ -17,7 +17,7 @@ Plan: Decibel Daemon — Unified Runtime
   in the MCP repo later. Archive it.
 
  The decibel-tools-marketplace plugin is deprecated. The marketplace directory is missing and the plugin reference in
- settings.json is broken. Phase 5 replaces it with @decibel/tools as a scoped package with proper .mcp.json config.
+ settings.json is broken. Phase 5 replaces it with @decibelsystems/tools as a scoped package with proper .mcp.json config.
 
  Phase 1: Tool Kernel Cleanup (ship first, prerequisite for everything)
 
@@ -417,9 +417,9 @@ Plan: Decibel Daemon — Unified Runtime
 
  6a. Scoped package rename
 
- - decibel-tools-mcp → @decibel/tools
+ - decibel-tools-mcp → @decibelsystems/tools
  - Update .mcp.json, plugin cache, npm publish config
- - Kill decibel-tools-marketplace plugin — @decibel/tools replaces it
+ - Kill decibel-tools-marketplace plugin — @decibelsystems/tools replaces it
 
  6b. VS Code/Cursor extension
 

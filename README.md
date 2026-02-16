@@ -1,4 +1,4 @@
-# @decibel/tools
+# @decibelsystems/tools
 
 MCP server for project intelligence. 26 facade tools (170+ internal handlers) across 20 domains: work tracking, architecture, experiments, design, git forensics, agent coordination, and more.
 
@@ -31,10 +31,10 @@ Tested with Claude Desktop, Claude Code, and Cursor. [Learn more →](https://de
 
 ```bash
 # Install globally
-npm install -g @decibel/tools
+npm install -g @decibelsystems/tools
 
 # Or run directly with npx
-npx @decibel/tools
+npx @decibelsystems/tools
 ```
 
 ## Platform Setup
@@ -48,7 +48,7 @@ Add to `~/.cursor/mcp.json`:
   "mcpServers": {
     "decibel-tools": {
       "command": "npx",
-      "args": ["-y", "@decibel/tools"]
+      "args": ["-y", "@decibelsystems/tools"]
     }
   }
 }
@@ -63,7 +63,7 @@ Add to `.mcp.json` in your project root or `~/.claude/settings.json`:
   "mcpServers": {
     "decibel-tools": {
       "command": "npx",
-      "args": ["-y", "@decibel/tools"]
+      "args": ["-y", "@decibelsystems/tools"]
     }
   }
 }
@@ -78,7 +78,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
   "mcpServers": {
     "decibel-tools": {
       "command": "npx",
-      "args": ["-y", "@decibel/tools"]
+      "args": ["-y", "@decibelsystems/tools"]
     }
   }
 }

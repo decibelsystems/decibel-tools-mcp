@@ -28,7 +28,7 @@ Add to `~/.cursor/mcp.json`:
   "mcpServers": {
     "decibel-tools": {
       "command": "npx",
-      "args": ["-y", "@decibel/tools"]
+      "args": ["-y", "@decibelsystems/tools"]
     }
   }
 }
@@ -43,7 +43,7 @@ For project-specific configuration, add to `.cursor/mcp.json` in your project ro
   "mcpServers": {
     "decibel-tools": {
       "command": "npx",
-      "args": ["-y", "@decibel/tools"]
+      "args": ["-y", "@decibelsystems/tools"]
     }
   }
 }
@@ -131,7 +131,7 @@ The agent will automatically call the appropriate MCP tools.
 1. First run downloads the package - subsequent runs are faster
 2. Consider local installation instead of npx:
    ```bash
-   npm install -g @decibel/tools
+   npm install -g @decibelsystems/tools
    ```
    Then update mcp.json:
    ```json
@@ -153,7 +153,7 @@ You can configure the server via environment variables in `mcp.json`:
   "mcpServers": {
     "decibel-tools": {
       "command": "npx",
-      "args": ["-y", "@decibel/tools"],
+      "args": ["-y", "@decibelsystems/tools"],
       "env": {
         "DECIBEL_ENV": "prod",
         "DECIBEL_MCP_ROOT": "/custom/path"

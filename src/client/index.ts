@@ -1,9 +1,9 @@
 // ============================================================================
-// @decibel/tools/client — Agent Client SDK
+// @decibelsystems/tools/client — Agent Client SDK
 // ============================================================================
 // Public API for headless agents to call Decibel facades.
 //
-// import { FacadeClient } from '@decibel/tools/client';
+// import { FacadeClient } from '@decibelsystems/tools/client';
 //
 // const client = new FacadeClient({
 //   command: 'node', args: ['dist/server.js'],
