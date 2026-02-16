@@ -46,6 +46,7 @@ import {
   filterByStatus,
   filterByEpicId,
 } from '../../sentinelIssues.js';
+import { resolveProjectPaths } from '../../projectRegistry.js';
 import {
   createTestSpec,
   CreateTestSpecInput,
@@ -509,7 +510,7 @@ export const sentinelScanTool: ToolSpec = {
       properties: {
         projectId: {
           type: 'string',
-          description: 'Project ID to scan (required for remote/HTTP access)',
+          description: 'Optional project identifier. Uses default project if not specified.',
         },
         scope: {
           type: 'string',
@@ -536,20 +537,28 @@ export const sentinelScanTool: ToolSpec = {
           description: 'Threshold in days for stale detection (default: 21)',
         },
       },
-      required: ['projectId'],
     },
   },
   handler: async (args) => {
     try {
-      requireFields(args, 'projectId');
-
       const validScopes = ['runtime', 'data', 'all'];
       const scope = (args.scope || 'data') as 'runtime' | 'data' | 'all';
       requireOneOf(scope, 'scope', validScopes);
 
+      // Resolve projectId — falls back to default project if not specified
+      let projectId = args.projectId as string | undefined;
+      if (!projectId) {
+        try {
+          const resolved = resolveProjectPaths();
+          projectId = resolved.id;
+        } catch {
+          // Let scanDataTS handle it — it has its own cwd fallback
+        }
+      }
+
       // Use TypeScript backend
       const result = await scanDataTS({
-        projectId: args.projectId as string,
+        projectId,
         scope,
         validate: args.validate ?? false,
         flag: (args.flag as DataInspectorFlag[]) || ['orphans', 'stale', 'invalid'],
@@ -581,7 +590,7 @@ export const sentinelScanDataTool: ToolSpec = {
       properties: {
         projectId: {
           type: 'string',
-          description: 'The project identifier (e.g., "my-project")',
+          description: 'Optional project identifier. Uses default project if not specified.',
         },
         validate: {
           type: 'boolean',
@@ -603,12 +612,20 @@ export const sentinelScanDataTool: ToolSpec = {
           description: 'Threshold in days for stale detection (default: 21)',
         },
       },
-      required: ['projectId'],
     },
   },
   handler: async (args) => {
     try {
-      requireFields(args, 'projectId');
+      // Resolve projectId — falls back to default project if not specified
+      let projectId = args.projectId as string | undefined;
+      if (!projectId) {
+        try {
+          const resolved = resolveProjectPaths();
+          projectId = resolved.id;
+        } catch {
+          // Let scanDataTS handle it — it has its own cwd fallback
+        }
+      }
 
       // Validate flag categories if provided
       if (args.flags && args.flags.length > 0) {
@@ -619,7 +636,7 @@ export const sentinelScanDataTool: ToolSpec = {
       }
 
       const result = await scanDataTS({
-        projectId: args.projectId as string,
+        projectId,
         scope: 'data',
         validate: args.validate ?? false,
         flag: (args.flags as DataInspectorFlag[]) ?? [],
@@ -655,7 +672,7 @@ export const sentinelListIssuesTool: ToolSpec = {
       properties: {
         projectId: {
           type: 'string',
-          description: 'The project identifier (e.g., "my-project")',
+          description: 'Optional project identifier. Uses default project if not specified.',
         },
         status: {
           type: 'string',
@@ -667,19 +684,20 @@ export const sentinelListIssuesTool: ToolSpec = {
           description: 'Optional filter by epic ID (e.g., "EPIC-0001")',
         },
       },
-      required: ['projectId'],
     },
   },
   handler: async (args) => {
     try {
-      requireFields(args, 'projectId');
+      // Resolve projectId — falls back to default project if not specified
+      const resolved = resolveProjectPaths(args.projectId as string | undefined);
+      const projectId = resolved.id;
 
       if (args.status) {
         const validStatuses: SentinelIssueStatus[] = ['open', 'in_progress', 'done', 'blocked'];
         requireOneOf(args.status, 'status', validStatuses);
       }
 
-      let issues = await listIssuesForProject(args.projectId);
+      let issues = await listIssuesForProject(projectId);
 
       // Apply filters
       if (args.status) {
@@ -723,7 +741,7 @@ export const sentinelCreateIssueTool2: ToolSpec = {
       properties: {
         projectId: {
           type: 'string',
-          description: 'The project identifier (e.g., "my-project")',
+          description: 'Optional project identifier. Uses default project if not specified.',
         },
         title: {
           type: 'string',
@@ -749,20 +767,23 @@ export const sentinelCreateIssueTool2: ToolSpec = {
           description: 'Tags for categorization',
         },
       },
-      required: ['projectId', 'title'],
+      required: ['title'],
     },
   },
   handler: withRunTracking(
     async (args) => {
       try {
-        requireFields(args, 'projectId', 'title');
+        requireFields(args, 'title');
+
+        // Resolve projectId — falls back to default project if not specified
+        const resolved = resolveProjectPaths(args.projectId as string | undefined);
 
         if (args.priority) {
           const validPriorities: SentinelIssuePriority[] = ['low', 'medium', 'high'];
           requireOneOf(args.priority, 'priority', validPriorities);
         }
 
-        const result = await createSentinelIssue(args as CreateSentinelIssueInput);
+        const result = await createSentinelIssue({ ...args, projectId: resolved.id } as CreateSentinelIssueInput);
         return toolSuccess(result);
       } catch (err) {
         return toolError(err instanceof Error ? err.message : String(err));
@@ -793,22 +814,25 @@ export const sentinelReadIssueTool: ToolSpec = {
       properties: {
         projectId: {
           type: 'string',
-          description: 'The project identifier (e.g., "decibel-agent")',
+          description: 'Optional project identifier. Uses default project if not specified.',
         },
         issue_id: {
           type: 'string',
           description: 'Issue ID (e.g., "ISS-0005")',
         },
       },
-      required: ['projectId', 'issue_id'],
+      required: ['issue_id'],
     },
   },
   handler: async (args) => {
     try {
-      requireFields(args, 'projectId', 'issue_id');
-      const issue = await getIssueById(args.projectId as string, args.issue_id as string);
+      requireFields(args, 'issue_id');
+      // Resolve projectId — falls back to default project if not specified
+      const resolved = resolveProjectPaths(args.projectId as string | undefined);
+      const projectId = resolved.id;
+      const issue = await getIssueById(projectId, args.issue_id as string);
       if (!issue) {
-        return toolError(`Issue ${args.issue_id} not found in project ${args.projectId}`);
+        return toolError(`Issue ${args.issue_id} not found in project ${projectId}`);
       }
       return toolSuccess(issue);
     } catch (err) {
@@ -836,7 +860,7 @@ export const sentinelUpdateIssueTool: ToolSpec = {
       properties: {
         projectId: {
           type: 'string',
-          description: 'The project identifier',
+          description: 'Optional project identifier. Uses default project if not specified.',
         },
         issue_id: {
           type: 'string',
@@ -862,15 +886,18 @@ export const sentinelUpdateIssueTool: ToolSpec = {
           description: 'Note to append to the description (auto-timestamped)',
         },
       },
-      required: ['projectId', 'issue_id'],
+      required: ['issue_id'],
     },
   },
   handler: async (args) => {
     try {
       const rawInput = args as Record<string, unknown>;
-      const projectId = (rawInput.projectId ?? rawInput.project_id) as string;
       const issueId = (rawInput.issue_id ?? rawInput.issueId) as string;
-      requireFields({ projectId, issue_id: issueId }, 'projectId', 'issue_id');
+      requireFields({ issue_id: issueId }, 'issue_id');
+      // Resolve projectId — falls back to default project if not specified
+      const rawProjectId = (rawInput.projectId ?? rawInput.project_id) as string | undefined;
+      const resolved = resolveProjectPaths(rawProjectId || undefined);
+      const projectId = resolved.id;
 
       const result = await updateSentinelIssue({
         projectId,
