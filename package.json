@@ -1,5 +1,5 @@
 {
-  "name": "@decibel/tools",
+  "name": "@decibelsystems/tools",
   "version": "2.0.0",
   "bin": {
     "decibel-tools": "dist/server.js"
