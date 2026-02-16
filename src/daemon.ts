@@ -5,7 +5,7 @@
 // integration for long-running daemon mode.
 // ============================================================================
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, copyFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, copyFileSync, statSync, renameSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { execSync } from 'child_process';
@@ -101,6 +101,130 @@ export function checkRunning(): number | null {
 export function getLogPath(): string {
   ensureDir(LOG_DIR);
   return LOG_PATH;
+}
+
+// ============================================================================
+// Log Rotation
+// ============================================================================
+
+const DEFAULT_MAX_LOG_BYTES = 10 * 1024 * 1024; // 10MB
+const DEFAULT_MAX_LOG_FILES = 3;
+
+/**
+ * Rotate a log file if it exceeds maxSizeBytes.
+ * Rotation: file → file.1 → file.2 → ... → file.{maxFiles} (deleted)
+ * Returns true if rotation occurred.
+ */
+export function rotateLog(
+  filePath: string,
+  maxSizeBytes: number = DEFAULT_MAX_LOG_BYTES,
+  maxFiles: number = DEFAULT_MAX_LOG_FILES,
+): boolean {
+  try {
+    if (!existsSync(filePath)) return false;
+    const stat = statSync(filePath);
+    if (stat.size < maxSizeBytes) return false;
+
+    // Shift existing rotated files: .3 → delete, .2 → .3, .1 → .2
+    for (let i = maxFiles; i >= 1; i--) {
+      const src = i === 1 ? filePath : `${filePath}.${i - 1}`;
+      const dst = `${filePath}.${i}`;
+      if (i === maxFiles && existsSync(dst)) {
+        unlinkSync(dst);
+      }
+      if (existsSync(src)) {
+        renameSync(src, dst);
+      }
+    }
+
+    // Create empty file in place of the original (which was renamed to .1)
+    writeFileSync(filePath, '', 'utf-8');
+    log(`Daemon: Rotated log ${filePath} (was ${(stat.size / 1024 / 1024).toFixed(1)}MB)`);
+    return true;
+  } catch (err) {
+    log(`Daemon: Log rotation failed for ${filePath}: ${err}`);
+    return false;
+  }
+}
+
+// ============================================================================
+// Crash Loop Protection
+// ============================================================================
+
+const META_PATH = join(DECIBEL_HOME, 'daemon.meta');
+const MAX_CRASH_COUNT = 5;
+const CRASH_WINDOW_MS = 60_000; // 60 seconds
+const HEALTH_RESET_MS = 5 * 60_000; // 5 minutes
+
+interface DaemonMeta {
+  started_at: string;
+  crash_count: number;
+}
+
+function readMeta(): DaemonMeta | null {
+  try {
+    return JSON.parse(readFileSync(META_PATH, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function writeMeta(meta: DaemonMeta): void {
+  ensureDir(DECIBEL_HOME);
+  writeFileSync(META_PATH, JSON.stringify(meta), 'utf-8');
+}
+
+/**
+ * Check for crash loop. Returns true if safe to start, false if should exit.
+ * Exits process with code 0 if crash loop detected (tells launchd to stop).
+ */
+export function checkCrashLoop(): boolean {
+  const now = Date.now();
+  const meta = readMeta();
+
+  let crashCount = 0;
+  if (meta) {
+    const lastStart = new Date(meta.started_at).getTime();
+    if (now - lastStart < CRASH_WINDOW_MS) {
+      crashCount = meta.crash_count + 1;
+    }
+    // else: enough time has passed, reset
+  }
+
+  if (crashCount >= MAX_CRASH_COUNT) {
+    console.error(`Daemon: Crash loop detected (${crashCount} crashes in <60s). Exiting.`);
+    console.error('Daemon: Run with --reset-crashes to clear the counter.');
+    writeMeta({ started_at: new Date().toISOString(), crash_count: crashCount });
+    return false;
+  }
+
+  writeMeta({ started_at: new Date().toISOString(), crash_count: crashCount });
+  if (crashCount > 0) {
+    log(`Daemon: Crash count: ${crashCount}/${MAX_CRASH_COUNT}`);
+  }
+  return true;
+}
+
+/**
+ * Reset crash count after healthy running period.
+ * Call once after successful startup.
+ */
+export function scheduleHealthReset(): void {
+  setTimeout(() => {
+    const meta = readMeta();
+    if (meta && meta.crash_count > 0) {
+      writeMeta({ started_at: meta.started_at, crash_count: 0 });
+      log('Daemon: Crash counter reset after healthy running');
+    }
+  }, HEALTH_RESET_MS);
+}
+
+/**
+ * Clear crash counter (for --reset-crashes CLI flag).
+ */
+export function resetCrashes(): void {
+  writeMeta({ started_at: new Date().toISOString(), crash_count: 0 });
+  console.log('Daemon: Crash counter reset.');
 }
 
 // ============================================================================

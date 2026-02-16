@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 const PRO_CONTEXT_KEY = 'decibel.isPro';
 const CACHE_KEY = 'decibel.licenseCache';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const OFFLINE_GRACE_MS = 72 * 60 * 60 * 1000; // 72 hours
 
 // License key format: DCBL-XXXX-XXXX-XXXX (alphanumeric segments)
 const KEY_PATTERN = /^DCBL-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
@@ -78,15 +79,21 @@ export class ProGate {
       if (age < CACHE_TTL_MS) return true;
     }
 
-    // Remote validation (non-blocking — fall back to format check if offline)
+    // Remote validation (non-blocking — fall back to cache if offline)
     try {
       const result = await this.validateKey(key.toUpperCase());
       await this.cacheResult({ key: key.toUpperCase(), tier: result.tier, valid: result.valid, checkedAt: Date.now() });
       return result.valid;
     } catch {
-      // Network failure — trust cache if it exists, otherwise accept format match
-      if (cached && cached.key === key.toUpperCase()) return cached.valid;
-      return true; // graceful degradation: format-valid key accepted offline
+      // Network failure — trust cache within 72h grace period
+      if (cached && cached.key === key.toUpperCase()) {
+        const cacheAge = Date.now() - cached.checkedAt;
+        if (cacheAge < OFFLINE_GRACE_MS) {
+          return cached.valid;
+        }
+      }
+      // No cache or cache too old — reject (was: accept format match)
+      return false;
     }
   }
 
@@ -140,6 +147,14 @@ export class ProGate {
       // Network error — re-throw so evaluate() can handle graceful degradation
       throw new Error('License verification unavailable');
     }
+  }
+
+  /**
+   * Get the current license key for daemon bridge passthrough.
+   * The daemon validates it independently.
+   */
+  getLicenseKey(): string {
+    return vscode.workspace.getConfiguration('decibel').get<string>('licenseKey', '');
   }
 
   private getCachedResult(): LicenseCache | undefined {

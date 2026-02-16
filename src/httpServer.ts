@@ -26,6 +26,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { timingSafeEqual } from 'crypto';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { readFileSync } from 'fs';
@@ -34,6 +35,7 @@ import { dirname, join } from 'path';
 import { log } from './config.js';
 import { isSupabaseConfigured } from './lib/supabase.js';
 import type { ToolKernel, DispatchContext } from './kernel.js';
+import { getLicenseValidator } from './license.js';
 import { listProjects } from './projectRegistry.js';
 import {
   listEpics,
@@ -70,6 +72,69 @@ let kernel: ToolKernel;
 let landingPageHtml = '';
 let startedAt: number = 0;
 let sseConnectionCount = 0;
+
+// ============================================================================
+// Security: Body Size Limit
+// ============================================================================
+
+const MAX_BODY_BYTES = 1_048_576; // 1MB
+
+// ============================================================================
+// Security: Rate Limiter
+// ============================================================================
+
+class RateLimiter {
+  private windows = new Map<string, { count: number; start: number }>();
+  private maxRpm: number;
+
+  constructor(maxRpm: number) {
+    this.maxRpm = maxRpm;
+  }
+
+  /** Returns true if the request should be allowed */
+  check(ip: string): boolean {
+    const now = Date.now();
+    const entry = this.windows.get(ip);
+
+    if (!entry || now - entry.start > 60_000) {
+      this.windows.set(ip, { count: 1, start: now });
+      return true;
+    }
+
+    entry.count++;
+    return entry.count <= this.maxRpm;
+  }
+
+  /** Update the max RPM (e.g. on config reload) */
+  setMaxRpm(rpm: number): void {
+    this.maxRpm = rpm;
+  }
+
+  /** Periodic cleanup of expired windows */
+  cleanup(): void {
+    const now = Date.now();
+    for (const [ip, entry] of this.windows) {
+      if (now - entry.start > 60_000) {
+        this.windows.delete(ip);
+      }
+    }
+  }
+}
+
+// ============================================================================
+// Security: Timing-Safe Token Comparison
+// ============================================================================
+
+function timingSafeTokenCompare(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided, 'utf-8');
+  const b = Buffer.from(expected, 'utf-8');
+  if (a.length !== b.length) {
+    // Still do a comparison to keep timing constant
+    timingSafeEqual(a, a);
+    return false;
+  }
+  return timingSafeEqual(a, b);
+}
 
 // ============================================================================
 // Version Info
@@ -245,12 +310,21 @@ function sendJson(res: ServerResponse, statusCode: number, data: StatusEnvelope)
 }
 
 /**
- * Parse JSON body from request
+ * Parse JSON body from request (with 1MB size limit)
  */
 async function parseBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', (chunk) => { body += chunk; });
+    let bytes = 0;
+    req.on('data', (chunk: Buffer | string) => {
+      bytes += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
+      if (bytes > MAX_BODY_BYTES) {
+        req.destroy();
+        reject(new Error('Request body too large (max 1MB)'));
+        return;
+      }
+      body += chunk;
+    });
     req.on('end', () => {
       try {
         resolve(body ? JSON.parse(body) : {});
@@ -273,7 +347,8 @@ async function parseBody(req: IncomingMessage): Promise<Record<string, unknown>>
 async function executeTool(
   tool: string,
   args: Record<string, unknown>,
-  req?: IncomingMessage
+  req?: IncomingMessage,
+  tierOverride?: 'core' | 'pro' | 'apps',
 ): Promise<StatusEnvelope> {
   try {
     // Extract agent context from HTTP headers
@@ -282,7 +357,8 @@ async function executeTool(
       runId: req.headers['x-run-id'] as string | undefined,
       parentCallId: req.headers['x-parent-call-id'] as string | undefined,
       scope: req.headers['x-scope'] as string | undefined,
-    } : undefined;
+      tier: tierOverride,
+    } : tierOverride ? { tier: tierOverride } : undefined;
 
     const toolResult = await kernel.dispatch(tool, args, context);
     const text = toolResult.content[0]?.text;
@@ -366,6 +442,38 @@ function getOpenAITools(): OpenAIFunction[] {
   }));
 }
 
+// ============================================================================
+// License Tier Resolution
+// ============================================================================
+
+/**
+ * Resolve the caller's license tier from the request.
+ * - DECIBEL_PRO=1 env var → skip validation (dev mode)
+ * - Authorization header with DCBL-XXXX key → validate via LicenseValidator
+ * - No key → 'core' tier (only core facades)
+ * - Config-level key → use that as default
+ */
+async function resolveTier(
+  req: IncomingMessage,
+  configLicenseKey?: string,
+): Promise<'core' | 'pro' | 'apps'> {
+  // Dev mode bypass
+  if (process.env.DECIBEL_PRO === '1' || process.env.NODE_ENV !== 'production') {
+    return 'pro';
+  }
+
+  // Extract license key from Authorization header (separate from auth token)
+  // Format: X-License-Key: DCBL-XXXX-XXXX-XXXX
+  const licenseHeader = req.headers['x-license-key'] as string | undefined;
+  const key = licenseHeader || configLicenseKey;
+
+  if (!key) return 'core';
+
+  const validator = getLicenseValidator();
+  const result = await validator.validate(key);
+  return result.valid ? result.tier : 'core';
+}
+
 export interface HttpServerOptions {
   port: number;
   authToken?: string;
@@ -374,6 +482,11 @@ export interface HttpServerOptions {
   sseKeepaliveMs?: number;      // Heartbeat interval (default: 30000)
   timeoutMs?: number;            // Request timeout (default: 120000)
   retryIntervalMs?: number;      // SSE retry interval for clients (default: 3000)
+  // Security settings
+  rateLimitRpm?: number;         // Max requests per minute per IP (default: 100)
+  isDaemon?: boolean;            // Running in daemon mode (affects CORS policy)
+  // License
+  configLicenseKey?: string;     // License key from config file (fallback)
 }
 
 /**
@@ -402,12 +515,19 @@ export async function startHttpServer(
     sseKeepaliveMs = 30000,     // Send keepalive every 30s
     timeoutMs = 120000,         // 2 minute default timeout
     retryIntervalMs = 3000,     // 3s retry for SSE clients
+    rateLimitRpm = 100,         // 100 req/min per IP default
+    isDaemon = false,
+    configLicenseKey,
   } = options;
 
   // Set module-level references
   kernel = kernelInstance;
   startedAt = Date.now();
   log(`HTTP: Using kernel with ${kernel.toolCount} tools`);
+
+  // Rate limiter (clean up stale entries every 60s)
+  const rateLimiter = new RateLimiter(rateLimitRpm);
+  const rateLimiterCleanup = setInterval(() => rateLimiter.cleanup(), 60_000);
 
   // Build landing page from actual tool list
   landingPageHtml = buildLandingPageHtml(getAvailableTools());
@@ -425,6 +545,9 @@ export async function startHttpServer(
 
   // Track active SSE connections for keepalive
   const activeSseConnections = new Set<ServerResponse>();
+
+  // Track active in-flight requests for graceful shutdown
+  const activeRequests = new Set<IncomingMessage>();
 
   // Start SSE keepalive heartbeat
   const keepaliveInterval = setInterval(() => {
@@ -457,8 +580,18 @@ export async function startHttpServer(
 
     log(`HTTP: ${req.method} ${path}`);
 
-    // CORS headers for browser access (required for ChatGPT connector)
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // CORS headers — /mcp needs '*' for ChatGPT; REST endpoints restrict to localhost in daemon mode
+    const isMcpRoute = path === '/mcp' || path === '/sse' || path === '/sse/';
+    if (isMcpRoute || !isDaemon) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    } else {
+      // Daemon mode: restrict REST endpoints to localhost origins
+      const origin = req.headers.origin || '';
+      const localhostOrigins = ['http://localhost', 'http://127.0.0.1', 'https://localhost', 'https://127.0.0.1'];
+      if (localhostOrigins.some(lo => origin.startsWith(lo)) || !origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin || 'http://localhost');
+      }
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, Accept');
     res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
@@ -469,6 +602,19 @@ export async function startHttpServer(
       res.end();
       return;
     }
+
+    // Rate limiting (check before auth to prevent brute force)
+    const clientIp = (req.socket.remoteAddress || '127.0.0.1').replace('::ffff:', '');
+    if (!rateLimiter.check(clientIp)) {
+      log(`HTTP: Rate limited ${clientIp}`);
+      sendJson(res, 429, wrapError('Too many requests (rate limit exceeded)', 'RATE_LIMITED'));
+      return;
+    }
+
+    // Track in-flight request
+    activeRequests.add(req);
+    res.on('finish', () => activeRequests.delete(req));
+    res.on('close', () => activeRequests.delete(req));
 
     // (c) Root health check - GET / returns 200
     if (path === '/' && req.method === 'GET') {
@@ -485,6 +631,13 @@ export async function startHttpServer(
     // Health check at /health too
     if (path === '/health') {
       const uptimeMs = Date.now() - startedAt;
+      // Determine pro status from config license key
+      const proEnabled = process.env.DECIBEL_PRO === '1' || process.env.NODE_ENV !== 'production';
+      let licenseTier: string = proEnabled ? 'pro' : 'core';
+      if (configLicenseKey && !proEnabled) {
+        const cached = getLicenseValidator().getCachedResult(configLicenseKey);
+        if (cached) licenseTier = cached.tier;
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         status: 'ok',
@@ -496,6 +649,9 @@ export async function startHttpServer(
         facade_count: kernel.facadeCount,
         internal_tool_count: kernel.toolCount,
         connected_clients: activeSseConnections.size,
+        active_requests: activeRequests.size,
+        pro: licenseTier !== 'core',
+        license_tier: licenseTier,
         supabase_configured: isSupabaseConfigured(),
       }));
       return;
@@ -611,10 +767,10 @@ export async function startHttpServer(
       return;
     }
 
-    // Auth check (if token provided)
+    // Auth check (timing-safe comparison to prevent timing attacks)
     if (authToken) {
       const authHeader = req.headers.authorization;
-      if (!authHeader || authHeader !== `Bearer ${authToken}`) {
+      if (!authHeader || !timingSafeTokenCompare(authHeader, `Bearer ${authToken}`)) {
         log('HTTP: Unauthorized request');
         sendJson(res, 401, wrapError('Unauthorized', 'UNAUTHORIZED'));
         return;
@@ -666,12 +822,17 @@ export async function startHttpServer(
           return;
         }
 
-        log(`HTTP: /call tool=${tool}`);
-        const result = await executeTool(tool, args);
+        const tier = await resolveTier(req, configLicenseKey);
+        log(`HTTP: /call tool=${tool} tier=${tier}`);
+        const result = await executeTool(tool, args, req, tier);
         sendJson(res, result.status === 'error' ? 400 : 200, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+        if (message.includes('too large')) {
+          sendJson(res, 413, wrapError(message, 'BODY_TOO_LARGE'));
+        } else {
+          sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
+        }
       }
       return;
     }
@@ -692,6 +853,8 @@ export async function startHttpServer(
           return;
         }
 
+        const tier = await resolveTier(req, configLicenseKey);
+
         // Build context from headers + optional body context
         const bodyContext = (body.context || {}) as Record<string, string>;
         const context: DispatchContext = {
@@ -700,9 +863,10 @@ export async function startHttpServer(
           parentCallId: (req.headers['x-parent-call-id'] as string) || bodyContext.parentCallId,
           scope: (req.headers['x-scope'] as string) || bodyContext.scope,
           allowedFacades: bodyContext.allowedFacades as unknown as string[] | undefined,
+          tier,
         };
 
-        log(`HTTP: /batch — ${calls.length} calls (agent=${context.agentId || 'anonymous'})`);
+        log(`HTTP: /batch — ${calls.length} calls (agent=${context.agentId || 'anonymous'}, tier=${tier})`);
         const results = await kernel.batch(calls, context);
         sendJson(res, 200, { status: 'executed', results });
       } catch (error) {
@@ -1761,12 +1925,35 @@ ${authToken ? '║  Auth:     Bearer token required                             
   return {
     async stop() {
       clearInterval(keepaliveInterval);
+      clearInterval(rateLimiterCleanup);
+
+      // Stop accepting new connections
+      httpServer.close(() => {});
+
+      // Wait for in-flight requests to drain (max 10s)
+      if (activeRequests.size > 0) {
+        log(`HTTP: Waiting for ${activeRequests.size} in-flight request(s) to drain...`);
+        const drainStart = Date.now();
+        while (activeRequests.size > 0 && Date.now() - drainStart < 10_000) {
+          await new Promise(r => setTimeout(r, 100));
+        }
+        if (activeRequests.size > 0) {
+          log(`HTTP: ${activeRequests.size} request(s) still active after 10s drain timeout`);
+        }
+      }
+
+      // Close SSE connections
       for (const conn of activeSseConnections) {
         try { if (!conn.writableEnded) conn.end(); } catch { /* ignore */ }
       }
       activeSseConnections.clear();
-      await new Promise<void>((resolve, reject) => {
-        httpServer.close((err) => err ? reject(err) : resolve());
+
+      // Final close
+      await new Promise<void>((resolve) => {
+        // Server may already be closed from above — handle gracefully
+        httpServer.close(() => resolve());
+        // If already closed, resolve immediately
+        setTimeout(resolve, 100);
       });
       log('HTTP server stopped');
     },

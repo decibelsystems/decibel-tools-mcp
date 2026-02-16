@@ -40,6 +40,8 @@ export interface DispatchContext {
   scope?: string;
   /** Restrict dispatch to these facades only (undefined = all allowed) */
   allowedFacades?: string[];
+  /** License tier — when set, pro facades are rejected for 'core' tier */
+  tier?: 'core' | 'pro' | 'apps';
 }
 
 // Tier gating (same logic as tools/index.ts)
@@ -188,6 +190,38 @@ export async function createKernel(): Promise<ToolKernel> {
           }) }],
           isError: true,
         };
+      }
+    }
+
+    // Tier enforcement: reject pro/apps facade calls from core-tier callers
+    if (context?.tier === 'core') {
+      const targetFacade = facadeMap.get(name);
+      if (targetFacade && (targetFacade.tier === 'pro' || targetFacade.tier === 'apps')) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({
+            error: `Facade "${name}" requires a pro license`,
+            facade_tier: targetFacade.tier,
+            caller_tier: 'core',
+            hint: 'Provide a valid DCBL license key to access pro features',
+          }) }],
+          isError: true,
+        };
+      }
+      // Also check direct tool calls that map to pro facades
+      if (!targetFacade) {
+        const facadePrefix = name.split('_')[0];
+        const parentFacade = facadeMap.get(facadePrefix);
+        if (parentFacade && (parentFacade.tier === 'pro' || parentFacade.tier === 'apps')) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({
+              error: `Tool "${name}" belongs to pro facade "${facadePrefix}"`,
+              facade_tier: parentFacade.tier,
+              caller_tier: 'core',
+              hint: 'Provide a valid DCBL license key to access pro features',
+            }) }],
+            isError: true,
+          };
+        }
       }
     }
 

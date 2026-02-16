@@ -19,6 +19,11 @@ export interface TransportConfig {
   sseKeepaliveMs?: number;
   timeoutMs?: number;
   retryIntervalMs?: number;
+  // Security
+  rateLimitRpm?: number;
+  isDaemon?: boolean;
+  // License
+  configLicenseKey?: string;
 }
 
 /**

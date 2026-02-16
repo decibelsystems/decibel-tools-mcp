@@ -355,6 +355,21 @@ export const coreFacades: FacadeSpec[] = [
     },
   },
 
+  {
+    name: 'guardian',
+    description: 'Security scanning: dependency audits, secret detection, HTTP surface checks, config review. Actions: scan_deps, scan_secrets, scan_http, scan_config, report',
+    compactDescription: 'Security scanning and vulnerability detection',
+    microEligible: false,
+    tier: 'core',
+    actions: {
+      scan_deps: 'guardian_scan_deps',
+      scan_secrets: 'guardian_scan_secrets',
+      scan_http: 'guardian_scan_http',
+      scan_config: 'guardian_scan_config',
+      report: 'guardian_report',
+    },
+  },
+
 ];
 
 // ============================================================================

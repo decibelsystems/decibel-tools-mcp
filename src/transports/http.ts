@@ -24,6 +24,9 @@ export class HttpAdapter implements TransportAdapter {
       sseKeepaliveMs: config.sseKeepaliveMs,
       timeoutMs: config.timeoutMs,
       retryIntervalMs: config.retryIntervalMs,
+      rateLimitRpm: config.rateLimitRpm,
+      isDaemon: config.isDaemon,
+      configLicenseKey: config.configLicenseKey,
     });
     log('HTTP transport started');
   }

@@ -30,7 +30,13 @@ import {
   installShutdownHandlers,
   handleDaemonSubcommand,
   getLogPath,
+  rotateLog,
+  checkCrashLoop,
+  scheduleHealthReset,
+  resetCrashes,
 } from './daemon.js';
+import { loadConfig } from './daemonConfig.js';
+import { getLicenseValidator } from './license.js';
 
 const config = getConfig();
 
@@ -48,20 +54,37 @@ async function main() {
   // Handle daemon subcommands (install, uninstall, status) — exits process
   if (daemonMode && handleDaemonSubcommand(args)) return;
 
+  // Handle --reset-crashes flag
+  if (args.includes('--reset-crashes')) {
+    resetCrashes();
+    process.exit(0);
+  }
+
   // Parse transport config
   const { httpMode, port, authToken, host, sseKeepaliveMs, timeoutMs, retryIntervalMs } = parseHttpArgs(args);
 
+  // Load daemon config file (CLI flags override config)
+  const daemonConfig = loadConfig();
+
   const transportConfig: TransportConfig = {
-    port: daemonMode ? (port || 4888) : port,  // Daemon defaults to 4888
-    host,
-    authToken,
+    port: daemonMode ? (port || daemonConfig.daemon.port || 4888) : port,
+    host: host || (daemonMode ? daemonConfig.daemon.host : undefined),
+    authToken: authToken || daemonConfig.daemon.auth_token,
     sseKeepaliveMs,
     timeoutMs,
     retryIntervalMs,
+    isDaemon: daemonMode,
+    rateLimitRpm: daemonConfig.daemon.rate_limit_rpm,
+    configLicenseKey: daemonConfig.license?.key,
   };
 
-  // Daemon lifecycle: check lock, write PID, setup shutdown
+  // Daemon lifecycle: check lock, crash loop, write PID, setup shutdown
   if (daemonMode) {
+    // Crash loop protection: exit cleanly if restarting too fast
+    if (!checkCrashLoop()) {
+      process.exit(0); // Exit 0 tells launchd to stop retrying
+    }
+
     const existingPid = checkRunning();
     if (existingPid) {
       console.error(`Daemon already running (PID ${existingPid}).`);
@@ -71,28 +94,87 @@ async function main() {
     }
 
     writePid();
+    scheduleHealthReset(); // Reset crash counter after 5 minutes of healthy running
     log(`Daemon: mode active, PID ${process.pid}, port ${transportConfig.port}`);
     log(`Daemon: log file at ${getLogPath()}`);
+
+    // Pre-validate license key from config (fire and forget)
+    if (daemonConfig.license?.key) {
+      getLicenseValidator().prevalidate(daemonConfig.license.key);
+    }
   }
 
   // Create kernel
   const kernel = await createKernel();
   const adapters: TransportAdapter[] = [];
 
-  // In daemon mode, log all dispatches to dispatch.jsonl
+  // In daemon mode, log all dispatches to dispatch.jsonl (async buffered writes + rotation)
   if (daemonMode) {
     const logsDir = path.join(process.env.HOME || '~', '.decibel', 'logs');
     fs.mkdirSync(logsDir, { recursive: true });
     const dispatchLogPath = path.join(logsDir, 'dispatch.jsonl');
+    const daemonLogPath = path.join(logsDir, 'daemon.log');
+
+    // Parse log rotation CLI flags
+    const maxSizeIdx = args.indexOf('--log-max-size');
+    const maxFilesIdx = args.indexOf('--log-max-files');
+    const logMaxSizeBytes = maxSizeIdx !== -1
+      ? parseInt(args[maxSizeIdx + 1], 10) * 1024 * 1024
+      : 10 * 1024 * 1024; // 10MB default
+    const logMaxFiles = maxFilesIdx !== -1
+      ? parseInt(args[maxFilesIdx + 1], 10)
+      : 3;
+
+    let writesSinceRotationCheck = 0;
+
+    // Buffered async writer — batches writes to reduce I/O
+    let writeBuffer: string[] = [];
+    let writeTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushBuffer = async () => {
+      if (writeBuffer.length === 0) return;
+      const batch = writeBuffer.join('');
+      writeBuffer = [];
+      try {
+        // Check rotation every 100 writes
+        writesSinceRotationCheck += batch.split('\n').length;
+        if (writesSinceRotationCheck >= 100) {
+          writesSinceRotationCheck = 0;
+          rotateLog(dispatchLogPath, logMaxSizeBytes, logMaxFiles);
+        }
+        await fs.promises.appendFile(dispatchLogPath, batch);
+      } catch (err) {
+        log(`Daemon: dispatch log write error: ${err}`);
+      }
+    };
 
     const writeEvent = (evt: DispatchEvent) => {
-      fs.appendFileSync(dispatchLogPath, JSON.stringify(evt) + '\n');
+      writeBuffer.push(JSON.stringify(evt) + '\n');
+      // Flush every 500ms or when buffer reaches 50 entries
+      if (writeBuffer.length >= 50) {
+        if (writeTimer) clearTimeout(writeTimer);
+        writeTimer = null;
+        flushBuffer();
+      } else if (!writeTimer) {
+        writeTimer = setTimeout(() => {
+          writeTimer = null;
+          flushBuffer();
+        }, 500);
+      }
     };
 
     kernel.on('dispatch', writeEvent);
     kernel.on('result', writeEvent);
     kernel.on('error', writeEvent);
+
+    // SIGHUP: rotate daemon.log (launchd sends this for log rotation)
+    process.on('SIGHUP', () => {
+      log('Daemon: SIGHUP received, rotating logs');
+      rotateLog(dispatchLogPath, logMaxSizeBytes, logMaxFiles);
+      rotateLog(daemonLogPath, logMaxSizeBytes, logMaxFiles);
+    });
+
     log(`Daemon: dispatch log at ${dispatchLogPath}`);
+    log(`Daemon: log rotation: max ${logMaxSizeBytes / 1024 / 1024}MB, keep ${logMaxFiles} files`);
   }
 
   // Start transport(s)
