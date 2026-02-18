@@ -50,10 +50,29 @@ export interface CallError {
 
 export type FacadeResponse<T = unknown> = CallResult<T> | CallError;
 
+/**
+ * Per-call context that overrides config-level defaults.
+ * Threaded via _meta in MCP args, or via HTTP headers on HttpTransport.
+ */
+export interface CallContext {
+  /** Project ID or 'portfolio' — overrides config.projectId for this call */
+  scope?: string;
+  /** Override config-level agentId for this call */
+  agentId?: string;
+  /** Trace correlation — vector run ID */
+  runId?: string;
+  /** Engagement mode: 'suggest' | 'curate' | 'compose' */
+  engagementMode?: string;
+  /** Identity of the calling user */
+  userKey?: string;
+}
+
 export interface BatchCall {
   facade: string;
   action: string;
   params?: Record<string, unknown>;
+  /** Per-call context (merged with batch-level context if both provided) */
+  context?: CallContext;
 }
 
 export interface BatchResult {

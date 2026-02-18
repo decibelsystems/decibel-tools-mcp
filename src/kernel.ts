@@ -42,6 +42,12 @@ export interface DispatchContext {
   allowedFacades?: string[];
   /** License tier — when set, pro facades are rejected for 'core' tier */
   tier?: 'core' | 'pro' | 'apps';
+  /** Engagement mode: 'suggest' | 'curate' | 'compose' */
+  engagementMode?: string;
+  /** Identity of the calling user */
+  userKey?: string;
+  /** Request correlation ID (crypto.randomUUID) — set by client, threaded through events */
+  requestId?: string;
 }
 
 // Tier gating (same logic as tools/index.ts)
@@ -63,6 +69,7 @@ export interface DispatchEvent {
   tool?: string;
   agentId: string;
   runId?: string;
+  requestId?: string;
   timestamp: string;
   duration_ms?: number;
   success?: boolean;
@@ -175,6 +182,7 @@ export async function createKernel(): Promise<ToolKernel> {
   ): Promise<ToolResult> {
     const agentId = context?.agentId || 'anonymous';
     const runId = context?.runId;
+    const requestId = context?.requestId;
     const allowed = context?.allowedFacades;
 
     // Facade filtering: reject if caller is scoped and facade not in allowlist
@@ -271,14 +279,14 @@ export async function createKernel(): Promise<ToolKernel> {
       const startTime = Date.now();
       emitter.emit('dispatch', {
         type: 'dispatch', facade: name, action, tool: internalName,
-        agentId, runId, timestamp: new Date().toISOString(),
+        agentId, runId, requestId, timestamp: new Date().toISOString(),
       } satisfies DispatchEvent);
 
       try {
         const result = await tool.handler(params);
         emitter.emit('result', {
           type: 'result', facade: name, action, tool: internalName,
-          agentId, runId, timestamp: new Date().toISOString(),
+          agentId, runId, requestId, timestamp: new Date().toISOString(),
           duration_ms: Date.now() - startTime, success: !result.isError,
         } satisfies DispatchEvent);
         return result;
@@ -286,7 +294,7 @@ export async function createKernel(): Promise<ToolKernel> {
         const errMsg = err instanceof Error ? err.message : String(err);
         emitter.emit('error', {
           type: 'error', facade: name, action, tool: internalName,
-          agentId, runId, timestamp: new Date().toISOString(),
+          agentId, runId, requestId, timestamp: new Date().toISOString(),
           duration_ms: Date.now() - startTime,
           error: errMsg,
         } satisfies DispatchEvent);
@@ -317,14 +325,14 @@ export async function createKernel(): Promise<ToolKernel> {
     const startTime = Date.now();
     emitter.emit('dispatch', {
       type: 'dispatch', tool: name,
-      agentId, runId, timestamp: new Date().toISOString(),
+      agentId, runId, requestId, timestamp: new Date().toISOString(),
     } satisfies DispatchEvent);
 
     try {
       const result = await tool.handler(args);
       emitter.emit('result', {
         type: 'result', tool: name,
-        agentId, runId, timestamp: new Date().toISOString(),
+        agentId, runId, requestId, timestamp: new Date().toISOString(),
         duration_ms: Date.now() - startTime, success: !result.isError,
       } satisfies DispatchEvent);
       return result;
@@ -332,7 +340,7 @@ export async function createKernel(): Promise<ToolKernel> {
       const errMsg = err instanceof Error ? err.message : String(err);
       emitter.emit('error', {
         type: 'error', tool: name,
-        agentId, runId, timestamp: new Date().toISOString(),
+        agentId, runId, requestId, timestamp: new Date().toISOString(),
         duration_ms: Date.now() - startTime,
         error: errMsg,
       } satisfies DispatchEvent);

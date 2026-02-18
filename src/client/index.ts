@@ -22,6 +22,7 @@ export type {
   FacadeResponse,
   CallResult,
   CallError,
+  CallContext,
   BatchCall,
   BatchResult,
 } from './types.js';

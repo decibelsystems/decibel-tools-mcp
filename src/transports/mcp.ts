@@ -46,6 +46,9 @@ export function createMcpServer(kernel: ToolKernel): Server {
         runId: meta.runId as string | undefined,
         parentCallId: meta.parentCallId as string | undefined,
         scope: meta.scope as string | undefined,
+        engagementMode: meta.engagementMode as string | undefined,
+        userKey: meta.userKey as string | undefined,
+        requestId: meta.requestId as string | undefined,
       } : undefined;
 
       const result = await kernel.dispatch(name, args as Record<string, unknown>, context);
