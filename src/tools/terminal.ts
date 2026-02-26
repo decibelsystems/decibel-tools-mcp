@@ -6,8 +6,10 @@
  * for the 21-day AI agent tournament on Base.
  *
  * Env vars:
- *   DX_TERMINAL_PRIVATE_KEY — vault owner private key (required for writes)
- *   DX_TERMINAL_VAULT — vault contract address (auto-resolved if missing)
+ *   DX_WALLET_ACCOUNT — cast keystore account name (preferred, e.g. "dx-tournament")
+ *   DX_WALLET_PASSWORD_FILE — path to keystore password file (required with DX_WALLET_ACCOUNT)
+ *   DX_WALLET_PRIVATE_KEY — raw private key fallback (less secure, use keystore instead)
+ *   DX_TERMINAL_VAULT — vault contract address (auto-resolved from wallet if missing)
  *   DX_TERMINAL_RPC — Base RPC URL (default: https://mainnet.base.org)
  */
 
@@ -32,10 +34,21 @@ function getRpc(): string {
   return process.env.DX_TERMINAL_RPC || DEFAULT_RPC;
 }
 
-function getPrivateKey(): string {
-  const key = process.env.DX_TERMINAL_PRIVATE_KEY;
-  if (!key) throw new Error('DX_TERMINAL_PRIVATE_KEY environment variable not set');
-  return key;
+/** Returns cast CLI flags for wallet authentication (keystore preferred, raw key fallback) */
+function getWalletFlags(): string {
+  const account = process.env.DX_WALLET_ACCOUNT;
+  if (account) {
+    const passwordFile = process.env.DX_WALLET_PASSWORD_FILE;
+    if (!passwordFile) throw new Error('DX_WALLET_PASSWORD_FILE required when using DX_WALLET_ACCOUNT');
+    return `--account "${account}" --password-file "${passwordFile}"`;
+  }
+
+  const key = process.env.DX_WALLET_PRIVATE_KEY;
+  if (key) return `--private-key "${key}"`;
+
+  throw new Error(
+    'Wallet not configured. Set DX_WALLET_ACCOUNT + DX_WALLET_PASSWORD_FILE (recommended) or DX_WALLET_PRIVATE_KEY (fallback)',
+  );
 }
 
 /** Cached vault address — resolved once per process */
@@ -50,12 +63,30 @@ async function getVaultAddress(): Promise<string> {
     return explicit;
   }
 
-  // Derive owner address from private key, then look up vault
-  const key = getPrivateKey();
-  const ownerAddress = execSync(
-    `cast wallet address --private-key "${key}"`,
-    { encoding: 'utf8', timeout: 10000 },
-  ).trim();
+  // Derive owner address from wallet, then look up vault
+  let ownerAddress: string;
+  try {
+    const account = process.env.DX_WALLET_ACCOUNT;
+    if (account) {
+      const passwordFile = process.env.DX_WALLET_PASSWORD_FILE;
+      if (!passwordFile) throw new Error('DX_WALLET_PASSWORD_FILE required when using DX_WALLET_ACCOUNT');
+      ownerAddress = execSync(
+        `cast wallet address --account "${account}" --password-file "${passwordFile}"`,
+        { encoding: 'utf8', timeout: 10000 },
+      ).trim();
+    } else {
+      const key = process.env.DX_WALLET_PRIVATE_KEY;
+      if (!key) throw new Error('Wallet not configured. Set DX_WALLET_ACCOUNT or DX_WALLET_PRIVATE_KEY');
+      ownerAddress = execSync(
+        `cast wallet address --private-key "${key}"`,
+        { encoding: 'utf8', timeout: 10000 },
+      ).trim();
+    }
+  } catch (err: any) {
+    if (err.message?.includes('Wallet not configured') || err.message?.includes('PASSWORD_FILE')) throw err;
+    const stderr = (err.stderr || '').toString().replace(/--private-key\s+"[^"]*"/, '--private-key "***"');
+    throw new Error(`cast wallet address failed: ${stderr || 'unknown error'}`);
+  }
 
   const res = await fetch(`${API_BASE}/vault?ownerAddress=${ownerAddress}`);
   if (!res.ok) throw new Error(`Vault lookup failed: ${res.status} ${res.statusText}`);
@@ -89,13 +120,19 @@ async function apiFetch(path: string, params?: Record<string, string>): Promise<
 }
 
 function castSend(contractAddress: string, sig: string, args: string[], value?: string): string {
-  const key = getPrivateKey();
+  const walletFlags = getWalletFlags();
   const rpc = getRpc();
   const valueFlag = value ? ` --value "${value}"` : '';
   const argsStr = args.map(a => `"${a}"`).join(' ');
-  const cmd = `cast send "${contractAddress}" "${sig}" ${argsStr}${valueFlag} --private-key "${key}" --rpc-url "${rpc}" --json`;
-  const result = execSync(cmd, { encoding: 'utf8', timeout: 60000 });
-  return JSON.parse(result);
+  const cmd = `cast send "${contractAddress}" "${sig}" ${argsStr}${valueFlag} ${walletFlags} --rpc-url "${rpc}" --json`;
+  try {
+    const result = execSync(cmd, { encoding: 'utf8', timeout: 60000 });
+    return JSON.parse(result);
+  } catch (err: any) {
+    // Never leak wallet flags (may contain --private-key) in error messages
+    const stderr = (err.stderr || '').toString().replace(/--private-key\s+"[^"]*"/, '--private-key "***"');
+    throw new Error(`cast send failed: ${stderr || 'unknown error'}`);
+  }
 }
 
 // ============================================================================
@@ -131,22 +168,28 @@ const terminalGetTokens: ToolSpec = {
         includeMarketData: String(args.includeMarketData ?? true),
       }) as any[];
 
-      // Sort by market cap descending for easy ranking
+      // Sort by holder count descending as a proxy for popularity
       const sorted = data.sort((a: any, b: any) => {
-        const mcA = parseFloat(a.marketData?.marketCap || '0');
-        const mcB = parseFloat(b.marketData?.marketCap || '0');
-        return mcB - mcA;
+        const hA = a.marketData?.holderCount || 0;
+        const hB = b.marketData?.holderCount || 0;
+        return hB - hA;
       });
 
       const summary = sorted.map((t: any, i: number) => ({
         rank: i + 1,
         symbol: t.symbol,
         name: t.name,
-        address: t.address,
-        marketCap: t.marketData?.marketCap,
-        price: t.marketData?.price,
-        volume24h: t.marketData?.volume24h,
-        priceChange24h: t.marketData?.priceChange24h,
+        address: t.tokenAddress,
+        type: t.type,
+        reaped: t.reaped,
+        priceEth: t.marketData?.priceEth,
+        priceUsd: t.marketData?.priceUsd,
+        holderCount: t.marketData?.holderCount,
+        volume24hEth: t.marketData?.['1d']?.volumeEth,
+        volume24hUsd: t.marketData?.['1d']?.volumeUsd,
+        priceChange24h: t.marketData?.['1d']?.priceChangePercent,
+        buyCount24h: t.marketData?.['1d']?.buyCount,
+        sellCount24h: t.marketData?.['1d']?.sellCount,
       }));
 
       return jsonResult({ success: true, tokenCount: summary.length, tokens: summary });

@@ -17,7 +17,7 @@ import type { FacadeSpec } from './types.js';
 export const coreFacades: FacadeSpec[] = [
   {
     name: 'sentinel',
-    description: 'Work tracking: epics, issues, test specs, code scanning. Actions: create_issue, read_issue, update_issue, close_issue, list_issues, log_epic, list_epics, read_epic, resolve_epic, list_epic_issues, create_test_spec, list_test_specs, compile_tests, audit_policies, scan, scan_data, scan_codebase, scan_config, scan_coverage, auto_link, link_commit, list_linked_commits',
+    description: 'Work tracking: epics, issues, test specs, code scanning. Use this instead of creating markdown files for task tracking. Always read_issue before update_issue. Pass project_id when filing cross-repo issues. For large features use log_epic first, then create_issue for sub-tasks. Actions: create_issue, read_issue, update_issue, close_issue, list_issues, log_epic, list_epics, read_epic, resolve_epic, list_epic_issues, create_test_spec, list_test_specs, compile_tests, audit_policies, scan, scan_data, scan_codebase, scan_config, scan_coverage, auto_link, link_commit, list_linked_commits',
     compactDescription: 'Track epics, issues, test specs, and scan code',
     microEligible: true,
     tier: 'core',
@@ -49,7 +49,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'architect',
-    description: 'Architecture decisions & policies. Actions: create_adr, read_adr, list_adrs, create_policy, read_policy, list_policies, compile_oversight, record_arch_decision',
+    description: 'Architecture decisions & policies. Use when recording WHY a technical decision was made, not WHAT was built (that is sentinel). create_adr for significant choices with trade-offs; record_arch_decision for quick inline rationale. Actions: create_adr, read_adr, list_adrs, create_policy, read_policy, list_policies, compile_oversight, record_arch_decision',
     compactDescription: 'Record ADRs, policies, and architecture decisions',
     microEligible: false,
     tier: 'core',
@@ -67,7 +67,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'dojo',
-    description: 'Feature incubation: wishes, proposals, experiments, benchmarks. Actions: add_wish, list_wishes, create_proposal, scaffold_experiment, run_experiment, read_artifact, read_results, can_graduate, list, projects, bench',
+    description: 'Feature incubation: wishes, proposals, experiments, benchmarks. Use for ideas not yet ready to build. Flow: add_wish (just an idea) → create_proposal (ready to spec) → scaffold_experiment (ready to test) → can_graduate (ready to promote). Never create proposal/experiment files manually. Actions: add_wish, list_wishes, create_proposal, scaffold_experiment, run_experiment, read_artifact, read_results, can_graduate, list, projects, bench',
     compactDescription: 'Incubate ideas with wishes, proposals, experiments',
     microEligible: false,
     tier: 'core',
@@ -88,7 +88,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'designer',
-    description: 'Design decisions, principles, critiques, tokens, and lateral thinking. Actions: create_decision, list_principles, create_principle, log_crit, review_figma, sync_tokens, check_parity, lateral_session, lateral_apply, lateral_close, list_crits',
+    description: 'Design decisions, principles, critiques, tokens, and lateral thinking. Use for UI/UX/visual choices (not architecture — that is architect). create_decision for design rationale; create_principle for reusable rules (e.g. "4px grid"); log_crit for design review feedback. Actions: create_decision, list_principles, create_principle, log_crit, review_figma, sync_tokens, check_parity, lateral_session, lateral_apply, lateral_close, list_crits',
     compactDescription: 'Design decisions, principles, crits, and tokens',
     microEligible: false,
     tier: 'core',
@@ -114,7 +114,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'git',
-    description: 'Git history, changes, and issue linking. Actions: log_recent, changed_files, find_removal, blame_context, tags, status, find_linked_issues',
+    description: 'Git history, changes, and issue linking. Use for investigating code history, not for making commits. find_removal to locate when code was deleted; blame_context for who changed a line and why; auto_link after commits to connect them to sentinel issues. Actions: log_recent, changed_files, find_removal, blame_context, tags, status, find_linked_issues',
     compactDescription: 'Git history, diffs, and forensics',
     microEligible: true,
     tier: 'core',
@@ -131,7 +131,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'workflow',
-    description: 'High-level composite operations. Actions: status, preflight, ship, investigate',
+    description: 'High-level composite operations that run multiple tools in sequence. status for a quick project health check; preflight before committing (runs lints, tests, scan); ship for release readiness; investigate to debug a reported issue with structured hypothesis tracking. Actions: status, preflight, ship, investigate',
     compactDescription: 'Status, preflight, ship, investigate',
     microEligible: true,
     tier: 'core',
@@ -145,7 +145,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'oracle',
-    description: 'Strategic planning, health scores, and recommendations. Actions: next_actions, portfolio_summary, hygiene_report, roadmap',
+    description: 'Strategic planning, health scores, and recommendations. Use when asked "what should I work on?" or "how healthy is the project?". next_actions for prioritized task suggestions; portfolio_summary for cross-project overview; hygiene_report for tech debt assessment. Actions: next_actions, portfolio_summary, hygiene_report, roadmap',
     compactDescription: 'AI-powered priorities and project health',
     microEligible: false,
     tier: 'core',
@@ -159,7 +159,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'roadmap',
-    description: 'Objectives, milestones, and epic tracking. Actions: init, list, read, list_objectives, read_objective, link_epic, get_epic_context, get_health',
+    description: 'Objectives, milestones, and epic tracking. Use for high-level planning (quarters/releases), not individual tasks (that is sentinel). init to bootstrap a roadmap; link_epic to connect sentinel epics to objectives; get_health for milestone progress. Actions: init, list, read, list_objectives, read_objective, link_epic, get_epic_context, get_health',
     compactDescription: 'Manage roadmap objectives and milestones',
     microEligible: false,
     tier: 'core',
@@ -177,7 +177,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'vector',
-    description: 'Agent run tracking, drift detection, and prompt scoring. Actions: create_run, read_run, list_runs, log_event, complete_run, checkpoint, context_pack, assumptions, score_prompt, trace',
+    description: 'Agent run tracking, drift detection, and prompt scoring. Use at the start and end of multi-step agent tasks. create_run when beginning work, log_event for key steps, complete_run when done. checkpoint to save progress mid-run; assumptions to record what you are assuming so drift can be detected. Actions: create_run, read_run, list_runs, log_event, complete_run, checkpoint, context_pack, assumptions, score_prompt, trace',
     compactDescription: 'Track agent runs, events, and drift',
     microEligible: false,
     tier: 'core',
@@ -197,7 +197,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'context',
-    description: 'Persistent memory: pinned facts, events, artifacts. Actions: list, pin, unpin, refresh, event_append, event_search, artifact_list, artifact_read',
+    description: 'Persistent memory: pinned facts, events, artifacts. pin to save key facts that should persist across sessions (e.g. "uses Postgres 16", "deploy target is Vercel"). event_append for timestamped logs. refresh at session start to load pinned context. Actions: list, pin, unpin, refresh, event_append, event_search, artifact_list, artifact_read',
     compactDescription: 'Pin facts, log events, manage artifacts',
     microEligible: true,
     tier: 'core',
@@ -215,7 +215,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'auditor',
-    description: 'Code quality, health metrics, and refactor scoring. Actions: init, triage, refactor_score, naming_audit, log_health, health_dashboard, health_history',
+    description: 'Code quality, health metrics, and refactor scoring. Use after refactors or before releases. triage to identify the worst code smells; refactor_score to measure improvement from a change; log_health to record a snapshot; health_dashboard for trends over time. Actions: init, triage, refactor_score, naming_audit, log_health, health_dashboard, health_history',
     compactDescription: 'Code quality audits and health metrics',
     microEligible: false,
     tier: 'core',
@@ -232,7 +232,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'forecast',
-    description: 'Task estimation, decomposition, and capacity planning. Actions: parse, decompose, plan, record, calibration',
+    description: 'Task estimation, decomposition, and capacity planning. parse a task description into estimated effort; decompose to break large tasks into sub-tasks with estimates; record actual time after completion to improve future calibration. Actions: parse, decompose, plan, record, calibration',
     compactDescription: 'Estimate tasks and plan capacity',
     microEligible: false,
     tier: 'core',
@@ -247,7 +247,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'velocity',
-    description: 'Productivity metrics, trends, and contributor stats. Actions: snapshot, list, trends, contributor, install_hook, uninstall_hook',
+    description: 'Productivity metrics, trends, and contributor stats. snapshot to capture current commit velocity; trends for week-over-week changes; contributor for per-author stats. install_hook to auto-track commits via git hook. Actions: snapshot, list, trends, contributor, install_hook, uninstall_hook',
     compactDescription: 'Track productivity and commit velocity',
     microEligible: false,
     tier: 'core',
@@ -263,7 +263,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'coordinator',
-    description: 'Multi-agent coordination: locking, heartbeat, logging, messaging. Actions: register, lock, unlock, status, heartbeat, log, send, inbox, ack',
+    description: 'Multi-agent coordination: locking, heartbeat, logging, messaging. Use when multiple agents work on the same project. register at agent start; lock before modifying shared resources (unlock when done); send/inbox for inter-agent messages; heartbeat to signal liveness. Actions: register, lock, unlock, status, heartbeat, log, send, inbox, ack',
     compactDescription: 'Agent coordination, locking, and messaging',
     microEligible: true,
     tier: 'core',
@@ -282,7 +282,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'friction',
-    description: 'Track recurring pain points and workarounds. Actions: log, list, bump, resolve',
+    description: 'Track recurring pain points and workarounds. log when you notice something annoying or broken that keeps coming up; bump to increase severity of an existing friction; resolve when the root cause is fixed. Check list before logging to avoid duplicates. Actions: log, list, bump, resolve',
     compactDescription: 'Log and track recurring pain points',
     microEligible: false,
     tier: 'core',
@@ -296,7 +296,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'registry',
-    description: 'Project discovery and management. Actions: add, remove, list, alias, resolve, init, snapshot, status',
+    description: 'Project discovery and management. init to bootstrap .decibel/ in a new project; add to register an existing project; resolve to look up a project by ID or alias. If tools fail with "project not found", use list to see registered projects, then init or add to fix. Actions: add, remove, list, alias, resolve, init, snapshot, status',
     compactDescription: 'Manage project registry and discovery',
     microEligible: false,
     tier: 'core',
@@ -315,7 +315,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'feedback',
-    description: 'Submit and view tool feedback. Actions: submit, list',
+    description: 'Submit and view tool feedback. submit when a tool behaves unexpectedly or could be improved. Include the tool name and what went wrong. Actions: submit, list',
     compactDescription: 'Tool feedback',
     microEligible: false,
     tier: 'core',
@@ -327,7 +327,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'learnings',
-    description: 'Technical knowledge and lessons learned. Actions: append, list',
+    description: 'Technical knowledge and lessons learned. append after discovering something non-obvious (gotchas, patterns, constraints) that future sessions should know. list at session start to recall prior learnings. Actions: append, list',
     compactDescription: 'Record and recall learnings',
     microEligible: false,
     tier: 'core',
@@ -339,7 +339,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'provenance',
-    description: 'Audit trail for tool operations. Actions: list',
+    description: 'Audit trail for tool operations. list to see what tools were called, when, and by whom. Use for debugging unexpected state or verifying what happened in a previous session. Actions: list',
     compactDescription: 'View audit trail',
     microEligible: false,
     tier: 'core',
@@ -350,7 +350,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'bench',
-    description: 'Benchmark suites and comparison. Actions: run, compare',
+    description: 'Benchmark suites and comparison. run to execute a benchmark suite; compare to diff two runs and identify regressions or improvements. Actions: run, compare',
     compactDescription: 'Run and compare benchmarks',
     microEligible: false,
     tier: 'core',
@@ -362,7 +362,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'guardian',
-    description: 'Security scanning: dependency audits, secret detection, HTTP surface checks, response header analysis, config review. Actions: scan_deps, scan_secrets, scan_http, scan_headers, scan_config, report',
+    description: 'Security scanning: dependency audits, secret detection, HTTP surface checks, response header analysis, config review. Use report for a full security grade; use individual scans to drill into specific areas. scan_headers takes a URL and checks for missing CSP/HSTS/etc. Run after deploying or changing infrastructure. Actions: scan_deps, scan_secrets, scan_http, scan_headers, scan_config, report',
     compactDescription: 'Security scanning and vulnerability detection',
     microEligible: false,
     tier: 'core',
@@ -385,7 +385,7 @@ export const coreFacades: FacadeSpec[] = [
 export const proFacades: FacadeSpec[] = [
   {
     name: 'voice',
-    description: 'Voice inbox and command processing. Actions: inbox_add, inbox_list, inbox_process, inbox_sync, command',
+    description: 'Voice inbox and command processing. inbox_sync at session start to pull queued voice messages from Supabase. inbox_process to act on a specific message. command to execute a spoken instruction directly. Actions: inbox_add, inbox_list, inbox_process, inbox_sync, command',
     compactDescription: 'Voice inbox and commands',
     microEligible: false,
     tier: 'pro',
@@ -400,7 +400,7 @@ export const proFacades: FacadeSpec[] = [
 
   {
     name: 'studio',
-    description: 'Creative asset generation: images, video, 3D. Actions: generate_image, get_image_status, create_artifact, update_artifact, list_artifacts, create_project, read_project, list_projects, list_tasks, list_jobs, claim_job, update_job, register_device, heartbeat, sync_events',
+    description: 'Creative asset generation: images, video, 3D. generate_image returns a job ID — poll get_image_status until complete. Artifacts are the persistent asset records; projects group related artifacts. Device endpoints are for GPU render workers. Actions: generate_image, get_image_status, create_artifact, update_artifact, list_artifacts, create_project, read_project, list_projects, list_tasks, list_jobs, claim_job, update_job, register_device, heartbeat, sync_events',
     compactDescription: 'Generate images, video, and 3D assets',
     microEligible: false,
     tier: 'pro',
@@ -425,7 +425,7 @@ export const proFacades: FacadeSpec[] = [
 
   {
     name: 'corpus',
-    description: 'Pattern and playbook search across codebase. Actions: search, status',
+    description: 'Pattern and playbook search across codebase. search to find code patterns, implementation examples, or playbooks by natural language query. status to check index freshness. Use before implementing something to find existing patterns to follow. Actions: search, status',
     compactDescription: 'Search patterns and playbooks',
     microEligible: false,
     tier: 'pro',
@@ -437,7 +437,7 @@ export const proFacades: FacadeSpec[] = [
 
   {
     name: 'agentic',
-    description: 'Agentic operations: render, lint, compile, evaluation. Actions: render, lint, compile_pack, golden_eval',
+    description: 'Agentic operations: render, lint, compile, evaluation. render to produce human-readable output from structured data; lint for code quality checks; compile_pack to bundle context for another agent; golden_eval to test agent output against known-good examples. Actions: render, lint, compile_pack, golden_eval',
     compactDescription: 'Render, lint, compile, evaluate',
     microEligible: false,
     tier: 'pro',
@@ -457,7 +457,7 @@ export const proFacades: FacadeSpec[] = [
 export const appFacades: FacadeSpec[] = [
   {
     name: 'senken',
-    description: 'Trade analysis: strategy summaries, giveback reports, grading. Actions: trade_summary, giveback_report, trade_review, list_overrides, apply_override',
+    description: 'Trade analysis: strategy summaries, giveback reports, grading. Reads from Postgres (requires SENKEN_DATABASE_URL). trade_summary for aggregate stats by strategy; trade_review for individual trade grades (A-F by MFE capture); giveback_report for unrealized profit analysis. apply_override is a WRITE — it modifies live strategy parameters. Actions: trade_summary, giveback_report, trade_review, list_overrides, apply_override',
     compactDescription: 'Trading strategy analysis (Postgres)',
     microEligible: false,
     tier: 'apps',
@@ -472,7 +472,7 @@ export const appFacades: FacadeSpec[] = [
 
   {
     name: 'deck',
-    description: 'Trading card buylist search and price comparison. Actions: list, search, stores',
+    description: 'Trading card buylist search and price comparison. search by card name to find best buylist prices across stores; list to see all available buylists; stores for store details and shipping info. Actions: list, search, stores',
     compactDescription: 'Card buylist search',
     microEligible: false,
     tier: 'apps',
@@ -485,7 +485,7 @@ export const appFacades: FacadeSpec[] = [
 
   {
     name: 'terminal',
-    description: 'DX Terminal Pro vault management: market data, portfolio, competitor intelligence, strategy writing. Actions: get_tokens, get_portfolio, get_strategies, get_leaderboard, get_swaps, get_inference_logs, get_holders, get_candles, get_pnl_history, get_vault_settings, get_deposits_withdrawals, add_strategy, disable_strategy, update_settings, deposit_eth, withdraw_eth',
+    description: 'DX Terminal Pro vault management: market data, portfolio, competitor intelligence, strategy writing. Read actions use REST (no auth); write actions use cast (requires wallet). get_strategies works on ANY vault (public on-chain) — use to scout competitors. Always get_strategies before add_strategy to check slot count (max 8). disable_strategy expired ones before adding new. Writes are on-chain transactions on Base L2. Actions: get_tokens, get_portfolio, get_strategies, get_leaderboard, get_swaps, get_inference_logs, get_holders, get_candles, get_pnl_history, get_vault_settings, get_deposits_withdrawals, add_strategy, disable_strategy, update_settings, deposit_eth, withdraw_eth',
     compactDescription: 'DX Terminal Pro vault + strategies',
     microEligible: false,
     tier: 'apps',
