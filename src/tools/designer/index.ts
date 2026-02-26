@@ -337,7 +337,7 @@ export const designerReviewFigmaTool: ToolSpec = {
 export const designerUpsertPrincipleTool: ToolSpec = {
   definition: {
     name: 'designer_upsert_principle',
-    description: 'Create or update a design principle. Principles are used by designer_review_figma to check components.',
+    description: 'Create or update a design principle (e.g. "4px grid", "accessible contrast"). Principles guide design reviews and Figma checks.',
     annotations: {
       title: 'Upsert Principle',
       readOnlyHint: false,

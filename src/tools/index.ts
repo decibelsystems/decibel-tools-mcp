@@ -20,6 +20,7 @@ import { roadmapTools } from './roadmap/index.js';
 import { architectTools } from './architect/index.js';
 import { deckTools } from './deck.js';
 import { senkenTools } from './senken.js';
+import { terminalTools } from './terminal.js';
 import { gitTools } from './git/index.js';
 import { auditorTools } from './auditor/index.js';
 import { workflowTools } from './workflow/index.js';
@@ -78,7 +79,7 @@ const coreTools: ToolSpec[] = [
 // App tools — Decibel internal (only when DECIBEL_APPS=1)
 function loadAppTools(): ToolSpec[] {
   if (!APPS_ENABLED) return [];
-  return [...deckTools, ...senkenTools];
+  return [...deckTools, ...senkenTools, ...terminalTools];
 }
 
 // Pro tools (only when DECIBEL_PRO=1)

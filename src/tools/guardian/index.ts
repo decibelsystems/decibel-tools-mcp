@@ -8,6 +8,7 @@ import {
   scanDeps,
   scanSecrets,
   scanHttp,
+  scanHeaders,
   scanConfig,
   guardianReport,
 } from '../guardian.js';
@@ -140,6 +141,45 @@ export const guardianScanConfigTool: ToolSpec = {
 };
 
 // ============================================================================
+// scan_headers
+// ============================================================================
+
+export const guardianScanHeadersTool: ToolSpec = {
+  definition: {
+    name: 'guardian_scan_headers',
+    description: 'Scan a URL for missing security headers (CSP, HSTS, X-Frame-Options, etc.), info-leak headers (Server, X-Powered-By), and CORS config. Optionally queries Mozilla Observatory. Grades A–F.',
+    annotations: {
+      title: 'Scan Headers',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description: 'URL to scan (e.g. https://example.com)',
+        },
+        check_observatory: {
+          type: 'boolean',
+          description: 'Also query Mozilla Observatory for a grade (slower, default: false)',
+        },
+      },
+      required: ['url'],
+    },
+  },
+  handler: async (args: { url: string; check_observatory?: boolean }) => {
+    try {
+      const result = await scanHeaders(args);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // report
 // ============================================================================
 
@@ -180,6 +220,7 @@ export const guardianTools: ToolSpec[] = [
   guardianScanDepsTool,
   guardianScanSecretsTool,
   guardianScanHttpTool,
+  guardianScanHeadersTool,
   guardianScanConfigTool,
   guardianReportTool,
 ];

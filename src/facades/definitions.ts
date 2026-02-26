@@ -88,15 +88,15 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'designer',
-    description: 'Design decisions, critiques, tokens, lateral thinking. Actions: record_decision, list_principles, upsert_principle, crit, review_figma, sync_tokens, check_parity, lateral_session, lateral_apply, lateral_close, list_crits',
-    compactDescription: 'Design decisions, crits, and design tokens',
+    description: 'Design decisions, principles, critiques, tokens, and lateral thinking. Actions: create_decision, list_principles, create_principle, log_crit, review_figma, sync_tokens, check_parity, lateral_session, lateral_apply, lateral_close, list_crits',
+    compactDescription: 'Design decisions, principles, crits, and tokens',
     microEligible: false,
     tier: 'core',
     actions: {
-      record_decision: 'designer_record_design_decision',
+      create_decision: 'designer_record_design_decision',
       list_principles: 'designer_list_principles',
-      upsert_principle: 'designer_upsert_principle',
-      crit: 'designer_crit',
+      create_principle: 'designer_upsert_principle',
+      log_crit: 'designer_crit',
       review_figma: 'designer_review_figma',
       sync_tokens: 'designer_sync_tokens',
       check_parity: 'designer_check_parity',
@@ -104,6 +104,11 @@ export const coreFacades: FacadeSpec[] = [
       lateral_apply: 'designer_lateral_apply',
       lateral_close: 'designer_lateral_close',
       list_crits: 'designer_list_crits',
+    },
+    aliases: {
+      upsert_principle: 'create_principle',
+      record_decision: 'create_decision',
+      crit: 'log_crit',
     },
   },
 
@@ -357,7 +362,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'guardian',
-    description: 'Security scanning: dependency audits, secret detection, HTTP surface checks, config review. Actions: scan_deps, scan_secrets, scan_http, scan_config, report',
+    description: 'Security scanning: dependency audits, secret detection, HTTP surface checks, response header analysis, config review. Actions: scan_deps, scan_secrets, scan_http, scan_headers, scan_config, report',
     compactDescription: 'Security scanning and vulnerability detection',
     microEligible: false,
     tier: 'core',
@@ -365,6 +370,7 @@ export const coreFacades: FacadeSpec[] = [
       scan_deps: 'guardian_scan_deps',
       scan_secrets: 'guardian_scan_secrets',
       scan_http: 'guardian_scan_http',
+      scan_headers: 'guardian_scan_headers',
       scan_config: 'guardian_scan_config',
       report: 'guardian_report',
     },
@@ -474,6 +480,32 @@ export const appFacades: FacadeSpec[] = [
       list: 'deck_buylist_list',
       search: 'deck_buylist_search',
       stores: 'deck_buylist_stores',
+    },
+  },
+
+  {
+    name: 'terminal',
+    description: 'DX Terminal Pro vault management: market data, portfolio, competitor intelligence, strategy writing. Actions: get_tokens, get_portfolio, get_strategies, get_leaderboard, get_swaps, get_inference_logs, get_holders, get_candles, get_pnl_history, get_vault_settings, get_deposits_withdrawals, add_strategy, disable_strategy, update_settings, deposit_eth, withdraw_eth',
+    compactDescription: 'DX Terminal Pro vault + strategies',
+    microEligible: false,
+    tier: 'apps',
+    actions: {
+      get_tokens: 'terminal_get_tokens',
+      get_portfolio: 'terminal_get_portfolio',
+      get_strategies: 'terminal_get_strategies',
+      get_leaderboard: 'terminal_get_leaderboard',
+      get_swaps: 'terminal_get_swaps',
+      get_inference_logs: 'terminal_get_inference_logs',
+      get_holders: 'terminal_get_holders',
+      get_candles: 'terminal_get_candles',
+      get_pnl_history: 'terminal_get_pnl_history',
+      get_vault_settings: 'terminal_get_vault_settings',
+      get_deposits_withdrawals: 'terminal_get_deposits_withdrawals',
+      add_strategy: 'terminal_add_strategy',
+      disable_strategy: 'terminal_disable_strategy',
+      update_settings: 'terminal_update_settings',
+      deposit_eth: 'terminal_deposit_eth',
+      withdraw_eth: 'terminal_withdraw_eth',
     },
   },
 ];

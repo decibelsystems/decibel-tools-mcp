@@ -1,0 +1,53 @@
+id: ISS-0049
+title: "Codex compatibility: sample config and setup docs"
+project: decibel-tools-mcp
+status: open
+priority: high
+tags: [codex, docs, distribution]
+epic_id: EPIC-0024
+created_at: 2026-02-19T22:00:00.000Z
+updated_at: 2026-02-19T22:00:00.000Z
+description: |-
+  ## Codex MCP Configuration Documentation
+
+  ### Context
+  OpenAI Codex natively supports both stdio and Streamable HTTP MCP transports.
+  Our current system is already compatible — this issue is about documenting it
+  so Codex users can connect with zero friction.
+
+  ### Deliverables
+
+  **1. stdio config (npx)**
+  ```toml
+  [mcp_servers.decibel]
+  command = "npx"
+  args = ["-y", "@decibelsystems/tools"]
+  startup_timeout_sec = 15
+  tool_timeout_sec = 120
+  required = true
+
+  [mcp_servers.decibel.env]
+  DECIBEL_PROJECT_ROOT = "/path/to/your/project"
+  ```
+
+  **2. Daemon/HTTP config**
+  ```toml
+  [mcp_servers.decibel]
+  url = "http://localhost:4888/mcp"
+  tool_timeout_sec = 120
+  ```
+
+  **3. Timeout guidance**
+  - Default 60s is too short for corpus indexing, studio generation
+  - Recommend tool_timeout_sec = 120
+
+  **4. Known quirks to document**
+  - TOML key must be `[mcp_servers.<name>]` not `[mcpServers.<name>]`
+  - `required = true` means Codex won't start if server fails
+  - `bearer_token_env_var` for authenticated daemon mode
+
+  ### Acceptance Criteria
+  - [ ] Sample configs added to docs or README
+  - [ ] Timeout recommendations documented
+  - [ ] Known Codex quirks listed
+  - [ ] Tested: config copy-paste works in Codex

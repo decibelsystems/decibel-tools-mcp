@@ -1,0 +1,38 @@
+id: ISS-0050
+title: "Codex end-to-end testing: stdio and HTTP transports"
+project: decibel-tools-mcp
+status: open
+priority: high
+tags: [codex, testing, distribution]
+epic_id: EPIC-0024
+created_at: 2026-02-19T22:00:00.000Z
+updated_at: 2026-02-19T22:00:00.000Z
+description: |-
+  ## End-to-End Codex Testing
+
+  ### Context
+  Our transports are theoretically compatible with Codex. This issue covers
+  actually testing it — confirming all 27 facades work, tool names pass
+  validation, and both transport modes function correctly.
+
+  ### Test Matrix
+
+  | Transport | Config | Test |
+  |-----------|--------|------|
+  | stdio | npx @decibelsystems/tools | All 27 facades callable |
+  | Streamable HTTP | daemon on :4888 | All 27 facades callable |
+
+  ### Specific Checks
+  - [ ] Tool names pass Codex regex `^[a-zA-Z0-9_-]+$`
+  - [ ] Namespaced names under 64 chars (longest: mcp__decibel__sentinel_createIssue = 34)
+  - [ ] Startup within 15s timeout
+  - [ ] Heavy tools (corpus, studio) complete within 120s
+  - [ ] Facade tier gating works (core always, pro with license)
+  - [ ] Error responses are well-formed (Codex shows them to user)
+  - [ ] Bridge transport works (stdio → daemon proxy)
+
+  ### Acceptance Criteria
+  - [ ] stdio: Codex can list and call all core facades
+  - [ ] HTTP: Codex can list and call all core facades via daemon
+  - [ ] No tool registration failures in Codex logs
+  - [ ] Pro tier gating behaves correctly

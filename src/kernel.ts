@@ -247,7 +247,10 @@ export async function createKernel(): Promise<ToolKernel> {
         };
       }
 
-      const internalName = facade.actions[action];
+      let internalName = facade.actions[action];
+      if (!internalName && facade.aliases?.[action]) {
+        internalName = facade.actions[facade.aliases[action]];
+      }
       if (!internalName) {
         return {
           content: [{ type: 'text', text: JSON.stringify({

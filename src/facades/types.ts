@@ -33,6 +33,9 @@ export interface FacadeSpec {
    * Example: { "create_issue": "sentinel_create_issue", "list_epics": "sentinel_list_epics" }
    */
   actions: Record<string, string>;
+
+  /** Deprecated action name → canonical action name. Hidden from LLM, resolved at dispatch. */
+  aliases?: Record<string, string>;
 }
 
 /** Detail tier for tool descriptions */
