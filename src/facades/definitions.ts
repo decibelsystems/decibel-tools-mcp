@@ -425,13 +425,16 @@ export const proFacades: FacadeSpec[] = [
 
   {
     name: 'corpus',
-    description: 'Pattern and playbook search across codebase. search to find code patterns, implementation examples, or playbooks by natural language query. status to check index freshness. Use before implementing something to find existing patterns to follow. Actions: search, status',
-    compactDescription: 'Search patterns and playbooks',
+    description: 'Shared knowledge base: patterns, playbooks, and field notes. search to find existing solutions before implementing; add_pattern for reusable solutions (id must be PREFIX-NNNN); add_field_note for lessons learned; add_playbook for step-by-step guides. status to check corpus availability. All writes are no-overwrite — they fail if the file already exists. Actions: search, status, add_pattern, add_field_note, add_playbook',
+    compactDescription: 'Search and contribute to shared knowledge base',
     microEligible: false,
     tier: 'pro',
     actions: {
       search: 'corpus_search',
       status: 'corpus_status',
+      add_pattern: 'corpus_add_pattern',
+      add_field_note: 'corpus_add_field_note',
+      add_playbook: 'corpus_add_playbook',
     },
   },
 

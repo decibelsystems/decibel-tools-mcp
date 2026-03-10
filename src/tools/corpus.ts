@@ -5,10 +5,13 @@
 // Enables cross-project knowledge sharing without submodules.
 // ============================================================================
 
-import { readdir, readFile } from 'fs/promises';
-import { join, basename } from 'path';
+import { readdir, readFile, writeFile } from 'fs/promises';
+import { join, basename, resolve, relative } from 'path';
 import { homedir } from 'os';
+import { existsSync } from 'fs';
 import { log } from '../config.js';
+import { ensureDir } from '../dataRoot.js';
+import { emitCreateProvenance } from './provenance.js';
 
 // ============================================================================
 // Types
@@ -36,6 +39,42 @@ export interface CorpusSearchResult {
   query: string;
   searched: number;
   corpus_path: string;
+}
+
+export interface AddPatternInput {
+  id: string;
+  title: string;
+  content: string;
+  category?: string;
+  status?: string;
+  severity?: string;
+  source?: string;
+  owner?: string;
+  tags?: string[];
+}
+
+export interface AddFieldNoteInput {
+  title: string;
+  content: string;
+  source?: string;
+  owner?: string;
+  status?: string;
+  tags?: string[];
+}
+
+export interface AddPlaybookInput {
+  title: string;
+  content: string;
+  owner?: string;
+  status?: string;
+  tags?: string[];
+}
+
+export interface CorpusWriteResult {
+  id: string;
+  path: string;
+  absolute_path: string;
+  title: string;
 }
 
 // ============================================================================
@@ -240,4 +279,257 @@ export async function corpusExists(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ============================================================================
+// Write Helpers
+// ============================================================================
+
+const PATTERN_ID_RE = /^[A-Z]+-\d{3,}$/;
+
+/**
+ * Slugify text for use in filenames.
+ * Lowercases, replaces non-alphanumeric with dashes, trims dashes, max 80 chars.
+ */
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+/**
+ * Build YAML frontmatter block from key-value pairs.
+ * Handles arrays (tags) as YAML lists.
+ */
+function buildFrontmatter(fields: Record<string, string | string[] | undefined>): string {
+  const lines: string[] = ['---'];
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      lines.push(`${key}:`);
+      for (const item of value) {
+        lines.push(`  - ${item}`);
+      }
+    } else {
+      lines.push(`${key}: ${value}`);
+    }
+  }
+  lines.push('---');
+  return lines.join('\n');
+}
+
+/**
+ * Validate that a target path is within CORPUS_PATH (prevents directory traversal).
+ */
+function validateCorpusWritePath(targetPath: string): void {
+  const resolved = resolve(targetPath);
+  const corpusResolved = resolve(CORPUS_PATH);
+  if (!resolved.startsWith(corpusResolved + '/')) {
+    throw new Error(
+      `Path traversal rejected: target "${relative(corpusResolved, resolved)}" escapes corpus root`
+    );
+  }
+}
+
+/**
+ * Validate that a category string has no traversal characters.
+ */
+function validateCategory(category: string): void {
+  if (/[\/\\.]/.test(category)) {
+    throw new Error(
+      `Invalid category "${category}": must not contain slashes, backslashes, or dots`
+    );
+  }
+}
+
+// ============================================================================
+// Write Functions
+// ============================================================================
+
+/**
+ * Add a pattern to decibel-corpus.
+ * Writes to primitives/patterns/{category?}/{id}-{slug}.md
+ */
+export async function addPattern(input: AddPatternInput): Promise<CorpusWriteResult> {
+  if (!await corpusExists()) {
+    throw new Error(
+      `Corpus not found at ${CORPUS_PATH}. ` +
+      'Clone decibel-corpus or set DECIBEL_CORPUS_PATH.'
+    );
+  }
+
+  if (!PATTERN_ID_RE.test(input.id)) {
+    throw new Error(
+      `Invalid pattern id "${input.id}": must match PREFIX-NNNN format (e.g., DBS-0004)`
+    );
+  }
+
+  const slug = slugify(input.title);
+  const filename = `${input.id}-${slug}.md`;
+
+  let targetDir = join(CORPUS_PATH, TYPE_PATHS['pattern']);
+  if (input.category) {
+    validateCategory(input.category);
+    targetDir = join(targetDir, input.category);
+  }
+  ensureDir(targetDir);
+
+  const targetPath = join(targetDir, filename);
+  validateCorpusWritePath(targetPath);
+
+  if (existsSync(targetPath)) {
+    throw new Error(
+      `Pattern already exists at ${relative(CORPUS_PATH, targetPath)}. ` +
+      'Will not overwrite — edit the file directly if an update is needed.'
+    );
+  }
+
+  const frontmatter = buildFrontmatter({
+    id: input.id,
+    title: input.title,
+    status: input.status || 'draft',
+    severity: input.severity,
+    category: input.category,
+    source: input.source,
+    owner: input.owner,
+    tags: input.tags,
+    created: new Date().toISOString().slice(0, 10),
+  });
+
+  const fileContent = `${frontmatter}\n\n# ${input.title}\n\n${input.content}\n`;
+  await writeFile(targetPath, fileContent, 'utf-8');
+
+  const relPath = relative(CORPUS_PATH, targetPath);
+  log(`Corpus: Added pattern ${input.id} at ${relPath}`);
+
+  // Best-effort provenance
+  try {
+    await emitCreateProvenance(`corpus:pattern:${input.id}`, fileContent, `Added pattern ${input.id}: ${input.title}`);
+  } catch {
+    // No project context — that's fine for corpus
+  }
+
+  return {
+    id: input.id,
+    path: relPath,
+    absolute_path: targetPath,
+    title: input.title,
+  };
+}
+
+/**
+ * Add a field note to decibel-corpus.
+ * Writes to field-notes/YYYY-MM-DD-{slug}.md
+ */
+export async function addFieldNote(input: AddFieldNoteInput): Promise<CorpusWriteResult> {
+  if (!await corpusExists()) {
+    throw new Error(
+      `Corpus not found at ${CORPUS_PATH}. ` +
+      'Clone decibel-corpus or set DECIBEL_CORPUS_PATH.'
+    );
+  }
+
+  const slug = slugify(input.title);
+  const date = new Date().toISOString().slice(0, 10);
+  const filename = `${date}-${slug}.md`;
+
+  const targetDir = join(CORPUS_PATH, TYPE_PATHS['field-note']);
+  ensureDir(targetDir);
+
+  const targetPath = join(targetDir, filename);
+  validateCorpusWritePath(targetPath);
+
+  if (existsSync(targetPath)) {
+    throw new Error(
+      `Field note already exists at ${relative(CORPUS_PATH, targetPath)}. ` +
+      'Will not overwrite — edit the file directly if an update is needed.'
+    );
+  }
+
+  const frontmatter = buildFrontmatter({
+    title: input.title,
+    status: input.status || 'draft',
+    source: input.source,
+    owner: input.owner,
+    tags: input.tags,
+    created: date,
+  });
+
+  const fileContent = `${frontmatter}\n\n# ${input.title}\n\n${input.content}\n`;
+  await writeFile(targetPath, fileContent, 'utf-8');
+
+  const relPath = relative(CORPUS_PATH, targetPath);
+  const id = basename(filename, '.md');
+  log(`Corpus: Added field note at ${relPath}`);
+
+  try {
+    await emitCreateProvenance(`corpus:field-note:${id}`, fileContent, `Added field note: ${input.title}`);
+  } catch {
+    // No project context — that's fine for corpus
+  }
+
+  return {
+    id,
+    path: relPath,
+    absolute_path: targetPath,
+    title: input.title,
+  };
+}
+
+/**
+ * Add a playbook to decibel-corpus.
+ * Writes to playbooks/{slug}.md
+ */
+export async function addPlaybook(input: AddPlaybookInput): Promise<CorpusWriteResult> {
+  if (!await corpusExists()) {
+    throw new Error(
+      `Corpus not found at ${CORPUS_PATH}. ` +
+      'Clone decibel-corpus or set DECIBEL_CORPUS_PATH.'
+    );
+  }
+
+  const slug = slugify(input.title);
+  const filename = `${slug}.md`;
+
+  const targetDir = join(CORPUS_PATH, TYPE_PATHS['playbook']);
+  ensureDir(targetDir);
+
+  const targetPath = join(targetDir, filename);
+  validateCorpusWritePath(targetPath);
+
+  if (existsSync(targetPath)) {
+    throw new Error(
+      `Playbook already exists at ${relative(CORPUS_PATH, targetPath)}. ` +
+      'Will not overwrite — edit the file directly if an update is needed.'
+    );
+  }
+
+  const frontmatter = buildFrontmatter({
+    title: input.title,
+    status: input.status || 'draft',
+    owner: input.owner,
+    tags: input.tags,
+    created: new Date().toISOString().slice(0, 10),
+  });
+
+  const fileContent = `${frontmatter}\n\n# ${input.title}\n\n${input.content}\n`;
+  await writeFile(targetPath, fileContent, 'utf-8');
+
+  const relPath = relative(CORPUS_PATH, targetPath);
+  log(`Corpus: Added playbook at ${relPath}`);
+
+  try {
+    await emitCreateProvenance(`corpus:playbook:${slug}`, fileContent, `Added playbook: ${input.title}`);
+  } catch {
+    // No project context — that's fine for corpus
+  }
+
+  return {
+    id: slug,
+    path: relPath,
+    absolute_path: targetPath,
+    title: input.title,
+  };
 }
