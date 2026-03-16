@@ -484,6 +484,21 @@ export const appFacades: FacadeSpec[] = [
   },
 
   {
+    name: 'mother',
+    description: 'Mother daemon: advice snapshots, policy patches, and incidents. Reads from Postgres (requires MOTHER_DATABASE_URL). write_advice_snapshot validates verdict + multiplier bounds before inserting. propose_policy_patch auto-computes revert_at from TTL. publish_incident for structured postmortems. get_advice_snapshot reads latest non-expired for symbol×strategy. list_incidents queries by symbol/strategy/type/date range. Actions: write_advice_snapshot, propose_policy_patch, publish_incident, get_advice_snapshot, list_incidents',
+    compactDescription: 'Mother daemon advice and incidents (Postgres)',
+    microEligible: false,
+    tier: 'apps',
+    actions: {
+      write_advice_snapshot: 'mother_write_advice_snapshot',
+      propose_policy_patch: 'mother_propose_policy_patch',
+      publish_incident: 'mother_publish_incident',
+      get_advice_snapshot: 'mother_get_advice_snapshot',
+      list_incidents: 'mother_list_incidents',
+    },
+  },
+
+  {
     name: 'terminal',
     description: 'DX Terminal Pro vault management: market data, portfolio, competitor intelligence, strategy writing. Read actions use REST (no auth); write actions use cast (requires wallet). get_strategies works on ANY vault (public on-chain) — use to scout competitors. Always get_strategies before add_strategy to check slot count (max 8). disable_strategy expired ones before adding new. Writes are on-chain transactions on Base L2. Actions: get_tokens, get_portfolio, get_strategies, get_leaderboard, get_swaps, get_inference_logs, get_holders, get_candles, get_pnl_history, get_vault_settings, get_deposits_withdrawals, add_strategy, disable_strategy, update_settings, deposit_eth, withdraw_eth',
     compactDescription: 'DX Terminal Pro vault + strategies',
