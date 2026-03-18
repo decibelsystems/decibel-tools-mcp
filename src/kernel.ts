@@ -125,6 +125,9 @@ export interface ToolKernel {
   /** Subscribe to dispatch events (dispatch, result, error) */
   on(event: string, listener: (evt: DispatchEvent) => void): void;
 
+  /** Unsubscribe from dispatch events (for SSE cleanup) */
+  off(event: string, listener: (evt: DispatchEvent) => void): void;
+
   /** Total internal tool count */
   toolCount: number;
   /** Total facade count */
@@ -395,6 +398,7 @@ export async function createKernel(): Promise<ToolKernel> {
     dispatch,
     batch,
     on: (event: string, listener: (evt: DispatchEvent) => void) => emitter.on(event, listener),
+    off: (event: string, listener: (evt: DispatchEvent) => void) => emitter.off(event, listener),
     getMcpToolDefinitions,
     toolCount: tools.length,
     facadeCount: facades.length,

@@ -6,6 +6,8 @@
 // ============================================================================
 
 import type { ToolKernel } from '../kernel.js';
+import type { AgentRegistry } from '../daemon.js';
+import type { DaemonConfig } from '../daemonConfig.js';
 
 /**
  * Configuration shared across all transports.
@@ -24,6 +26,9 @@ export interface TransportConfig {
   isDaemon?: boolean;
   // License
   configLicenseKey?: string;
+  // Multi-agent
+  agentRegistry?: AgentRegistry;
+  daemonConfig?: DaemonConfig;
 }
 
 /**

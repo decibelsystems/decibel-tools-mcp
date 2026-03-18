@@ -380,6 +380,99 @@ export function daemonStatus(): {
 }
 
 // ============================================================================
+// Agent Registry — in-memory state of connected daemon agents
+// ============================================================================
+
+export interface DaemonAgent {
+  id: string;
+  capabilities: string[];
+  connectedAt: string;
+  lastHeartbeat: string;
+  status: 'active' | 'busy' | 'idle';
+  currentTask?: string;
+  allowedFacades?: string[];
+  tier?: 'core' | 'pro' | 'apps';
+}
+
+const DEFAULT_STALE_MS = 5 * 60 * 1000; // 5 minutes
+
+export class AgentRegistry {
+  private agents = new Map<string, DaemonAgent>();
+
+  register(init: {
+    id: string;
+    capabilities?: string[];
+    allowedFacades?: string[];
+    tier?: 'core' | 'pro' | 'apps';
+  }): DaemonAgent {
+    const now = new Date().toISOString();
+    const existing = this.agents.get(init.id);
+    const agent: DaemonAgent = {
+      id: init.id,
+      capabilities: init.capabilities || existing?.capabilities || [],
+      connectedAt: existing?.connectedAt || now,
+      lastHeartbeat: now,
+      status: 'active',
+      allowedFacades: init.allowedFacades || existing?.allowedFacades,
+      tier: init.tier || existing?.tier,
+    };
+    this.agents.set(init.id, agent);
+    log(`AgentRegistry: registered ${init.id} (${this.agents.size} total)`);
+    return agent;
+  }
+
+  heartbeat(agentId: string, update?: {
+    status?: 'active' | 'busy' | 'idle';
+    currentTask?: string;
+  }): DaemonAgent | null {
+    const agent = this.agents.get(agentId);
+    if (!agent) return null;
+    agent.lastHeartbeat = new Date().toISOString();
+    if (update?.status) agent.status = update.status;
+    if (update?.currentTask !== undefined) agent.currentTask = update.currentTask;
+    return agent;
+  }
+
+  disconnect(agentId: string): boolean {
+    const had = this.agents.has(agentId);
+    this.agents.delete(agentId);
+    if (had) log(`AgentRegistry: disconnected ${agentId} (${this.agents.size} remaining)`);
+    return had;
+  }
+
+  get(agentId: string): DaemonAgent | undefined {
+    return this.agents.get(agentId);
+  }
+
+  list(): DaemonAgent[] {
+    return [...this.agents.values()];
+  }
+
+  sweepStale(staleMs: number = DEFAULT_STALE_MS): string[] {
+    const cutoff = Date.now() - staleMs;
+    const swept: string[] = [];
+    for (const [id, agent] of this.agents) {
+      if (new Date(agent.lastHeartbeat).getTime() < cutoff) {
+        this.agents.delete(id);
+        swept.push(id);
+      }
+    }
+    if (swept.length > 0) {
+      log(`AgentRegistry: swept ${swept.length} stale agent(s): ${swept.join(', ')}`);
+    }
+    return swept;
+  }
+
+  get count(): number {
+    return this.agents.size;
+  }
+
+  toJSON(): object[] {
+    return this.list().map(a => ({ ...a }));
+  }
+}
+
+// ============================================================================
 // CLI Subcommands (called from server.ts)
 // ============================================================================
 
