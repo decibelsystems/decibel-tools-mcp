@@ -27,6 +27,8 @@ export class HttpAdapter implements TransportAdapter {
       rateLimitRpm: config.rateLimitRpm,
       isDaemon: config.isDaemon,
       configLicenseKey: config.configLicenseKey,
+      agentRegistry: config.agentRegistry,
+      daemonConfig: config.daemonConfig,
     });
     log('HTTP transport started');
   }

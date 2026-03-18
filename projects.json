@@ -121,6 +121,59 @@
         "agent",
         "agent-core"
       ]
+    },
+    {
+      "id": "otherides",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/frontend_v0.2",
+      "name": "Otherides NFT Collection",
+      "aliases": [
+        "otherides-nft",
+        "nft",
+        "otheridesIntern"
+      ]
+    },
+    {
+      "id": "gatherful",
+      "name": "Gatherful",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/gatherful",
+      "aliases": [
+        "gatherful-v2"
+      ]
+    },
+    {
+      "id": "tactus",
+      "name": "Tactus",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/tactus",
+      "aliases": [
+        "tactus",
+        "numpad"
+      ]
+    },
+    {
+      "id": "deck-arena",
+      "name": "Deck Arena",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/deck-arena",
+      "aliases": [
+        "arena",
+        "deckarena"
+      ]
+    },
+    {
+      "id": "noisevault-research",
+      "name": "NoiseVault",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/decibel-agent/apps/noisevault",
+      "aliases": [
+        "noisevault",
+        "noise-vault"
+      ]
+    },
+    {
+      "id": "noisevault",
+      "name": "NoiseVault",
+      "path": "/Volumes/Ashitaka/Documents/GitHub/noisevault",
+      "aliases": [
+        "nv"
+      ]
     }
   ]
 }

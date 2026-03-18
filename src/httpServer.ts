@@ -34,9 +34,11 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { log } from './config.js';
 import { isSupabaseConfigured } from './lib/supabase.js';
-import type { ToolKernel, DispatchContext } from './kernel.js';
+import type { ToolKernel, DispatchContext, DispatchEvent } from './kernel.js';
 import { getLicenseValidator } from './license.js';
 import { listProjects } from './projectRegistry.js';
+import type { AgentRegistry } from './daemon.js';
+import type { DaemonConfig } from './daemonConfig.js';
 import {
   listEpics,
   listRepoIssues,
@@ -67,11 +69,13 @@ import {
   listTasks,
 } from './tools/studio/index.js';
 
-// Module-level kernel reference — set by startHttpServer()
+// Module-level references — set by startHttpServer()
 let kernel: ToolKernel;
 let landingPageHtml = '';
 let startedAt: number = 0;
 let sseConnectionCount = 0;
+let agentRegistry: AgentRegistry | undefined;
+let daemonConfig: DaemonConfig | undefined;
 
 // ============================================================================
 // Security: Body Size Limit
@@ -86,23 +90,31 @@ const MAX_BODY_BYTES = 1_048_576; // 1MB
 class RateLimiter {
   private windows = new Map<string, { count: number; start: number }>();
   private maxRpm: number;
+  private agentLimits = new Map<string, number>();
 
   constructor(maxRpm: number) {
     this.maxRpm = maxRpm;
   }
 
-  /** Returns true if the request should be allowed */
-  check(ip: string): boolean {
+  /** Returns true if the request should be allowed. Uses agent-scoped key when agentId is provided. */
+  check(ip: string, agentId?: string): boolean {
+    const key = agentId ? `agent:${agentId}` : `ip:${ip}`;
+    const limit = agentId ? (this.agentLimits.get(agentId) ?? this.maxRpm) : this.maxRpm;
     const now = Date.now();
-    const entry = this.windows.get(ip);
+    const entry = this.windows.get(key);
 
     if (!entry || now - entry.start > 60_000) {
-      this.windows.set(ip, { count: 1, start: now });
+      this.windows.set(key, { count: 1, start: now });
       return true;
     }
 
     entry.count++;
-    return entry.count <= this.maxRpm;
+    return entry.count <= limit;
+  }
+
+  /** Set a per-agent RPM override */
+  setAgentLimit(agentId: string, rpm: number): void {
+    this.agentLimits.set(agentId, rpm);
   }
 
   /** Update the max RPM (e.g. on config reload) */
@@ -113,9 +125,9 @@ class RateLimiter {
   /** Periodic cleanup of expired windows */
   cleanup(): void {
     const now = Date.now();
-    for (const [ip, entry] of this.windows) {
+    for (const [key, entry] of this.windows) {
       if (now - entry.start > 60_000) {
-        this.windows.delete(ip);
+        this.windows.delete(key);
       }
     }
   }
@@ -352,8 +364,25 @@ async function executeTool(
 ): Promise<StatusEnvelope> {
   try {
     // Extract agent context from HTTP headers
+    const headerAgentId = req?.headers['x-agent-id'] as string | undefined;
+
+    // Resolve allowedFacades: header > agent registry > agent config > none
+    let allowedFacades: string[] | undefined;
+    const facadesHeader = req?.headers['x-allowed-facades'] as string | undefined;
+    if (facadesHeader) {
+      allowedFacades = facadesHeader.split(',').map(s => s.trim()).filter(Boolean);
+    } else if (headerAgentId && agentRegistry) {
+      const registeredAgent = agentRegistry.get(headerAgentId);
+      if (registeredAgent?.allowedFacades) {
+        allowedFacades = registeredAgent.allowedFacades;
+      }
+    }
+    if (!allowedFacades && headerAgentId && daemonConfig?.agents?.[headerAgentId]?.allowed_facades) {
+      allowedFacades = daemonConfig.agents[headerAgentId].allowed_facades;
+    }
+
     const context: DispatchContext | undefined = req ? {
-      agentId: req.headers['x-agent-id'] as string | undefined,
+      agentId: headerAgentId,
       runId: req.headers['x-run-id'] as string | undefined,
       parentCallId: req.headers['x-parent-call-id'] as string | undefined,
       scope: req.headers['x-scope'] as string | undefined,
@@ -361,6 +390,7 @@ async function executeTool(
       userKey: req.headers['x-user-key'] as string | undefined,
       requestId: req.headers['x-request-id'] as string | undefined,
       tier: tierOverride,
+      allowedFacades,
     } : tierOverride ? { tier: tierOverride } : undefined;
 
     const toolResult = await kernel.dispatch(tool, args, context);
@@ -490,6 +520,9 @@ export interface HttpServerOptions {
   isDaemon?: boolean;            // Running in daemon mode (affects CORS policy)
   // License
   configLicenseKey?: string;     // License key from config file (fallback)
+  // Multi-agent
+  agentRegistry?: AgentRegistry;
+  daemonConfig?: DaemonConfig;
 }
 
 /**
@@ -521,16 +554,29 @@ export async function startHttpServer(
     rateLimitRpm = 100,         // 100 req/min per IP default
     isDaemon = false,
     configLicenseKey,
+    agentRegistry: optAgentRegistry,
+    daemonConfig: optDaemonConfig,
   } = options;
 
   // Set module-level references
   kernel = kernelInstance;
   startedAt = Date.now();
+  agentRegistry = optAgentRegistry;
+  daemonConfig = optDaemonConfig;
   log(`HTTP: Using kernel with ${kernel.toolCount} tools`);
 
   // Rate limiter (clean up stale entries every 60s)
   const rateLimiter = new RateLimiter(rateLimitRpm);
   const rateLimiterCleanup = setInterval(() => rateLimiter.cleanup(), 60_000);
+
+  // Apply per-agent rate limits from daemon config
+  if (daemonConfig?.agents) {
+    for (const [agentId, agentCfg] of Object.entries(daemonConfig.agents)) {
+      if (agentCfg.rate_limit_rpm) {
+        rateLimiter.setAgentLimit(agentId, agentCfg.rate_limit_rpm);
+      }
+    }
+  }
 
   // Build landing page from actual tool list
   landingPageHtml = buildLandingPageHtml(getAvailableTools());
@@ -596,7 +642,7 @@ export async function startHttpServer(
       }
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, Accept');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, Accept, X-Agent-Id, X-Run-Id, X-License-Key, X-Allowed-Facades, X-Scope, X-Request-Id, X-Parent-Call-Id, X-Engagement-Mode, X-User-Key');
     res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
     // (a) Handle preflight OPTIONS requests
@@ -608,10 +654,16 @@ export async function startHttpServer(
 
     // Rate limiting (check before auth to prevent brute force)
     const clientIp = (req.socket.remoteAddress || '127.0.0.1').replace('::ffff:', '');
-    if (!rateLimiter.check(clientIp)) {
-      log(`HTTP: Rate limited ${clientIp}`);
+    const reqAgentId = req.headers['x-agent-id'] as string | undefined;
+    if (!rateLimiter.check(clientIp, reqAgentId)) {
+      log(`HTTP: Rate limited ${reqAgentId || clientIp}`);
       sendJson(res, 429, wrapError('Too many requests (rate limit exceeded)', 'RATE_LIMITED'));
       return;
+    }
+
+    // Implicit heartbeat: any authenticated request with X-Agent-Id keeps the agent alive
+    if (reqAgentId && agentRegistry) {
+      agentRegistry.heartbeat(reqAgentId);
     }
 
     // Track in-flight request
@@ -653,6 +705,8 @@ export async function startHttpServer(
         internal_tool_count: kernel.toolCount,
         connected_clients: activeSseConnections.size,
         active_requests: activeRequests.size,
+        connected_agents: agentRegistry?.count ?? 0,
+        agents: agentRegistry?.toJSON() ?? [],
         pro: licenseTier !== 'core',
         license_tier: licenseTier,
         supabase_configured: isSupabaseConfigured(),
@@ -791,6 +845,137 @@ export async function startHttpServer(
         api_version: 'v1',
         tools: getAvailableTools(),
       }));
+      return;
+    }
+
+    // ========================================================================
+    // Multi-Agent Endpoints (ISS-0052)
+    // ========================================================================
+
+    // POST /connect — Agent handshake with daemon
+    if (path === '/connect' && req.method === 'POST') {
+      if (!agentRegistry) {
+        sendJson(res, 503, wrapError('Agent registry not available (not in daemon mode)', 'NOT_DAEMON'));
+        return;
+      }
+      try {
+        const body = await parseBody(req);
+        const agentId = body.agent_id as string;
+        if (!agentId) {
+          sendJson(res, 400, wrapError('Missing "agent_id" field', 'MISSING_AGENT_ID'));
+          return;
+        }
+
+        // Look up per-agent config
+        const agentCfg = daemonConfig?.agents?.[agentId];
+        const agent = agentRegistry.register({
+          id: agentId,
+          capabilities: (body.capabilities as string[]) || [],
+          allowedFacades: agentCfg?.allowed_facades,
+          tier: agentCfg?.tier,
+        });
+
+        // Apply per-agent rate limit if configured
+        if (agentCfg?.rate_limit_rpm) {
+          rateLimiter.setAgentLimit(agentId, agentCfg.rate_limit_rpm);
+        }
+
+        log(`HTTP: /connect agent=${agentId}`);
+        sendJson(res, 200, wrapSuccess({
+          agent_id: agent.id,
+          connected_at: agent.connectedAt,
+          capabilities: agent.capabilities,
+          allowed_facades: agent.allowedFacades || null,
+          tier: agent.tier || null,
+          rate_limit_rpm: agentCfg?.rate_limit_rpm || rateLimitRpm,
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'CONNECT_ERROR'));
+      }
+      return;
+    }
+
+    // POST /disconnect — Graceful agent disconnect
+    if (path === '/disconnect' && req.method === 'POST') {
+      if (!agentRegistry) {
+        sendJson(res, 503, wrapError('Agent registry not available (not in daemon mode)', 'NOT_DAEMON'));
+        return;
+      }
+      try {
+        const body = await parseBody(req);
+        const agentId = body.agent_id as string;
+        if (!agentId) {
+          sendJson(res, 400, wrapError('Missing "agent_id" field', 'MISSING_AGENT_ID'));
+          return;
+        }
+
+        const disconnected = agentRegistry.disconnect(agentId);
+        log(`HTTP: /disconnect agent=${agentId} (was_connected=${disconnected})`);
+        sendJson(res, 200, wrapSuccess({
+          agent_id: agentId,
+          disconnected,
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'DISCONNECT_ERROR'));
+      }
+      return;
+    }
+
+    // GET /agents — List connected agents
+    if (path === '/agents' && req.method === 'GET') {
+      if (!agentRegistry) {
+        sendJson(res, 200, wrapSuccess({ agents: [], count: 0 }));
+        return;
+      }
+      sendJson(res, 200, wrapSuccess({
+        agents: agentRegistry.toJSON(),
+        count: agentRegistry.count,
+      }));
+      return;
+    }
+
+    // GET /events/stream — SSE stream of real-time dispatch events
+    if (path === '/events/stream' && req.method === 'GET') {
+      // Filter params
+      const filterAgentId = url.searchParams.get('agent_id');
+      const filterFacade = url.searchParams.get('facade');
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+      res.write(': connected\n\n');
+
+      const listener = (evt: DispatchEvent) => {
+        // Apply filters
+        if (filterAgentId && evt.agentId !== filterAgentId) return;
+        if (filterFacade && evt.facade !== filterFacade) return;
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify(evt)}\n\n`);
+        }
+      };
+
+      kernel.on('dispatch', listener);
+      kernel.on('result', listener);
+      kernel.on('error', listener);
+
+      // Track for keepalive
+      activeSseConnections.add(res);
+      log(`HTTP: /events/stream opened (${activeSseConnections.size} SSE connections)`);
+
+      // Cleanup on close
+      const cleanup = () => {
+        kernel.off('dispatch', listener);
+        kernel.off('result', listener);
+        kernel.off('error', listener);
+        activeSseConnections.delete(res);
+        log(`HTTP: /events/stream closed (${activeSseConnections.size} SSE connections)`);
+      };
+      res.on('close', cleanup);
+      res.on('error', cleanup);
       return;
     }
 

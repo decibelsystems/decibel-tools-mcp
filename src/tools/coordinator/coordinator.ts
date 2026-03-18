@@ -810,6 +810,118 @@ export async function coordAck(
 }
 
 // ============================================================================
+// Garbage Collection (ISS-0052: daemon-driven periodic cleanup)
+// ============================================================================
+
+export interface GcResult {
+  expired_messages: number;
+  expired_locks: number;
+  projects_swept: number;
+}
+
+/**
+ * Sweep expired coordinator state across one or more projects.
+ * Called periodically by the daemon's GC interval.
+ *
+ * - Deletes message files past their `expires_at`
+ * - Rewrites locks.yaml to remove expired locks
+ * - Logs GC events to coordinator audit log
+ */
+export async function coordGarbageCollect(projectIds: string[]): Promise<GcResult> {
+  let expiredMessages = 0;
+  let expiredLocks = 0;
+  let projectsSwept = 0;
+
+  for (const projectId of projectIds) {
+    let resolved: ResolvedProjectPaths;
+    try {
+      resolved = resolveProjectPaths(projectId);
+    } catch {
+      continue; // Skip unresolvable projects
+    }
+
+    const coordDir = getCoordDir(resolved);
+    const now = new Date().toISOString();
+    let hadWork = false;
+
+    // 1. Sweep expired locks
+    try {
+      const locks = await readLocks(coordDir);
+      const { active, expired } = cleanExpiredLocks(locks);
+      if (expired.length > 0) {
+        await writeLocks(coordDir, active);
+        for (const lock of expired) {
+          await appendEvent(coordDir, {
+            ts: now,
+            agent: 'gc',
+            action: 'lock_gc_expired',
+            resource: lock.resource,
+            details: { owner: lock.owner, expired_at: lock.expires_at },
+          });
+        }
+        expiredLocks += expired.length;
+        hadWork = true;
+      }
+    } catch {
+      // No locks file or read error — skip
+    }
+
+    // 2. Sweep expired messages across all agent inboxes
+    try {
+      const messagesDir = path.join(coordDir, 'messages');
+      let agentDirs: string[];
+      try {
+        agentDirs = await fs.readdir(messagesDir);
+      } catch {
+        agentDirs = [];
+      }
+
+      for (const agentDir of agentDirs) {
+        const inboxPath = path.join(messagesDir, agentDir);
+        let stat;
+        try {
+          stat = await fs.stat(inboxPath);
+        } catch { continue; }
+        if (!stat.isDirectory()) continue;
+
+        const files = await listMessageFiles(inboxPath);
+        for (const file of files) {
+          const filePath = path.join(inboxPath, file);
+          const msg = await readMessage(filePath);
+          if (!msg) continue;
+
+          if (isExpired(msg.expires_at)) {
+            await fs.unlink(filePath);
+            await appendEvent(coordDir, {
+              ts: now,
+              agent: 'gc',
+              action: 'message_gc_expired',
+              details: { message_id: msg.id, from: msg.from, to: msg.to, intent: msg.intent },
+            });
+            expiredMessages++;
+            hadWork = true;
+          }
+        }
+      }
+    } catch {
+      // Messages dir doesn't exist — that's fine
+    }
+
+    if (hadWork) projectsSwept++;
+  }
+
+  if (expiredMessages > 0 || expiredLocks > 0) {
+    log(`Coordinator GC: swept ${expiredMessages} messages, ${expiredLocks} locks across ${projectsSwept} project(s)`);
+  }
+
+  return {
+    expired_messages: expiredMessages,
+    expired_locks: expiredLocks,
+    projects_swept: projectsSwept,
+  };
+}
+
+// ============================================================================
 // Type guard export
 // ============================================================================
 

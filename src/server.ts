@@ -34,9 +34,12 @@ import {
   checkCrashLoop,
   scheduleHealthReset,
   resetCrashes,
+  AgentRegistry,
 } from './daemon.js';
 import { loadConfig } from './daemonConfig.js';
 import { getLicenseValidator } from './license.js';
+import { coordGarbageCollect } from './tools/coordinator/index.js';
+import { listProjects } from './projectRegistry.js';
 
 const config = getConfig();
 
@@ -66,6 +69,9 @@ async function main() {
   // Load daemon config file (CLI flags override config)
   const daemonConfig = loadConfig();
 
+  // Create agent registry for daemon mode
+  const agentRegistry = daemonMode ? new AgentRegistry() : undefined;
+
   const transportConfig: TransportConfig = {
     port: daemonMode ? (port || daemonConfig.daemon.port || 4888) : port,
     host: host || (daemonMode ? daemonConfig.daemon.host : undefined),
@@ -76,6 +82,8 @@ async function main() {
     isDaemon: daemonMode,
     rateLimitRpm: daemonConfig.daemon.rate_limit_rpm,
     configLicenseKey: daemonConfig.license?.key,
+    agentRegistry,
+    daemonConfig,
   };
 
   // Daemon lifecycle: check lock, crash loop, write PID, setup shutdown
@@ -177,6 +185,28 @@ async function main() {
     log(`Daemon: log rotation: max ${logMaxSizeBytes / 1024 / 1024}MB, keep ${logMaxFiles} files`);
   }
 
+  // Schedule GC interval for daemon mode (coordinator cleanup + stale agent sweep)
+  let gcInterval: ReturnType<typeof setInterval> | null = null;
+  if (daemonMode && agentRegistry) {
+    const gcIntervalSecs = daemonConfig.daemon.gc_interval_secs || 300;
+    gcInterval = setInterval(async () => {
+      try {
+        // Sweep stale agents from registry
+        agentRegistry.sweepStale();
+
+        // GC coordinator state across all registered projects
+        const projects = listProjects();
+        if (projects.length > 0) {
+          const projectIds = projects.map(p => p.id);
+          await coordGarbageCollect(projectIds);
+        }
+      } catch (err) {
+        log(`Daemon: GC error: ${err}`);
+      }
+    }, gcIntervalSecs * 1000);
+    log(`Daemon: GC interval set to ${gcIntervalSecs}s`);
+  }
+
   // Start transport(s)
   if (daemonMode) {
     // Daemon always starts HTTP
@@ -194,6 +224,7 @@ async function main() {
     // Install graceful shutdown handlers
     installShutdownHandlers(async () => {
       log('Daemon: stopping all transports...');
+      if (gcInterval) clearInterval(gcInterval);
       await Promise.all(adapters.map(a => a.stop()));
     });
   } else if (httpMode) {

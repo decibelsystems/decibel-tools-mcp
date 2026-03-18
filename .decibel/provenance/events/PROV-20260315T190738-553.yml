@@ -1,0 +1,11 @@
+event_id: PROV-20260315T190738-553
+timestamp: 2026-03-15T19:07:38.553Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-03-15T19-07-38Z-add-mother-mcp-facade-tools-to-decibel-tools-mcp.md
+reason_code: initial_creation
+summary: "Created issue: Add Mother MCP facade tools to decibel-tools-mcp"
+fingerprint_before: null
+fingerprint_after: sha256:ff2c8f228f20a86d

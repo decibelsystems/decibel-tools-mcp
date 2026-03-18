@@ -15,6 +15,12 @@ import { log } from './config.js';
 // Config Schema
 // ============================================================================
 
+export interface AgentConfig {
+  rate_limit_rpm?: number;
+  allowed_facades?: string[];
+  tier?: 'core' | 'pro' | 'apps';
+}
+
 export interface DaemonConfig {
   daemon: {
     port: number;
@@ -23,10 +29,12 @@ export interface DaemonConfig {
     log_max_size_mb: number;
     log_max_files: number;
     rate_limit_rpm: number;
+    gc_interval_secs: number;
   };
   license?: {
     key?: string;
   };
+  agents?: Record<string, AgentConfig>;
 }
 
 const DEFAULT_CONFIG: DaemonConfig = {
@@ -36,6 +44,7 @@ const DEFAULT_CONFIG: DaemonConfig = {
     log_max_size_mb: 10,
     log_max_files: 3,
     rate_limit_rpm: 100,
+    gc_interval_secs: 300,
   },
 };
 
@@ -72,10 +81,12 @@ export function loadConfig(): DaemonConfig {
         log_max_size_mb: parsed.daemon?.log_max_size_mb ?? DEFAULT_CONFIG.daemon.log_max_size_mb,
         log_max_files: parsed.daemon?.log_max_files ?? DEFAULT_CONFIG.daemon.log_max_files,
         rate_limit_rpm: parsed.daemon?.rate_limit_rpm ?? DEFAULT_CONFIG.daemon.rate_limit_rpm,
+        gc_interval_secs: parsed.daemon?.gc_interval_secs ?? DEFAULT_CONFIG.daemon.gc_interval_secs,
       },
       license: parsed.license ? {
         key: parsed.license.key,
       } : undefined,
+      agents: (parsed as Record<string, unknown>).agents as Record<string, AgentConfig> | undefined,
     };
   } catch (err) {
     log(`Config: Failed to parse ${CONFIG_PATH}: ${err}`);
@@ -148,6 +159,12 @@ export function reloadConfig(
   }
   if (reloaded.daemon.auth_token !== current.daemon.auth_token) {
     changes.push('auth_token: changed');
+  }
+  if (reloaded.daemon.gc_interval_secs !== current.daemon.gc_interval_secs) {
+    changes.push(`gc_interval_secs: ${current.daemon.gc_interval_secs} → ${reloaded.daemon.gc_interval_secs}`);
+  }
+  if (JSON.stringify(reloaded.agents) !== JSON.stringify(current.agents)) {
+    changes.push('agents: config changed');
   }
 
   return { config: reloaded, changes, requiresRestart };

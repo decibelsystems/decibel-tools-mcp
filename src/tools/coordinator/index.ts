@@ -29,6 +29,10 @@ import {
   isCoordError,
 } from './coordinator.js';
 
+// Re-export GC function for daemon-driven cleanup
+export { coordGarbageCollect } from './coordinator.js';
+export type { GcResult } from './coordinator.js';
+
 // ============================================================================
 // coord_register
 // ============================================================================
