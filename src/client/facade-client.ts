@@ -16,7 +16,8 @@
 // ============================================================================
 
 import { EventEmitter } from 'events';
-import type { FacadeClientConfig, BatchCall, BatchResult } from './types.js';
+import { randomUUID } from 'crypto';
+import type { FacadeClientConfig, CallContext, BatchCall, BatchResult } from './types.js';
 import {
   StdioTransport,
   HttpTransport,
@@ -76,14 +77,18 @@ export class FacadeClient {
   /**
    * Call a facade action.
    *
+   * @param context  Per-call context that overrides config-level defaults.
+   *
    * @example
    *   const epics = await client.call('sentinel', 'list_epics');
    *   const issue = await client.call('sentinel', 'create_issue', { title: 'Fix login' });
+   *   const scoped = await client.call('sentinel', 'list_epics', {}, { scope: 'portfolio' });
    */
   async call<T = unknown>(
     facade: string,
     action: string,
     params?: Record<string, unknown>,
+    context?: CallContext,
   ): Promise<T> {
     // Enforce allowlist
     if (this.config.allowedFacades && !this.config.allowedFacades.includes(facade)) {
@@ -98,33 +103,42 @@ export class FacadeClient {
     // Build args: facade dispatch expects { action, ...params }
     const args: Record<string, unknown> = { action, ...params };
 
-    // Auto-inject project_id from config if not already provided
-    if (this.config.projectId && !args.project_id) {
-      args.project_id = this.config.projectId;
+    // Resolve effective scope: per-call > config-level
+    const effectiveScope = context?.scope ?? this.config.projectId;
+
+    // Auto-inject project_id from effective scope if not already provided
+    if (effectiveScope && !args.project_id) {
+      args.project_id = effectiveScope;
     }
+
+    // Generate request correlation ID
+    const requestId = randomUUID();
 
     // Thread DispatchContext via _meta (MCP convention)
-    if (this.config.agentId || this.config.projectId) {
-      args._meta = {
-        agentId: this.config.agentId,
-        scope: this.config.projectId,
-      };
-    }
+    // Per-call context merges with and overrides config-level defaults
+    args._meta = {
+      agentId: context?.agentId ?? this.config.agentId,
+      scope: effectiveScope,
+      runId: context?.runId,
+      engagementMode: context?.engagementMode,
+      userKey: context?.userKey,
+      requestId,
+    };
 
-    this.log(`call ${facade}.${action}`);
+    this.log(`call ${facade}.${action} (req=${requestId.slice(0, 8)})`);
 
     const startTime = Date.now();
     try {
       const result = await this.transport!.call(facade, args);
       const duration = Date.now() - startTime;
 
-      this.events.emit('result', { facade, action, duration_ms: duration, success: true });
+      this.events.emit('result', { facade, action, duration_ms: duration, success: true, requestId });
       return result as T;
     } catch (err) {
       const duration = Date.now() - startTime;
       const message = err instanceof Error ? err.message : String(err);
 
-      this.events.emit('error', { facade, action, duration_ms: duration, error: message });
+      this.events.emit('error', { facade, action, duration_ms: duration, error: message, requestId });
 
       // Try to parse structured error from the server
       if ((err as { isCallError?: boolean }).isCallError && (err as { raw?: string }).raw) {
@@ -144,10 +158,13 @@ export class FacadeClient {
   /**
    * Batch multiple facade calls (max 20, parallel execution).
    *
+   * @param context  Batch-level context applied to all calls.
+   *   Individual BatchCall.context merges with (and overrides) this.
+   *
    * For HTTP transport, uses the daemon's /batch endpoint directly.
    * For stdio transport, runs calls in parallel via Promise.all.
    */
-  async batch(calls: BatchCall[]): Promise<BatchResult[]> {
+  async batch(calls: BatchCall[], context?: CallContext): Promise<BatchResult[]> {
     if (calls.length === 0) return [];
     if (calls.length > MAX_BATCH_SIZE) {
       throw new Error(`Batch size ${calls.length} exceeds maximum of ${MAX_BATCH_SIZE}`);
@@ -166,37 +183,53 @@ export class FacadeClient {
 
     await this.connect();
 
+    // Resolve effective batch-level context (per-batch > config defaults)
+    const effectiveScope = context?.scope ?? this.config.projectId;
+    const effectiveAgentId = context?.agentId ?? this.config.agentId;
+
     // Try native /batch endpoint for HTTP transport
     const httpTransport = this.getHttpTransport();
     if (httpTransport) {
       this.log(`batch (HTTP) — ${calls.length} calls`);
-      const context = {
-        agentId: this.config.agentId,
-        scope: this.config.projectId,
+      const httpContext = {
+        agentId: effectiveAgentId,
+        scope: effectiveScope,
+        runId: context?.runId,
+        engagementMode: context?.engagementMode,
+        userKey: context?.userKey,
+        requestId: randomUUID(),
       };
 
       // Inject project_id into each call's params
-      const enrichedCalls = calls.map(c => ({
-        ...c,
-        params: {
-          ...c.params,
-          ...(this.config.projectId && !c.params?.project_id
-            ? { project_id: this.config.projectId }
-            : {}),
-        },
-      }));
+      const enrichedCalls = calls.map(c => {
+        const callScope = c.context?.scope ?? effectiveScope;
+        return {
+          facade: c.facade,
+          action: c.action,
+          params: {
+            ...c.params,
+            ...(callScope && !c.params?.project_id
+              ? { project_id: callScope }
+              : {}),
+          },
+        };
+      });
 
-      const result = await httpTransport.batch(enrichedCalls, context);
+      const result = await httpTransport.batch(enrichedCalls, httpContext);
       return result as BatchResult[];
     }
 
-    // Stdio fallback: parallel Promise.all
+    // Stdio fallback: parallel Promise.all (each call gets its own requestId via call())
     this.log(`batch (stdio) — ${calls.length} calls`);
     const results = await Promise.all(
       calls.map(async (c): Promise<BatchResult> => {
         const start = Date.now();
+        // Per-call context merges: call-level > batch-level > config
+        const callCtx = c.context
+          ? { ...context, ...c.context }
+          : context;
         try {
-          const data = await this.call(c.facade, c.action, c.params);
+          const data = await this.call(c.facade, c.action, c.params, callCtx);
           return {
             facade: c.facade,
             action: c.action,

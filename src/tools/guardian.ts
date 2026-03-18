@@ -69,6 +69,21 @@ export interface ScanConfigOutput {
   config_path: string;
 }
 
+export interface ScanHeadersInput {
+  url: string;
+  check_observatory?: boolean;
+}
+
+export interface ScanHeadersOutput {
+  url: string;
+  present_headers: Array<{ name: string; value: string }>;
+  missing_headers: Array<{ name: string; recommended_value: string; severity: 'critical' | 'high' | 'medium' }>;
+  info_leak_headers: Array<{ name: string; value: string }>;
+  cors: { origin: string | null; credentials: boolean };
+  observatory?: { grade: string; score: number };
+  grade: string;
+}
+
 export interface GuardianReportOutput {
   overall_grade: string;
   sections: {
@@ -332,6 +347,108 @@ export async function scanHttp(): Promise<ScanHttpOutput> {
   const score = gradeFromScore(passCount, checks.length);
 
   return { checks, score };
+}
+
+// ============================================================================
+// Header Security Scanning
+// ============================================================================
+
+const CRITICAL_HEADERS: Array<{ name: string; recommended: string; severity: 'critical' | 'high' | 'medium' }> = [
+  { name: 'content-security-policy', recommended: "default-src 'self'", severity: 'critical' },
+  { name: 'x-frame-options', recommended: 'DENY', severity: 'high' },
+  { name: 'strict-transport-security', recommended: 'max-age=63072000; includeSubDomains; preload', severity: 'critical' },
+  { name: 'x-content-type-options', recommended: 'nosniff', severity: 'high' },
+  { name: 'referrer-policy', recommended: 'strict-origin-when-cross-origin', severity: 'medium' },
+  { name: 'permissions-policy', recommended: 'camera=(), microphone=(), geolocation=()', severity: 'medium' },
+];
+
+const INFO_LEAK_PATTERNS = [
+  'server',
+  'x-powered-by',
+  'x-vercel-id',
+  'x-render-origin-server',
+];
+const INFO_LEAK_PREFIX = 'x-amz-';
+
+export async function scanHeaders(input: ScanHeadersInput): Promise<ScanHeadersOutput> {
+  let url = input.url;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  // Fetch headers via HEAD request
+  const res = await fetch(url, {
+    method: 'HEAD',
+    redirect: 'follow',
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  const headers = res.headers;
+  const present: ScanHeadersOutput['present_headers'] = [];
+  const missing: ScanHeadersOutput['missing_headers'] = [];
+  const infoLeak: ScanHeadersOutput['info_leak_headers'] = [];
+
+  // Check critical security headers
+  for (const h of CRITICAL_HEADERS) {
+    const value = headers.get(h.name);
+    if (value) {
+      present.push({ name: h.name, value });
+    } else {
+      missing.push({ name: h.name, recommended_value: h.recommended, severity: h.severity });
+    }
+  }
+
+  // Detect info-leak headers
+  headers.forEach((value, name) => {
+    const lower = name.toLowerCase();
+    if (INFO_LEAK_PATTERNS.includes(lower) || lower.startsWith(INFO_LEAK_PREFIX)) {
+      infoLeak.push({ name, value });
+    }
+  });
+
+  // CORS
+  const corsOrigin = headers.get('access-control-allow-origin');
+  const corsCredentials = headers.get('access-control-allow-credentials') === 'true';
+
+  // Grade: A (6/6 present, no leaks), B (5/6), C (4/6), D (2-3/6), F (<2/6)
+  let grade: string;
+  const presentCount = present.length;
+  const hasLeaks = infoLeak.length > 0;
+  if (presentCount === 6 && !hasLeaks) grade = 'A';
+  else if (presentCount >= 5) grade = 'B';
+  else if (presentCount >= 4) grade = 'C';
+  else if (presentCount >= 2) grade = 'D';
+  else grade = 'F';
+
+  // Optional Mozilla Observatory check
+  let observatory: ScanHeadersOutput['observatory'] | undefined;
+  if (input.check_observatory) {
+    try {
+      const hostname = new URL(url).hostname;
+      const obsRes = await fetch(
+        `https://http-observatory.security.mozilla.org/api/v1/analyze?host=${encodeURIComponent(hostname)}`,
+        { method: 'POST', signal: AbortSignal.timeout(30_000) },
+      );
+      if (obsRes.ok) {
+        const obsData = await obsRes.json() as { grade?: string; score?: number; state?: string };
+        if (obsData.grade && obsData.score !== undefined) {
+          observatory = { grade: obsData.grade, score: obsData.score };
+        } else if (obsData.state === 'PENDING' || obsData.state === 'RUNNING') {
+          observatory = { grade: 'PENDING', score: 0 };
+        }
+      }
+    } catch {
+      // Observatory unreachable — skip silently
+    }
+  }
+
+  return {
+    url,
+    present_headers: present,
+    missing_headers: missing,
+    info_leak_headers: infoLeak,
+    cors: { origin: corsOrigin, credentials: corsCredentials },
+    observatory,
+    grade,
+  };
 }
 
 export async function scanConfig(): Promise<ScanConfigOutput> {

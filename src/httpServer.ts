@@ -357,6 +357,9 @@ async function executeTool(
       runId: req.headers['x-run-id'] as string | undefined,
       parentCallId: req.headers['x-parent-call-id'] as string | undefined,
       scope: req.headers['x-scope'] as string | undefined,
+      engagementMode: req.headers['x-engagement-mode'] as string | undefined,
+      userKey: req.headers['x-user-key'] as string | undefined,
+      requestId: req.headers['x-request-id'] as string | undefined,
       tier: tierOverride,
     } : tierOverride ? { tier: tierOverride } : undefined;
 
@@ -862,6 +865,9 @@ export async function startHttpServer(
           runId: (req.headers['x-run-id'] as string) || bodyContext.runId,
           parentCallId: (req.headers['x-parent-call-id'] as string) || bodyContext.parentCallId,
           scope: (req.headers['x-scope'] as string) || bodyContext.scope,
+          engagementMode: (req.headers['x-engagement-mode'] as string) || bodyContext.engagementMode,
+          userKey: (req.headers['x-user-key'] as string) || bodyContext.userKey,
+          requestId: (req.headers['x-request-id'] as string) || bodyContext.requestId,
           allowedFacades: bodyContext.allowedFacades as unknown as string[] | undefined,
           tier,
         };

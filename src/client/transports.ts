@@ -155,6 +155,9 @@ export class HttpTransport implements ClientTransport {
     if (meta?.agentId) headers['X-Agent-Id'] = meta.agentId as string;
     if (meta?.runId) headers['X-Run-Id'] = meta.runId as string;
     if (meta?.scope) headers['X-Scope'] = meta.scope as string;
+    if (meta?.engagementMode) headers['X-Engagement-Mode'] = meta.engagementMode as string;
+    if (meta?.userKey) headers['X-User-Key'] = meta.userKey as string;
+    if (meta?.requestId) headers['X-Request-Id'] = meta.requestId as string;
 
     // Strip _meta from the args sent to daemon (it uses headers)
     const { _meta: _stripped, ...callArgs } = args;
@@ -196,7 +199,10 @@ export class HttpTransport implements ClientTransport {
   /** Batch call via daemon's /batch endpoint */
   async batch(
     calls: Array<{ facade: string; action: string; params?: Record<string, unknown> }>,
-    context?: { agentId?: string; runId?: string; scope?: string },
+    context?: {
+      agentId?: string; runId?: string; scope?: string;
+      engagementMode?: string; userKey?: string; requestId?: string;
+    },
   ): Promise<unknown> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -204,6 +210,9 @@ export class HttpTransport implements ClientTransport {
     if (context?.agentId) headers['X-Agent-Id'] = context.agentId;
     if (context?.runId) headers['X-Run-Id'] = context.runId;
     if (context?.scope) headers['X-Scope'] = context.scope;
+    if (context?.engagementMode) headers['X-Engagement-Mode'] = context.engagementMode;
+    if (context?.userKey) headers['X-User-Key'] = context.userKey;
+    if (context?.requestId) headers['X-Request-Id'] = context.requestId;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);

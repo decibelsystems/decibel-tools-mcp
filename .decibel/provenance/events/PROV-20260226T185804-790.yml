@@ -1,0 +1,11 @@
+event_id: PROV-20260226T185804-790
+timestamp: 2026-02-26T18:58:04.790Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-02-26T18-58-04Z-replace-private-key-cli-arg-with-foundry-keystore-.md
+reason_code: initial_creation
+summary: "Created issue: Replace --private-key CLI arg with Foundry keystore in terminal facade"
+fingerprint_before: null
+fingerprint_after: sha256:27620f90b226a214

@@ -1,0 +1,11 @@
+event_id: PROV-20260217T074341-059
+timestamp: 2026-02-17T07:43:41.059Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-02-17T07-43-41Z-xcode-26-3-mcp-support-install-guide-requirements.md
+reason_code: initial_creation
+summary: "Created issue: Xcode 26.3 MCP Support — Install Guide & Requirements"
+fingerprint_before: null
+fingerprint_after: sha256:a79ed529ee147439

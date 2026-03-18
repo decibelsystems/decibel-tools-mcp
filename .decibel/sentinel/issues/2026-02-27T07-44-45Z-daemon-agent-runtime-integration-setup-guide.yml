@@ -1,0 +1,56 @@
+id: ISS-0052
+projectId: decibel-tools-mcp
+title: "Daemon + agent runtime integration: startup, health checks, and env var
+  contract"
+severity: high
+status: open
+tags:
+  - daemon
+  - agent-runtime
+  - dx
+  - terminal-trader
+created_at: 2026-02-27T07:44:45.028Z
+description: >-
+  The daemon (decibel-tools --daemon) and the agent runtime (decibel-agent
+  createAgentServer) need a clear integration contract.
+
+
+  Open questions:
+
+  - How does the agent ensure the daemon is running before connecting? (health
+  check polling, auto-start, launchd dependency?)
+
+  - What env vars does the agent need? (MCP_SERVER_URL, MCP_AUTH_TOKEN,
+  DECIBEL_APPS=1)
+
+  - Should the agent runtime auto-start the daemon if MCP_SERVER_URL is set but
+  /health fails?
+
+  - Auth token sharing: agent needs the same token as daemon config.yaml — where
+  is the source of truth?
+
+  - Multiple agents sharing one daemon: does the daemon handle concurrent facade
+  dispatch correctly?
+
+  - Tier gating: daemon needs DECIBEL_APPS=1 in its env for terminal facade to
+  load — how is this configured for launchd?
+
+
+  Immediate need: terminal-trader agent for DX Terminal Pro tournament (Day 2
+  live now).
+
+
+  Acceptance criteria:
+
+  - Document the env var contract between daemon and agent runtime
+
+  - Agent runtime gracefully handles daemon-not-running (retry with backoff, or
+  auto-start)
+
+  - Auth token can be resolved from ~/.decibel/config.yaml by both daemon and
+  agent
+
+  - launchd plist sets DECIBEL_APPS=1 so terminal facade loads in production
+
+  - /health endpoint returns facade_count that includes terminal (confirms apps
+  tier loaded)
