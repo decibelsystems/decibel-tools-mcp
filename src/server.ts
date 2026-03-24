@@ -69,8 +69,8 @@ async function main() {
   // Load daemon config file (CLI flags override config)
   const daemonConfig = loadConfig();
 
-  // Create agent registry for daemon mode
-  const agentRegistry = daemonMode ? new AgentRegistry() : undefined;
+  // Create agent registry for daemon or HTTP mode (multi-agent endpoints need it)
+  const agentRegistry = (daemonMode || httpMode) ? new AgentRegistry() : undefined;
 
   const transportConfig: TransportConfig = {
     port: daemonMode ? (port || daemonConfig.daemon.port || 4888) : port,
