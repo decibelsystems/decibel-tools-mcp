@@ -1678,6 +1678,205 @@ const deckDraftStats: ToolSpec = {
 };
 
 // =============================================================================
+// Intel Reports
+// =============================================================================
+
+const INTEL_TYPES = [
+  'price_spike', 'price_crash', 'format_shakeup', 'sleeper_pick',
+  'deck_tech', 'meta_shift', 'budget_alert', 'spec_target',
+  'correlation', 'event_impact',
+] as const;
+
+const INTEL_URGENCIES = ['breaking', 'daily', 'weekly', 'background'] as const;
+
+const deckIntelWrite: ToolSpec = {
+  definition: {
+    name: 'deck_intel_write',
+    description:
+      'Write an intel report to the intel_reports table. Used by the deckscry-intel agent to publish analysis results.',
+    annotations: {
+      title: 'Write Intel Report',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          enum: [...INTEL_TYPES],
+          description: 'Intel report type',
+        },
+        format: {
+          type: 'string',
+          description: 'MTG format (standard, pioneer, modern, etc.) or null for cross-format',
+        },
+        urgency: {
+          type: 'string',
+          enum: [...INTEL_URGENCIES],
+          description: 'Report urgency (default: daily)',
+        },
+        title: {
+          type: 'string',
+          description: 'Report title — e.g. "Sheoldred spikes 40% after Pioneer RCQ results"',
+        },
+        summary: {
+          type: 'string',
+          description: '2-3 sentence analysis with evidence and reasoning',
+        },
+        cards: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Scryfall UUIDs of cards involved',
+        },
+        data: {
+          type: 'object',
+          description: 'Structured payload — analyzer name, confidence, evidence, involved_cards details',
+        },
+        social_hook: {
+          type: 'string',
+          description: 'Pre-written social media hook with specific numbers, timeframe, and why. Under 200 chars.',
+        },
+      },
+      required: ['type', 'title', 'summary'],
+    },
+  },
+  handler: async (args: {
+    type: string;
+    format?: string;
+    urgency?: string;
+    title: string;
+    summary: string;
+    cards?: string[];
+    data?: Record<string, unknown>;
+    social_hook?: string;
+  }): Promise<ToolResult> => {
+    try {
+      const db = getClient();
+      const { data, error } = await db
+        .from('intel_reports')
+        .insert({
+          type: args.type,
+          format: args.format || null,
+          urgency: args.urgency || 'daily',
+          title: args.title,
+          summary: args.summary,
+          cards: args.cards || [],
+          data: args.data || {},
+          social_hook: args.social_hook || null,
+        })
+        .select('id, type, format, urgency, title, created_at')
+        .single();
+
+      if (error) throw new Error(error.message);
+      return jsonResult({ success: true, report: data });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return jsonResult({ success: false, error: msg }, true);
+    }
+  },
+};
+
+const deckIntelReports: ToolSpec = {
+  definition: {
+    name: 'deck_intel_reports',
+    description:
+      'Read intel reports. Filter by type, format, urgency, or unpublished status. Used by marketer and other consumers.',
+    annotations: {
+      title: 'Read Intel Reports',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', description: 'Filter by intel type' },
+        format: { type: 'string', description: 'Filter by MTG format' },
+        urgency: { type: 'string', description: 'Filter by urgency level' },
+        unpublished: { type: 'boolean', description: 'If true, only return reports not yet consumed by marketer' },
+        limit: { type: 'number', description: 'Max reports to return (default: 20)' },
+      },
+      required: [],
+    },
+  },
+  handler: async (args: {
+    type?: string;
+    format?: string;
+    urgency?: string;
+    unpublished?: boolean;
+    limit?: number;
+  }): Promise<ToolResult> => {
+    try {
+      const db = getClient();
+      let query = db
+        .from('intel_reports')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(args.limit || 20);
+
+      if (args.type) query = query.eq('type', args.type);
+      if (args.format) query = query.eq('format', args.format);
+      if (args.urgency) query = query.eq('urgency', args.urgency);
+      if (args.unpublished) query = query.eq('published', false);
+
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+
+      return jsonResult({
+        success: true,
+        reports: data,
+        count: data?.length || 0,
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return jsonResult({ success: false, error: msg }, true);
+    }
+  },
+};
+
+const deckIntelPublish: ToolSpec = {
+  definition: {
+    name: 'deck_intel_publish',
+    description:
+      'Mark intel reports as published (consumed by marketer). Accepts one or more report IDs.',
+    annotations: {
+      title: 'Mark Intel Published',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        report_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'UUIDs of reports to mark as published',
+        },
+      },
+      required: ['report_ids'],
+    },
+  },
+  handler: async (args: { report_ids: string[] }): Promise<ToolResult> => {
+    try {
+      const db = getClient();
+      const { error } = await db
+        .from('intel_reports')
+        .update({ published: true })
+        .in('id', args.report_ids);
+
+      if (error) throw new Error(error.message);
+      return jsonResult({ success: true, published: args.report_ids.length });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return jsonResult({ success: false, error: msg }, true);
+    }
+  },
+};
+
+// =============================================================================
 // Export
 // =============================================================================
 
@@ -1698,4 +1897,7 @@ export const deckTools: ToolSpec[] = [
   deckRecord,
   deckPlayerSummary,
   deckDraftStats,
+  deckIntelWrite,
+  deckIntelReports,
+  deckIntelPublish,
 ];
