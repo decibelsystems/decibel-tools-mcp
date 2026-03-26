@@ -34,6 +34,7 @@ import { forecastTools } from './forecast/index.js';
 import { coordinatorTools } from './coordinator/index.js';
 import { benchTools } from './bench/index.js';
 import { guardianTools } from './guardian/index.js';
+import { swarmTools } from './swarm.js';
 import {
   loadGraduatedTools,
   executeGraduatedTool,
@@ -75,6 +76,7 @@ const coreTools: ToolSpec[] = [
   ...coordinatorTools,
   ...benchTools,
   ...guardianTools,
+  ...swarmTools,
 ];
 
 // App tools — Decibel internal (only when DECIBEL_APPS=1)

@@ -281,6 +281,27 @@ export const coreFacades: FacadeSpec[] = [
   },
 
   {
+    name: 'swarm',
+    description: 'Shared agent context layer for multi-agent coordination. Sessions group agents around a mission; signals are typed events (bug_found, fix_applied, blocker, decision, finding, request, api_changed, breaking_change, schema_changed, new_capability, gate, intent) published by topic; claim/release/resolve manage signal lifecycle; ack for lightweight acknowledgment. Actions: start_session, join_session, session_status, pause_session, close_session, emit_signal, read_signals, ack_signal, claim_signal, release_signal, resolve_signal',
+    compactDescription: 'Multi-agent sessions, signals, and coordination',
+    microEligible: false,
+    tier: 'core',
+    actions: {
+      start_session: 'swarm_start_session',
+      join_session: 'swarm_join_session',
+      session_status: 'swarm_session_status',
+      pause_session: 'swarm_pause_session',
+      close_session: 'swarm_close_session',
+      emit_signal: 'swarm_emit_signal',
+      read_signals: 'swarm_read_signals',
+      ack_signal: 'swarm_ack_signal',
+      claim_signal: 'swarm_claim_signal',
+      release_signal: 'swarm_release_signal',
+      resolve_signal: 'swarm_resolve_signal',
+    },
+  },
+
+  {
     name: 'friction',
     description: 'Track recurring pain points and workarounds. log when you notice something annoying or broken that keeps coming up; bump to increase severity of an existing friction; resolve when the root cause is fixed. Check list before logging to avoid duplicates. Actions: log, list, bump, resolve',
     compactDescription: 'Log and track recurring pain points',
