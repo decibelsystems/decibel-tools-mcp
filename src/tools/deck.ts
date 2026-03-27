@@ -1684,7 +1684,7 @@ const deckDraftStats: ToolSpec = {
 const INTEL_TYPES = [
   'price_spike', 'price_crash', 'format_shakeup', 'sleeper_pick',
   'deck_tech', 'meta_shift', 'budget_alert', 'spec_target',
-  'correlation', 'event_impact',
+  'correlation', 'event_impact', 'reprint_arb', 'supply_signal',
 ] as const;
 
 const INTEL_URGENCIES = ['breaking', 'daily', 'weekly', 'background'] as const;
