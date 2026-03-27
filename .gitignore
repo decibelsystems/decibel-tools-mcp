@@ -40,3 +40,4 @@ extension/*.vsix
 
 # Project registry (user-specific, each dev has their own)
 projects.json
+projects.json

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "projects": [
+    {
+      "id": "my-project",
+      "name": "My Project",
+      "path": "/absolute/path/to/my-project",
+      "aliases": ["mp"]
+    }
+  ]
+}

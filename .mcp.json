@@ -1,8 +1,8 @@
 {
     "mcpServers": {
       "decibel-tools": {
-        "command": "npx",
-        "args": ["-y", "@decibelsystems/tools"],
+        "command": "node",
+        "args": ["dist/server.js"],
         "env": {}
       }
     }
