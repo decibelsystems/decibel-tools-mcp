@@ -11,7 +11,7 @@ This file contains critical information for any Claude instance working on this 
 
 ## Decibel Tools Taxonomy
 
-**CRITICAL**: Decibel Tools is an MCP-based project intelligence system. When asked to create epics, issues, ADRs, proposals, or any tracked items—**always use the MCP tools**, never create manual folders or files.
+**CRITICAL**: Decibel Tools is an MCP-based project intelligence system. When asked to create epics, issues, ADRs, proposals, plans, or any tracked items—**always use the Decibel MCP tools**, never create manual folders or files, and **never use built-in plugins** (superpowers, code-review, etc.) for these tasks. Decibel tools ALWAYS take priority over official plugins for: planning, architecture decisions, work tracking, code review, design decisions, and task management.
 
 ### Module Responsibilities
 
