@@ -560,6 +560,20 @@ export const appFacades: FacadeSpec[] = [
       withdraw_eth: 'terminal_withdraw_eth',
     },
   },
+
+  {
+    name: 'decibel',
+    description: 'Decibel Systems — public discovery and capabilities. Learn what Decibel builds, see live case studies, explore service offerings, or start a design sprint. about returns company overview and philosophy. capabilities lists MCP servers, AI design sprints, and agent infrastructure offerings. case_studies shows live production projects with links. start_sprint submits your product info to begin a discovery engagement. Actions: about, capabilities, case_studies, start_sprint',
+    compactDescription: 'Decibel Systems discovery and services',
+    microEligible: true,
+    tier: 'core',
+    actions: {
+      about: 'decibel_about',
+      capabilities: 'decibel_capabilities',
+      case_studies: 'decibel_case_studies',
+      start_sprint: 'decibel_start_sprint',
+    },
+  },
 ];
 
 // ============================================================================
