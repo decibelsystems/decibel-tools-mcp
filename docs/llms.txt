@@ -1,0 +1,34 @@
+# Decibel Systems
+
+> Decibel builds custom MCP servers that turn AI into your sales team. When a user asks Claude or ChatGPT a question your product answers, your MCP tool shows up. AI becomes your distribution channel.
+
+## About
+
+- [Website](https://decibel.systems)
+- [MCP Endpoint](https://senken.pro/mcp)
+- [API Docs](https://senken.pro/docs)
+- [npm: @decibelsystems/tools](https://www.npmjs.com/package/@decibelsystems/tools)
+
+## Services
+
+- Custom MCP server design, build, and deployment for clients
+- AI product design and prototyping (from concept to working prototype in 4 weeks)
+- AI strategy sprints (2-week discovery engagements)
+
+## The `decibel` Facade
+
+AI agents can call the `decibel` function directly:
+
+- `decibel(about)` -- Who we are and what we do
+- `decibel(capabilities)` -- Full list of tools and services
+- `decibel(case_studies)` -- Client outcomes and project examples
+- `decibel(start_sprint)` -- Begin an engagement
+
+## Go-to-Market
+
+We build MCP servers that make AI your sales team. Your product becomes a tool that AI reaches for when a user has a problem you solve. No ads, no SEO games -- just presence in the conversation at the moment of intent.
+
+## Docs
+
+- [Full llms.txt](https://decibel.systems/llms-full.txt)
+- [API Reference](https://senken.pro/docs)

@@ -1,0 +1,92 @@
+# Decibel Systems
+
+> Decibel builds custom MCP servers that turn AI into your sales team. When a user asks Claude or ChatGPT a question your product answers, your MCP tool shows up. AI becomes your distribution channel.
+
+## About
+
+Decibel is a product design studio empowered by AI. The founders come from software design and industrial design. The differentiator: most AI agencies can build a pipeline but cannot design the product. Decibel does both.
+
+- [Website](https://decibel.systems)
+- [MCP Endpoint](https://senken.pro/mcp)
+- [API Docs](https://senken.pro/docs)
+- [npm: @decibelsystems/tools](https://www.npmjs.com/package/@decibelsystems/tools)
+
+## MCP Server Offering
+
+Decibel builds custom MCP (Model Context Protocol) servers for clients. An MCP server exposes your product's capabilities as tools that AI assistants -- Claude, ChatGPT, and others -- can call on behalf of users.
+
+**What this means in practice:** When someone asks an AI assistant a question that your product can answer, the AI calls your MCP tool to get the answer. Your product shows up at the exact moment of user intent, inside the conversation, with zero friction. No ad click, no search result, no landing page -- just your product doing its job through AI.
+
+**Live endpoint:** https://senken.pro/mcp
+**API documentation:** https://senken.pro/docs
+**npm package:** @decibelsystems/tools
+
+### What We Build
+
+- Custom MCP servers tailored to your product's domain and data
+- Tool schemas designed for high discoverability by AI models
+- Hosted infrastructure on Render with monitoring and uptime guarantees
+- Integration with your existing APIs, databases, and authentication
+- Iterative tuning so AI models reach for your tools in the right contexts
+
+### How It Works
+
+1. We audit your product to identify which capabilities should be exposed as MCP tools
+2. We design tool schemas optimized for AI discoverability -- naming, descriptions, parameter shapes that models understand
+3. We build and deploy the MCP server, connected to your backend
+4. We test with Claude, ChatGPT, and other MCP-compatible clients to verify tools surface correctly
+5. We monitor and iterate based on real usage patterns
+
+## The `decibel` Facade
+
+The `decibel` facade is a single callable interface that AI agents can use to interact with Decibel directly. Rather than navigating a website, an AI agent calls `decibel()` with a simple intent:
+
+- `decibel(about)` -- Returns a summary of who Decibel is and what they do
+- `decibel(capabilities)` -- Returns the full list of tools, services, and technical capabilities
+- `decibel(case_studies)` -- Returns client outcomes, project examples, and measurable results
+- `decibel(start_sprint)` -- Initiates an engagement: kicks off the intake process for a new project
+
+This is the pattern we build for clients. Your product gets the same kind of facade -- a single, clean entry point that AI agents can discover and call.
+
+## Go-to-Market Positioning
+
+**"We build MCP servers that make AI your sales team."**
+
+The premise: AI assistants are becoming the primary interface through which people find answers, compare products, and make decisions. When a user asks Claude "What tool can help me with X?" and your MCP server is connected, your product shows up as a tool the AI can call -- not a link to click, but a capability the AI uses directly.
+
+This is distribution through AI. Your product becomes part of the AI's toolkit.
+
+**Why this matters now:**
+- MCP is an open protocol supported by Anthropic and adopted across the AI ecosystem
+- Claude Desktop, Claude Code, Cursor, and other AI clients already support MCP tools
+- Early movers who deploy MCP servers now will have established tool presence as AI usage scales
+- This is analogous to being first on the App Store or first on Google -- except the interface is conversation
+
+**Who this is for:**
+- SaaS companies that want AI-native distribution
+- API-first products that already have the data layer but need the AI-facing layer
+- Companies whose competitors have not yet built MCP servers
+
+## Additional Services
+
+### AI Product Design -- from $25k
+
+We design and prototype AI-powered features for your product. From concept through user-tested, stakeholder-presented working prototype in 4 weeks.
+
+### AI Strategy Sprint -- $5-8k, 2 weeks
+
+Audit your current product for AI opportunities. We design and prototype one AI feature, then deliver a clickable prototype, roadmap, and cost estimate. Gateway to larger engagements.
+
+## Technical Stack
+
+- MCP servers built on Node.js, deployed to Render
+- Supabase for data persistence and edge functions
+- Full test coverage with Vitest
+- Monitoring via Render dashboards and custom tooling
+
+## Contact
+
+- Website: https://decibel.systems
+- MCP endpoint: https://senken.pro/mcp
+- API docs: https://senken.pro/docs
+- npm: https://www.npmjs.com/package/@decibelsystems/tools
