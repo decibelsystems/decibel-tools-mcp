@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Decibel Tools API</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --surface-2: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #e0e0e0;
+      --text-muted: #888;
+      --accent: #7c6aef;
+      --accent-dim: #5a4bbf;
+      --green: #4ade80;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      --blue: #60a5fa;
+      --orange: #fb923c;
+      --cyan: #22d3ee;
+      --mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre {
+      font-family: var(--mono);
+      font-size: 0.875rem;
+    }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      line-height: 1.5;
+    }
+    code {
+      background: var(--surface-2);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      font-size: 0.85em;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      border-radius: 0;
+      font-size: inherit;
+    }
+
+    /* Layout */
+    .wrapper {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 260px;
+      min-width: 260px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 1.5rem 0;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      overflow-y: auto;
+      z-index: 10;
+    }
+    .sidebar-logo {
+      padding: 0 1.25rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1rem;
+    }
+    .sidebar-logo h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .sidebar-logo h1 span { color: var(--accent); }
+    .sidebar-logo p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+    .nav-section {
+      padding: 0.75rem 1.25rem 0.25rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+    .nav-link {
+      display: block;
+      padding: 0.35rem 1.25rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+    .nav-link:hover {
+      color: var(--text);
+      background: var(--surface-2);
+      text-decoration: none;
+    }
+
+    /* Main */
+    .main {
+      flex: 1;
+      margin-left: 260px;
+      max-width: 900px;
+      padding: 3rem 3rem 6rem;
+    }
+
+    /* Hero */
+    .hero {
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.5rem;
+    }
+    .hero h1 span { color: var(--accent); }
+    .hero p {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      max-width: 600px;
+    }
+    .hero-meta {
+      display: flex;
+      gap: 1.5rem;
+      margin-top: 1.25rem;
+      font-size: 0.8rem;
+    }
+    .hero-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--text-muted);
+    }
+    .hero-meta .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot-green { background: var(--green); }
+
+    /* Base URL box */
+    .base-url {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 2.5rem;
+    }
+    .base-url label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      display: block;
+      margin-bottom: 0.35rem;
+    }
+    .base-url code {
+      font-size: 1rem;
+      color: var(--green);
+      background: none;
+      padding: 0;
+    }
+
+    /* Sections */
+    .section {
+      margin-bottom: 3rem;
+    }
+    .section > h2 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+      padding-top: 1rem;
+    }
+    .section > p {
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+      font-size: 0.95rem;
+    }
+
+    /* Endpoint cards */
+    .endpoint {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 1.25rem;
+      overflow: hidden;
+    }
+    .endpoint-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.85rem 1.25rem;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .endpoint-header:hover {
+      background: var(--surface-2);
+    }
+    .method {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      min-width: 52px;
+      text-align: center;
+      letter-spacing: 0.02em;
+    }
+    .method-get { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+    .method-post { background: rgba(96, 165, 250, 0.15); color: var(--blue); }
+    .method-delete { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+    .method-sse { background: rgba(251, 191, 36, 0.15); color: var(--yellow); }
+    .endpoint-path {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--text);
+      flex: 1;
+    }
+    .endpoint-desc {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .endpoint-chevron {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      transition: transform 0.2s;
+    }
+    .endpoint.open .endpoint-chevron {
+      transform: rotate(90deg);
+    }
+    .endpoint-body {
+      display: none;
+      padding: 0 1.25rem 1.25rem;
+      border-top: 1px solid var(--border);
+    }
+    .endpoint.open .endpoint-body {
+      display: block;
+    }
+    .endpoint-body h4 {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin: 1rem 0 0.5rem;
+    }
+    .endpoint-body h4:first-child {
+      margin-top: 1rem;
+    }
+    .endpoint-body p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin-bottom: 0.75rem;
+    }
+    th {
+      text-align: left;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    td code {
+      font-size: 0.8rem;
+    }
+    tr:last-child td { border-bottom: none; }
+
+    /* Auth badge */
+    .badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.15rem 0.45rem;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+    .badge-auth { background: rgba(251, 191, 36, 0.15); color: var(--yellow); }
+    .badge-none { background: rgba(74, 222, 128, 0.1); color: var(--green); }
+    .badge-tier { background: rgba(124, 106, 239, 0.15); color: var(--accent); }
+
+    /* Info boxes */
+    .info-box {
+      background: rgba(124, 106, 239, 0.08);
+      border: 1px solid rgba(124, 106, 239, 0.2);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+    }
+    .info-box.warning {
+      background: rgba(251, 191, 36, 0.08);
+      border-color: rgba(251, 191, 36, 0.2);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main { margin-left: 0; padding: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="sidebar-logo">
+        <h1><span>decibel</span> tools</h1>
+        <p>MCP Server HTTP API v2.1</p>
+      </div>
+
+      <div class="nav-section">Getting Started</div>
+      <a class="nav-link" href="#overview">Overview</a>
+      <a class="nav-link" href="#authentication">Authentication</a>
+      <a class="nav-link" href="#errors">Error Handling</a>
+
+      <div class="nav-section">MCP Protocol</div>
+      <a class="nav-link" href="#sse">SSE Transport</a>
+      <a class="nav-link" href="#mcp">StreamableHTTP</a>
+
+      <div class="nav-section">REST API</div>
+      <a class="nav-link" href="#tools">List Tools</a>
+      <a class="nav-link" href="#call">Execute Tool</a>
+      <a class="nav-link" href="#batch">Batch Execute</a>
+      <a class="nav-link" href="#facades">List Facades</a>
+
+      <div class="nav-section">Agent Management</div>
+      <a class="nav-link" href="#connect">Connect</a>
+      <a class="nav-link" href="#disconnect">Disconnect</a>
+      <a class="nav-link" href="#agents">List Agents</a>
+      <a class="nav-link" href="#events-stream">Event Stream</a>
+      <a class="nav-link" href="#events">Query Events</a>
+
+      <div class="nav-section">Infrastructure</div>
+      <a class="nav-link" href="#health">Health Check</a>
+      <a class="nav-link" href="#ready">Readiness Probe</a>
+      <a class="nav-link" href="#context-headers">Context Headers</a>
+      <a class="nav-link" href="#rate-limiting">Rate Limiting</a>
+      <a class="nav-link" href="#tiers">Facade Tiers</a>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main">
+      <div class="hero" id="overview">
+        <h1><span>Decibel Tools</span> API</h1>
+        <p>HTTP interface to the Decibel MCP server. Supports the MCP protocol (SSE + StreamableHTTP), a REST convenience layer, and multi-agent coordination.</p>
+        <div class="hero-meta">
+          <span><span class="dot dot-green"></span> v{{VERSION}}</span>
+          <span>{{FACADE_COUNT}} facades</span>
+          <span>{{TOOL_COUNT}} actions</span>
+          <span>MCP + REST + SSE</span>
+        </div>
+      </div>
+
+      <div class="base-url">
+        <label>Base URL</label>
+        <code>https://senken.pro</code>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- AUTHENTICATION -->
+      <!-- ============================================================ -->
+      <div class="section" id="authentication">
+        <h2>Authentication</h2>
+        <p>When the server is started with <code>--auth-token</code>, all mutating endpoints require a Bearer token. Health and discovery endpoints are always public.</p>
+        <pre><code>Authorization: Bearer YOUR_TOKEN</code></pre>
+        <p>Alternatively, pass a license key for tier-gated access:</p>
+        <pre><code>X-License-Key: YOUR_LICENSE_KEY</code></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- ERROR HANDLING -->
+      <!-- ============================================================ -->
+      <div class="section" id="errors">
+        <h2>Error Handling</h2>
+        <p>All endpoints return a consistent JSON envelope.</p>
+        <pre><code><span style="color:#888">// Success</span>
+{ "status": "executed", ... }
+
+<span style="color:#888">// Error</span>
+{
+  "status": "error",
+  "error": "Human-readable message",
+  "code": "ERROR_CODE"
+}</code></pre>
+
+        <table>
+          <thead><tr><th>Code</th><th>HTTP</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>UNAUTHORIZED</code></td><td>401</td><td>Missing or invalid auth token</td></tr>
+            <tr><td><code>RATE_LIMITED</code></td><td>429</td><td>Too many requests</td></tr>
+            <tr><td><code>MISSING_TOOL</code></td><td>400</td><td>Tool not found in registry</td></tr>
+            <tr><td><code>ACCESS_DENIED</code></td><td>403</td><td>Facade not in agent's allowlist or tier</td></tr>
+            <tr><td><code>BODY_TOO_LARGE</code></td><td>413</td><td>Request body exceeds 1MB</td></tr>
+            <tr><td><code>PARSE_ERROR</code></td><td>400</td><td>Invalid JSON in request body</td></tr>
+            <tr><td><code>NOT_DAEMON</code></td><td>503</td><td>Agent management endpoint requires daemon mode</td></tr>
+            <tr><td><code>TOOL_ERROR</code></td><td>500</td><td>Tool execution failed</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- SSE TRANSPORT -->
+      <!-- ============================================================ -->
+      <div class="section" id="sse">
+        <h2>SSE Transport</h2>
+        <p>Server-Sent Events transport for the MCP protocol. Used by ChatGPT and other MCP clients that prefer streaming.</p>
+
+        <div class="endpoint open">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-sse">SSE</span>
+            <span class="endpoint-path">/sse/</span>
+            <span class="endpoint-desc">MCP over Server-Sent Events</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <p>Opens a persistent SSE connection for bidirectional MCP communication. The server sends keepalive comments every 30 seconds to maintain the connection.</p>
+            <h4>Connection</h4>
+            <pre><code>curl -N https://senken.pro/sse/</code></pre>
+            <h4>Details</h4>
+            <table>
+              <tr><td><strong>Methods</strong></td><td><code>GET</code> (stream), <code>POST</code> (messages), <code>DELETE</code> (close)</td></tr>
+              <tr><td><strong>Content-Type</strong></td><td><code>text/event-stream</code></td></tr>
+              <tr><td><strong>Keepalive</strong></td><td>Comment heartbeat every 30s (configurable via <code>--sse-keepalive</code>)</td></tr>
+              <tr><td><strong>CORS</strong></td><td>All origins allowed</td></tr>
+              <tr><td><strong>Auth</strong></td><td><span class="badge badge-auth">Token if set</span></td></tr>
+            </table>
+            <h4>Notes</h4>
+            <p>The trailing slash matters for some clients (e.g., ChatGPT). Both <code>/sse</code> and <code>/sse/</code> are accepted.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- STREAMABLE HTTP -->
+      <!-- ============================================================ -->
+      <div class="section" id="mcp">
+        <h2>StreamableHTTP (JSON-RPC)</h2>
+        <p>The primary MCP protocol endpoint. Supports the full MCP spec via JSON-RPC over HTTP.</p>
+
+        <div class="endpoint open">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/mcp</span>
+            <span class="endpoint-desc">MCP JSON-RPC endpoint</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <p>Send MCP protocol messages (JSON-RPC 2.0). This is the recommended transport for programmatic access.</p>
+            <h4>Example: List Tools</h4>
+            <pre><code>curl -X POST https://senken.pro/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list",
+    "params": {}
+  }'</code></pre>
+            <h4>Example: Call a Tool</h4>
+            <pre><code>curl -X POST https://senken.pro/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+      "name": "sentinel",
+      "arguments": {
+        "action": "list_issues",
+        "project_id": "my-project"
+      }
+    }
+  }'</code></pre>
+            <h4>Supported Methods</h4>
+            <table>
+              <thead><tr><th>Method</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>initialize</code></td><td>Initialize MCP session</td></tr>
+                <tr><td><code>tools/list</code></td><td>List available tools (facades)</td></tr>
+                <tr><td><code>tools/call</code></td><td>Execute a tool</td></tr>
+                <tr><td><code>resources/list</code></td><td>List available resources</td></tr>
+                <tr><td><code>resources/read</code></td><td>Read a resource</td></tr>
+                <tr><td><code>prompts/list</code></td><td>List available prompts</td></tr>
+                <tr><td><code>prompts/get</code></td><td>Get a prompt</td></tr>
+              </tbody>
+            </table>
+            <h4>Details</h4>
+            <table>
+              <tr><td><strong>Methods</strong></td><td><code>GET</code>, <code>POST</code>, <code>DELETE</code></td></tr>
+              <tr><td><strong>Content-Type</strong></td><td><code>application/json</code></td></tr>
+              <tr><td><strong>CORS</strong></td><td>All origins allowed</td></tr>
+              <tr><td><strong>Auth</strong></td><td><span class="badge badge-auth">Token if set</span></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- TOOLS -->
+      <!-- ============================================================ -->
+      <div class="section" id="tools">
+        <h2>List Tools</h2>
+        <p>Discover available facades and their actions.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/tools</span>
+            <span class="endpoint-desc">List all available tools</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <p>Returns all registered facades and their actions. Responds with JSON or HTML based on the <code>Accept</code> header.</p>
+            <h4>Example</h4>
+            <pre><code>curl https://senken.pro/tools \
+  -H "Accept: application/json"</code></pre>
+            <h4>Response</h4>
+            <pre><code>{
+  "status": "executed",
+  "version": "{{VERSION}}",
+  "api_version": "v1",
+  "tools": [
+    {
+      "name": "sentinel",
+      "description": "Work tracking: epics, issues, incidents",
+      "actions": ["create_issue", "list_issues", "log_epic", ...]
+    },
+    {
+      "name": "swarm",
+      "description": "Multi-agent sessions and signals",
+      "actions": ["start_session", "join_session", "emit_signal", ...]
+    }
+  ]
+}</code></pre>
+            <table>
+              <tr><td><strong>Auth</strong></td><td><span class="badge badge-none">Public</span></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- CALL -->
+      <!-- ============================================================ -->
+      <div class="section" id="call">
+        <h2>Execute Tool</h2>
+        <p>Call any tool directly via the REST convenience layer.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/call</span>
+            <span class="endpoint-desc">Execute any tool by name</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <p>Generic dispatch endpoint. Pass the tool name and arguments. The kernel routes to the correct facade and action.</p>
+            <h4>Request</h4>
+            <pre><code>curl -X POST https://senken.pro/call \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer TOKEN" \
+  -d '{
+    "tool": "sentinel",
+    "arguments": {
+      "action": "list_issues",
+      "project_id": "decibel-tools-mcp"
+    }
+  }'</code></pre>
+            <h4>Request Body</h4>
+            <table>
+              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>tool</code></td><td>string</td><td>Yes</td><td>Facade or tool name</td></tr>
+                <tr><td><code>arguments</code></td><td>object</td><td>Yes</td><td>Tool-specific parameters</td></tr>
+              </tbody>
+            </table>
+            <h4>Response</h4>
+            <pre><code>{
+  "status": "executed",
+  "result": { ... }
+}</code></pre>
+            <h4>Context Headers</h4>
+            <p>Include optional headers to identify the calling agent and trace requests. See <a href="#context-headers">Context Headers</a>.</p>
+            <table>
+              <tr><td><strong>Auth</strong></td><td><span class="badge badge-auth">Token if set</span></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- BATCH -->
+      <!-- ============================================================ -->
+      <div class="section" id="batch">
+        <h2>Batch Execute</h2>
+        <p>Execute multiple independent tool calls in parallel.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/batch</span>
+            <span class="endpoint-desc">Parallel multi-tool execution</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <p>Send up to 20 calls in a single request. All calls execute concurrently via <code>Promise.allSettled</code>. Ideal for agent bootstrap (fetching context + issues + roadmap in one round-trip).</p>
+            <h4>Request</h4>
+            <pre><code>curl -X POST https://senken.pro/batch \
+  -H "Content-Type: application/json" \
+  -H "X-Agent-Id: analyst-01" \
+  -d '{
+    "calls": [
+      { "facade": "sentinel", "action": "list_issues", "params": { "project_id": "my-project" } },
+      { "facade": "oracle", "action": "next_actions", "params": { "project_id": "my-project" } },
+      { "facade": "context", "action": "refresh", "params": { "task": "status check" } }
+    ],
+    "context": {
+      "agentId": "analyst-01",
+      "runId": "run-abc"
+    }
+  }'</code></pre>
+            <h4>Request Body</h4>
+            <table>
+              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>calls</code></td><td>array</td><td>Yes</td><td>Array of call objects (max 20)</td></tr>
+                <tr><td><code>calls[].facade</code></td><td>string</td><td>Yes</td><td>Facade name</td></tr>
+                <tr><td><code>calls[].action</code></td><td>string</td><td>Yes</td><td>Action name</td></tr>
+                <tr><td><code>calls[].params</code></td><td>object</td><td>No</td><td>Action parameters</td></tr>
+                <tr><td><code>context</code></td><td>object</td><td>No</td><td>Shared context for all calls</td></tr>
+              </tbody>
+            </table>
+            <h4>Response</h4>
+            <pre><code>{
+  "status": "executed",
+  "results": [
+    { "status": "executed", ... },
+    { "status": "executed", ... },
+    { "status": "error", "error": "...", "code": "..." }
+  ]
+}</code></pre>
+            <table>
+              <tr><td><strong>Max calls</strong></td><td>20 per batch</td></tr>
+              <tr><td><strong>Auth</strong></td><td><span class="badge badge-auth">Token if set</span></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- FACADES -->
+      <!-- ============================================================ -->
+      <div class="section" id="facades">
+        <h2>List Facades</h2>
+        <p>Facade registry for agent bootstrap and capability discovery.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/facades</span>
+            <span class="endpoint-desc">Facade registry with tiers</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <p>Returns all facades with their descriptions, actions, and tier. Use the <code>tier</code> query param to control verbosity.</p>
+            <h4>Example</h4>
+            <pre><code>curl "https://senken.pro/facades?tier=compact"</code></pre>
+            <h4>Query Parameters</h4>
+            <table>
+              <thead><tr><th>Param</th><th>Values</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>tier</code></td><td><code>full</code>, <code>compact</code>, <code>micro</code></td><td>Description verbosity level (default: <code>full</code>)</td></tr>
+              </tbody>
+            </table>
+            <h4>Response</h4>
+            <pre><code>{
+  "status": "executed",
+  "facades": [
+    {
+      "name": "sentinel",
+      "description": "Work tracking: epics, issues, incidents...",
+      "actions": ["create_issue", "list_issues", "log_epic", ...],
+      "tier": "core"
+    }
+  ],
+  "facade_count": 30,
+  "internal_tool_count": 170
+}</code></pre>
+            <table>
+              <tr><td><strong>Auth</strong></td><td><span class="badge badge-none">Public</span></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- CONNECT -->
+      <!-- ============================================================ -->
+      <div class="section" id="connect">
+        <h2>Agent Connect</h2>
+        <p>Register an agent with the daemon's agent registry. Required for multi-agent coordination.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/connect</span>
+            <span class="endpoint-desc">Agent handshake</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <p>Registers an agent with the daemon. Returns the agent's capabilities, allowed facades, tier, and rate limit. Only available in daemon mode.</p>
+            <h4>Request</h4>
+            <pre><code>curl -X POST https://senken.pro/connect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "analyst-01",
+    "capabilities": ["sentinel", "oracle", "context"]
+  }'</code></pre>
+            <h4>Request Body</h4>
+            <table>
+              <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>agent_id</code></td><td>string</td><td>Yes</td><td>Unique agent identifier</td></tr>
+                <tr><td><code>capabilities</code></td><td>string[]</td><td>No</td><td>Facade names the agent needs</td></tr>
+              </tbody>
+            </table>
+            <h4>Response</h4>
+            <pre><code>{
+  "status": "executed",
+  "agent_id": "analyst-01",
+  "connected_at": "2026-03-30T19:35:00.000Z",
+  "capabilities": ["sentinel", "oracle", "context"],
+  "allowed_facades": ["sentinel", "oracle", "context"],
+  "tier": "pro",
+  "rate_limit_rpm": 100
+}</code></pre>
+            <table>
+              <tr><td><strong>Requires</strong></td><td>Daemon mode (<code>--daemon</code>)</td></tr>
+              <tr><td><strong>Error</strong></td><td><code>503 NOT_DAEMON</code> if not in daemon mode</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- DISCONNECT -->
+      <!-- ============================================================ -->
+      <div class="section" id="disconnect">
+        <h2>Agent Disconnect</h2>
+        <p>Gracefully unregister an agent from the daemon.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-post">POST</span>
+            <span class="endpoint-path">/disconnect</span>
+            <span class="endpoint-desc">Graceful agent disconnect</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <h4>Request</h4>
+            <pre><code>curl -X POST https://senken.pro/disconnect \
+  -H "Content-Type: application/json" \
+  -d '{ "agent_id": "analyst-01" }'</code></pre>
+            <h4>Response</h4>
+            <pre><code>{
+  "status": "executed",
+  "agent_id": "analyst-01",
+  "disconnected": true
+}</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- AGENTS -->
+      <!-- ============================================================ -->
+      <div class="section" id="agents">
+        <h2>List Agents</h2>
+        <p>See all currently connected agents.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/agents</span>
+            <span class="endpoint-desc">List connected agents</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <h4>Example</h4>
+            <pre><code>curl https://senken.pro/agents</code></pre>
+            <h4>Response</h4>
+            <pre><code>{
+  "status": "executed",
+  "agents": [
+    {
+      "id": "analyst-01",
+      "connected_at": "2026-03-30T19:35:00.000Z",
+      "capabilities": ["sentinel", "oracle"],
+      "last_seen": "2026-03-30T19:40:00.000Z"
+    }
+  ],
+  "count": 1
+}</code></pre>
+            <table>
+              <tr><td><strong>Auth</strong></td><td><span class="badge badge-none">Public</span></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- EVENTS STREAM -->
+      <!-- ============================================================ -->
+      <div class="section" id="events-stream">
+        <h2>Event Stream</h2>
+        <p>Real-time SSE stream of dispatch events. Monitor tool calls as they happen.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-sse">SSE</span>
+            <span class="endpoint-path">/events/stream</span>
+            <span class="endpoint-desc">Real-time dispatch events</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <p>Opens an SSE stream that emits every tool dispatch as it happens. Useful for dashboards, audit logs, and debugging agent behavior.</p>
+            <h4>Example</h4>
+            <pre><code>curl -N "https://senken.pro/events/stream?agent_id=analyst-01"</code></pre>
+            <h4>Query Parameters</h4>
+            <table>
+              <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>agent_id</code></td><td>string</td><td>Filter by agent (optional)</td></tr>
+                <tr><td><code>facade</code></td><td>string</td><td>Filter by facade (optional)</td></tr>
+              </tbody>
+            </table>
+            <h4>Event Format</h4>
+            <pre><code>data: {
+  "timestamp": "2026-03-30T19:35:12.345Z",
+  "agentId": "analyst-01",
+  "facade": "sentinel",
+  "action": "list_issues",
+  "duration_ms": 42,
+  "status": "ok"
+}</code></pre>
+            <table>
+              <tr><td><strong>Auth</strong></td><td><span class="badge badge-none">Public</span></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- EVENTS QUERY -->
+      <!-- ============================================================ -->
+      <div class="section" id="events">
+        <h2>Query Events</h2>
+        <p>Query the dispatch event log for historical tool calls.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/events</span>
+            <span class="endpoint-desc">Query dispatch event log</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <h4>Query Parameters</h4>
+            <table>
+              <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>since</code></td><td>ISO 8601</td><td>Events after this timestamp</td></tr>
+                <tr><td><code>agent_id</code></td><td>string</td><td>Filter by agent</td></tr>
+                <tr><td><code>limit</code></td><td>number</td><td>Max events (default: 100)</td></tr>
+              </tbody>
+            </table>
+            <h4>Response</h4>
+            <pre><code>{
+  "status": "executed",
+  "events": [ ... ],
+  "total": 42
+}</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- HEALTH -->
+      <!-- ============================================================ -->
+      <div class="section" id="health">
+        <h2>Health Check</h2>
+        <p>System health and runtime info.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/health</span>
+            <span class="endpoint-desc">Detailed health check</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <h4>Response</h4>
+            <pre><code>{
+  "status": "ok",
+  "version": "{{VERSION}}",
+  "api_version": "v1",
+  "uptime_ms": 3600000,
+  "uptime_human": "1h 0m 0s",
+  "pid": 12345,
+  "facade_count": 30,
+  "internal_tool_count": 170,
+  "connected_clients": 2,
+  "active_requests": 0,
+  "connected_agents": 3,
+  "pro": true,
+  "license_tier": "pro",
+  "supabase_configured": true
+}</code></pre>
+            <table>
+              <tr><td><strong>Auth</strong></td><td><span class="badge badge-none">Public</span></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- READY -->
+      <!-- ============================================================ -->
+      <div class="section" id="ready">
+        <h2>Readiness Probe</h2>
+
+        <div class="endpoint">
+          <div class="endpoint-header" onclick="this.parentElement.classList.toggle('open')">
+            <span class="method method-get">GET</span>
+            <span class="endpoint-path">/ready</span>
+            <span class="endpoint-desc">K8s/orchestrator readiness probe</span>
+            <span class="endpoint-chevron">&#9654;</span>
+          </div>
+          <div class="endpoint-body">
+            <p>Returns 200 when the server is ready to accept requests, 503 otherwise.</p>
+            <pre><code>{ "ready": true, "facade_count": 30 }</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- CONTEXT HEADERS -->
+      <!-- ============================================================ -->
+      <div class="section" id="context-headers">
+        <h2>Context Headers</h2>
+        <p>Optional headers for multi-agent tracing and access control. Passed through to the dispatch kernel on every <code>/call</code> and <code>/batch</code> request.</p>
+
+        <table>
+          <thead><tr><th>Header</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>X-Agent-Id</code></td><td>Agent identifier (used for rate limiting, event attribution, facade scoping)</td></tr>
+            <tr><td><code>X-Run-Id</code></td><td>Run/session ID for grouping related calls</td></tr>
+            <tr><td><code>X-Parent-Call-Id</code></td><td>Parent call ID for distributed tracing</td></tr>
+            <tr><td><code>X-Scope</code></td><td>Scope hint for the kernel</td></tr>
+            <tr><td><code>X-Engagement-Mode</code></td><td>Engagement mode selector</td></tr>
+            <tr><td><code>X-User-Key</code></td><td>User identifier</td></tr>
+            <tr><td><code>X-Request-Id</code></td><td>Request tracking ID</td></tr>
+            <tr><td><code>X-License-Key</code></td><td>License key (overrides config for tier resolution)</td></tr>
+            <tr><td><code>X-Allowed-Facades</code></td><td>Comma-separated facade whitelist (restricts which facades this call can access)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- RATE LIMITING -->
+      <!-- ============================================================ -->
+      <div class="section" id="rate-limiting">
+        <h2>Rate Limiting</h2>
+        <p>Sliding window rate limiter, scoped per IP or per agent.</p>
+
+        <div class="info-box">
+          <strong>Default:</strong> 100 requests per minute per IP. Agents registered via <code>/connect</code> get their own limit that can be configured in the daemon config.
+        </div>
+
+        <p>When rate limited, the server returns:</p>
+        <pre><code>HTTP 429
+{
+  "status": "error",
+  "error": "Rate limited",
+  "code": "RATE_LIMITED"
+}</code></pre>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- TIERS -->
+      <!-- ============================================================ -->
+      <div class="section" id="tiers">
+        <h2>Facade Tiers</h2>
+        <p>Facades are grouped into three access tiers. In development, all tiers are enabled. In production, pro and apps tiers require environment variables or a valid license key.</p>
+
+        <table>
+          <thead><tr><th>Tier</th><th>Count</th><th>Gate</th><th>Facades</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-none">core</span></td>
+              <td>21</td>
+              <td>Always available</td>
+              <td>sentinel, architect, dojo, designer, git, workflow, oracle, roadmap, vector, context, auditor, forecast, velocity, coordinator, swarm, friction, registry, feedback, learnings, provenance, bench, guardian</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-tier">pro</span></td>
+              <td>4</td>
+              <td><code>DECIBEL_PRO=1</code></td>
+              <td>voice, studio, corpus, agentic</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-auth">apps</span></td>
+              <td>2+</td>
+              <td><code>DECIBEL_APPS=1</code></td>
+              <td>senken, mother, terminal</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Footer -->
+      <div style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.8rem;">
+        <p>Decibel Tools v{{VERSION}} &middot; <code>@decibelsystems/tools</code> on npm &middot; Built by Decibel Systems</p>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Smooth scroll for nav links
+    document.querySelectorAll('.nav-link').forEach(link => {
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        const target = document.querySelector(link.getAttribute('href'));
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+  </script>
+</body>
+</html>

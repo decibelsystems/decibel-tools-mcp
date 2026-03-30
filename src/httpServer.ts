@@ -175,94 +175,17 @@ const PKG = getVersion();
 /**
  * Generate landing page HTML from facade definitions.
  */
-function buildLandingPageHtml(facades: { name: string; description: string; actions: string[] }[]): string {
-  const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-  const totalActions = facades.reduce((sum, f) => sum + f.actions.length, 0);
-
-  const toolSections = facades
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map(f => {
-      const rows = f.actions
-        .sort()
-        .map(action => {
-          return `        <tr><td class="tool-name">${escHtml(f.name)}(${escHtml(action)})</td><td class="tool-desc"></td></tr>`;
-        })
-        .join('\n');
-      return `      <div class="module-section">
-        <h3>${escHtml(f.name)} <span class="tool-count">${f.actions.length} actions</span></h3>
-        <p style="color:#888;font-size:0.85rem;margin-bottom:0.75rem">${escHtml(f.description.split('.')[0])}</p>
-        <table>${rows}</table>
-      </div>`;
-    }).join('\n');
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Decibel Tools - ${facades.length} Facades</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-      background: #0a0a0a;
-      color: #e5e5e5;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem;
-    }
-    .container { max-width: 900px; width: 100%; }
-    h1 {
-      font-size: 2.5rem;
-      font-weight: 700;
-      margin-bottom: 0.5rem;
-      background: linear-gradient(135deg, #fff 0%, #888 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .tagline { font-size: 1.25rem; color: #888; margin-bottom: 0.5rem; }
-    .tool-total { font-size: 0.9rem; color: #555; margin-bottom: 2rem; }
-    .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2rem; }
-    .feature { background: #111; border: 1px solid #222; border-radius: 8px; padding: 1.25rem; }
-    .feature h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: #fff; }
-    .feature p { font-size: 0.85rem; color: #888; line-height: 1.5; }
-    .module-section { background: #111; border: 1px solid #222; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
-    .module-section h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.75rem; color: #fff; text-transform: capitalize; }
-    .tool-count { font-size: 0.75rem; color: #555; font-weight: 400; margin-left: 0.5rem; }
-    table { width: 100%; border-collapse: collapse; }
-    tr { border-bottom: 1px solid #1a1a1a; }
-    tr:last-child { border-bottom: none; }
-    td { padding: 0.4rem 0; vertical-align: top; font-size: 0.8rem; }
-    .tool-name { color: #ccc; font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; white-space: nowrap; padding-right: 1rem; width: 1%; }
-    .tool-desc { color: #666; }
-    footer { margin-top: 2rem; padding-top: 2rem; font-size: 0.8rem; color: #444; }
-    footer a { color: #666; text-decoration: none; }
-    footer a:hover { color: #888; }
-    @media (max-width: 600px) { .features { grid-template-columns: 1fr; } }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Decibel Tools</h1>
-    <p class="tagline">Project intelligence for AI coding agents</p>
-    <p class="tool-total">${facades.length} facades, ${totalActions} actions &middot; v${PKG.version}</p>
-    <div class="features">
-      <div class="feature"><h3>Sentinel</h3><p>Track epics, issues, and incidents. Your agent knows what's in flight.</p></div>
-      <div class="feature"><h3>Architect</h3><p>Record ADRs and decisions. Context persists across sessions.</p></div>
-      <div class="feature"><h3>Dojo</h3><p>Incubate ideas with wishes, proposals, and experiments.</p></div>
-      <div class="feature"><h3>Oracle</h3><p>Get AI-powered recommendations on what to work on next.</p></div>
-    </div>
-${toolSections}
-    <footer>
-      <a href="https://github.com/decibelsystems/decibel-tools-beta">GitHub</a> &middot;
-      <a href="https://modelcontextprotocol.io">MCP Protocol</a>
-    </footer>
-  </div>
-</body>
-</html>`;
+function buildLandingPageHtml(_facades: { name: string; description: string; actions: string[] }[]): string {
+  // Load full API docs from template (uses module-level __dirname)
+  const templatePath = join(__dirname, '..', 'templates', 'docs.html');
+  try {
+    return readFileSync(templatePath, 'utf-8')
+      .replace(/\{\{VERSION\}\}/g, PKG.version)
+      .replace(/\{\{FACADE_COUNT\}\}/g, String(_facades.length))
+      .replace(/\{\{TOOL_COUNT\}\}/g, String(_facades.reduce((s, f) => s + f.actions.length, 0)));
+  } catch {
+    return `<html><body><h1>Decibel Tools v${PKG.version}</h1><p>Docs template not found.</p></body></html>`;
+  }
 }
 
 // ============================================================================
