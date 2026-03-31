@@ -100,6 +100,10 @@ export async function agentQueueSync(input: AgentQueueSyncInput): Promise<AgentQ
     throw new Error('Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_KEY.');
   }
 
+  if (!input.projectId) {
+    throw new Error('projectId is required for agent queue sync.');
+  }
+
   const supabase = getSupabaseServiceClient();
   const limit = input.limit ?? 50;
 
