@@ -1,7 +1,7 @@
 // tests/unit/agentQueue.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { agentQueueSync, agentQueueStatus } from '../../src/tools/agentic/agentQueue.js';
-import kernel from '../../src/kernel.js';
+import { createKernel } from '../../src/kernel.js';
 
 // ============================================================================
 // Mocks
@@ -24,12 +24,12 @@ vi.mock('../../src/lib/supabase.js', () => ({
   getSupabaseServiceClient: vi.fn(() => mockSupabase),
 }));
 
-// Mock kernel — factory cannot reference outer variables (hoisting), so we
-// import the mock after factory registration and alias dispatch from there.
+// Mock kernel — createKernel returns an object with a dispatch method
+const mockDispatch = vi.fn();
 vi.mock('../../src/kernel.js', () => ({
-  default: {
-    dispatch: vi.fn(),
-  },
+  createKernel: vi.fn(async () => ({
+    dispatch: mockDispatch,
+  })),
 }));
 
 // ============================================================================
@@ -92,12 +92,12 @@ describe('agentQueueSync', () => {
   it('replays queued items through kernel dispatch with correct args', async () => {
     const row = makeRow();
     mockSupabase.limit.mockResolvedValue({ data: [row], error: null });
-    vi.mocked(kernel.dispatch).mockResolvedValue(makeDispatchResult('{"id":"ISS-001"}'));
+    mockDispatch.mockResolvedValue(makeDispatchResult('{"id":"ISS-001"}'));
 
     const result = await agentQueueSync({ projectId: 'test-project' });
 
-    expect(vi.mocked(kernel.dispatch)).toHaveBeenCalledOnce();
-    expect(vi.mocked(kernel.dispatch)).toHaveBeenCalledWith(
+    expect(mockDispatch).toHaveBeenCalledOnce();
+    expect(mockDispatch).toHaveBeenCalledWith(
       'sentinel',
       { action: 'create_issue', title: 'Test issue', severity: 'med' },
       undefined
@@ -115,7 +115,7 @@ describe('agentQueueSync', () => {
     const row2 = makeRow({ id: 'queue-002', action: 'log_epic' });
     mockSupabase.limit.mockResolvedValue({ data: [row1, row2], error: null });
 
-    vi.mocked(kernel.dispatch)
+    mockDispatch
       .mockRejectedValueOnce(new Error('Kernel exploded'))
       .mockResolvedValueOnce(makeDispatchResult('{"id":"EPIC-001"}'));
 
@@ -153,7 +153,7 @@ describe('agentQueueSync', () => {
 
     const result = await agentQueueSync({ projectId: 'test-project' });
 
-    expect(vi.mocked(kernel.dispatch)).not.toHaveBeenCalled();
+    expect(mockDispatch).not.toHaveBeenCalled();
     expect(result.failed).toBe(1);
     expect(result.items[0].status).toBe('error');
     expect(result.items[0].error).toMatch(/not queueable/i);
@@ -162,7 +162,7 @@ describe('agentQueueSync', () => {
   it('extracts PROV reference from dispatch result text', async () => {
     const row = makeRow();
     mockSupabase.limit.mockResolvedValue({ data: [row], error: null });
-    vi.mocked(kernel.dispatch).mockResolvedValue(
+    mockDispatch.mockResolvedValue(
       makeDispatchResult('Issue created. Provenance: PROV-20260330T100000-42')
     );
 
@@ -174,7 +174,7 @@ describe('agentQueueSync', () => {
   it('treats kernel isError result as failed', async () => {
     const row = makeRow();
     mockSupabase.limit.mockResolvedValue({ data: [row], error: null });
-    vi.mocked(kernel.dispatch).mockResolvedValue(makeDispatchResult('Tool failed: bad input', true));
+    mockDispatch.mockResolvedValue(makeDispatchResult('Tool failed: bad input', true));
 
     const result = await agentQueueSync({ projectId: 'test-project' });
 
