@@ -6,6 +6,7 @@ This file contains critical information for any Claude instance working on this 
 
 - **OS**: macOS
 - **Python**: Use `python3` (not `python`)
+- **Spec location**: Design specs go in `.decibel/specs/`, not `docs/superpowers/specs/`
 
 ---
 
@@ -280,3 +281,13 @@ voice_inbox_sync with project_id: "decibel-tools-mcp"
 ```
 
 This pulls queued messages from Supabase → local `.decibel/voice/inbox/` so you can see and act on them.
+
+## Agent Queue Protocol
+
+Remote agents queue writes via Supabase. **Sync them at session start:**
+
+```
+agentic queue_sync with project_id: "decibel-tools-mcp"
+```
+
+This replays any queued agent writes (issues, ADRs, friction logs, wishes, etc.) to local `.decibel/` files with provenance tracking.
