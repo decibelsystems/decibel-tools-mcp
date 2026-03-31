@@ -10,9 +10,19 @@ This file contains critical information for any Claude instance working on this 
 
 ---
 
+## Tool Priority — Decibel First
+
+**CRITICAL**: Before invoking any superpowers skill or built-in plugin, check whether a Decibel MCP tool covers the task. Decibel tools ALWAYS take priority. The order is:
+
+1. **Decibel MCP tools** (sentinel, architect, dojo, oracle, workflow, etc.) — highest priority
+2. **Superpowers skills** (brainstorming, TDD, debugging, etc.) — only for process/methodology
+3. **Built-in plugins** (code-review, etc.) — lowest priority, use only when no Decibel equivalent exists
+
+Superpowers skills are useful for *how* to work (TDD, brainstorming, planning methodology). Decibel tools are for *what* gets tracked (issues, ADRs, decisions, friction, roadmap). When both could apply, use Decibel for the artifact and superpowers for the process.
+
 ## Decibel Tools Taxonomy
 
-**CRITICAL**: Decibel Tools is an MCP-based project intelligence system. When asked to create epics, issues, ADRs, proposals, plans, or any tracked items—**always use the Decibel MCP tools**, never create manual folders or files, and **never use built-in plugins** (superpowers, code-review, etc.) for these tasks. Decibel tools ALWAYS take priority over official plugins for: planning, architecture decisions, work tracking, code review, design decisions, and task management.
+Decibel Tools is an MCP-based project intelligence system. When asked to create epics, issues, ADRs, proposals, plans, or any tracked items—**always use the Decibel MCP tools**, never create manual folders or files, and **never use built-in plugins** (superpowers, code-review, etc.) for these tasks.
 
 ### Module Responsibilities
 
