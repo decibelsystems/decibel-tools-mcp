@@ -16,6 +16,12 @@ import {
   LintInput,
   GoldenInput,
 } from '../../agentic/index.js';
+import {
+  agentQueueSync,
+  agentQueueStatus,
+  AgentQueueSyncInput,
+  AgentQueueStatusInput,
+} from './agentQueue.js';
 
 // ============================================================================
 // Compile Pack Tool
@@ -208,6 +214,89 @@ export const agenticGoldenEvalTool: ToolSpec = {
 };
 
 // ============================================================================
+// Agent Queue Sync Tool
+// ============================================================================
+
+export const agenticQueueSyncTool: ToolSpec = {
+  definition: {
+    name: 'agentic_queue_sync',
+    description: 'Sync queued agent writes from Supabase to local .decibel/ files. Replays each queued tool call through the kernel, records results and provenance.',
+    annotations: {
+      title: 'Sync Agent Queue',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Project identifier. Uses default project if not specified.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of queued items to sync (default: 50)',
+        },
+        facadeFilter: {
+          type: 'string',
+          description: 'Only sync items for this facade (e.g. "sentinel", "friction")',
+        },
+      },
+      required: [],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as AgentQueueSyncInput;
+      const result = await agentQueueSync(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// Agent Queue Status Tool
+// ============================================================================
+
+export const agenticQueueStatusTool: ToolSpec = {
+  definition: {
+    name: 'agentic_queue_status',
+    description: 'Check the status of a queued agent write. Returns pending, synced (with result), or error.',
+    annotations: {
+      title: 'Check Queue Status',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        queueId: {
+          type: 'string',
+          description: 'The UUID of the queued item (returned when the item was queued)',
+        },
+      },
+      required: ['queueId'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as AgentQueueStatusInput;
+      if (!input.queueId) {
+        return toolError('Missing required field: queueId');
+      }
+      const result = await agentQueueStatus(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -216,4 +305,6 @@ export const agenticTools: ToolSpec[] = [
   agenticRenderTool,
   agenticLintTool,
   agenticGoldenEvalTool,
+  agenticQueueSyncTool,
+  agenticQueueStatusTool,
 ];

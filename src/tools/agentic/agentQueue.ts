@@ -8,8 +8,18 @@
 
 import { isSupabaseConfigured, getSupabaseServiceClient } from '../../lib/supabase.js';
 import { isQueueable } from '../../config/queueableActions.js';
-import kernel from '../../kernel.js';
+import { createKernel } from '../../kernel.js';
+import type { ToolKernel } from '../../kernel.js';
 import { log } from '../../config.js';
+
+// Lazy kernel singleton — created on first use to avoid boot-time overhead.
+let _kernel: ToolKernel | undefined;
+async function getKernel(): Promise<ToolKernel> {
+  if (!_kernel) {
+    _kernel = await createKernel();
+  }
+  return _kernel;
+}
 
 // ============================================================================
 // Types
@@ -172,13 +182,14 @@ export async function agentQueueSync(input: AgentQueueSyncInput): Promise<AgentQ
         ...(rowArgs || {}),
       };
 
+      const kernel = await getKernel();
       const dispatchResult = await kernel.dispatch(facade, dispatchArgs, undefined);
 
       // If kernel returned an error result, treat as failure
       if (dispatchResult.isError) {
         const errText = dispatchResult.content
-          .filter(c => c.type === 'text')
-          .map(c => (c as { type: 'text'; text: string }).text)
+          .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+          .map(c => c.text)
           .join(' ');
 
         items.push({
@@ -201,8 +212,8 @@ export async function agentQueueSync(input: AgentQueueSyncInput): Promise<AgentQ
 
       // Extract text content and try to parse JSON result
       const resultText = dispatchResult.content
-        .filter(c => c.type === 'text')
-        .map(c => (c as { type: 'text'; text: string }).text)
+        .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+        .map(c => c.text)
         .join('');
 
       let parsedResult: unknown = resultText;

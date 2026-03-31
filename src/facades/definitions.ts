@@ -458,8 +458,8 @@ export const proFacades: FacadeSpec[] = [
 
   {
     name: 'agentic',
-    description: 'Agentic operations: render, lint, compile, evaluation. render to produce human-readable output from structured data; lint for code quality checks; compile_pack to bundle context for another agent; golden_eval to test agent output against known-good examples. Actions: render, lint, compile_pack, golden_eval',
-    compactDescription: 'Render, lint, compile, evaluate',
+    description: 'Agentic operations: render, lint, compile, evaluation, queue sync. render to produce human-readable output from structured data; lint for code quality checks; compile_pack to bundle context for another agent; golden_eval to test agent output against known-good examples; queue_sync to replay remote agent writes locally; queue_status to check queued write results. Actions: render, lint, compile_pack, golden_eval, queue_sync, queue_status',
+    compactDescription: 'Render, lint, compile, evaluate, queue sync',
     microEligible: false,
     tier: 'pro',
     actions: {
@@ -467,6 +467,8 @@ export const proFacades: FacadeSpec[] = [
       lint: 'agentic_lint',
       compile_pack: 'agentic_compile_pack',
       golden_eval: 'agentic_golden_eval',
+      queue_sync: 'agentic_queue_sync',
+      queue_status: 'agentic_queue_status',
     },
   },
 ];
