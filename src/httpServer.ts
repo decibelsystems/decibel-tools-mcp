@@ -33,7 +33,8 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { log } from './config.js';
-import { isSupabaseConfigured } from './lib/supabase.js';
+import { isSupabaseConfigured, getSupabaseServiceClient } from './lib/supabase.js';
+import { shouldQueueForAgent, parseToolCall } from './httpQueueDetection.js';
 import type { ToolKernel, DispatchContext, DispatchEvent } from './kernel.js';
 import { getLicenseValidator } from './license.js';
 import { listProjects } from './projectRegistry.js';
@@ -193,7 +194,7 @@ function buildLandingPageHtml(_facades: { name: string; description: string; act
 // ============================================================================
 
 interface StatusEnvelope {
-  status: 'executed' | 'error' | 'unavailable';
+  status: 'executed' | 'error' | 'unavailable' | 'queued';
   [key: string]: unknown;
 }
 
@@ -289,6 +290,13 @@ async function executeTool(
     // Extract agent context from HTTP headers
     const headerAgentId = req?.headers['x-agent-id'] as string | undefined;
 
+    // Queue detection: if this is a write call from a remote agent, queue instead of execute
+    if (headerAgentId && shouldQueueForAgent(tool, args, headerAgentId)) {
+      const parsed = parseToolCall(tool, args)!;
+      const { action: _action, ...queueArgs } = args;
+      return await queueForAgent(parsed.facade, parsed.action, queueArgs, headerAgentId, (args.projectId as string) || 'default');
+    }
+
     // Resolve allowedFacades: header > agent registry > agent config > none
     let allowedFacades: string[] | undefined;
     const facadesHeader = req?.headers['x-allowed-facades'] as string | undefined;
@@ -351,6 +359,46 @@ async function executeTool(
 
     return wrapError(message, 'EXECUTION_ERROR');
   }
+}
+
+/**
+ * Queue a write operation for later local sync instead of executing immediately.
+ * Used when a remote agent calls a queueable write action.
+ */
+async function queueForAgent(
+  facade: string,
+  action: string,
+  args: Record<string, unknown>,
+  agentId: string,
+  projectId: string,
+): Promise<StatusEnvelope> {
+  if (!isSupabaseConfigured()) {
+    return wrapError('Agent queue requires Supabase configuration', 'QUEUE_UNAVAILABLE');
+  }
+
+  const supabase = getSupabaseServiceClient();
+
+  const { data, error } = await supabase
+    .from('agent_queue')
+    .insert({
+      project_id: projectId,
+      facade,
+      action,
+      arguments: args,
+      created_by: agentId,
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    return wrapError(`Failed to queue: ${error.message}`, 'QUEUE_ERROR');
+  }
+
+  return {
+    status: 'queued',
+    queue_id: data.id,
+    message: 'Queued for local sync. Use agentic queue_status to check result.',
+  };
 }
 
 /**
