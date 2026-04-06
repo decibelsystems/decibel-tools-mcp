@@ -88,8 +88,8 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'designer',
-    description: 'Design decisions, principles, critiques, tokens, and lateral thinking. Use for UI/UX/visual choices (not architecture — that is architect). create_decision for design rationale; create_principle for reusable rules (e.g. "4px grid"); log_crit for design review feedback; tokens for registry lookup; drift for token-vs-source drift detection; figma_parity for Figma-to-code comparison. Actions: create_decision, list_principles, create_principle, log_crit, review_figma, sync_tokens, check_parity, tokens, drift, figma_parity, lateral_session, lateral_apply, lateral_close, list_crits',
-    compactDescription: 'Design decisions, principles, crits, tokens, drift detection, and Figma parity',
+    description: 'Design decisions, principles, critiques, tokens, evals, and lateral thinking. Use for UI/UX/visual choices (not architecture — that is architect). create_decision for design rationale; create_principle for reusable rules; log_crit for gut reactions; eval for structured evaluations with scoring; evals to list/filter; eval_history for temporal trends; tokens for registry lookup; drift for token-vs-source drift; figma_parity for Figma-to-code comparison. Actions: create_decision, list_principles, create_principle, log_crit, review_figma, sync_tokens, check_parity, tokens, drift, figma_parity, eval, evals, eval_history, lateral_session, lateral_apply, lateral_close, list_crits',
+    compactDescription: 'Design decisions, principles, crits, evals, tokens, drift, and Figma parity',
     microEligible: false,
     tier: 'core',
     actions: {
@@ -103,6 +103,9 @@ export const coreFacades: FacadeSpec[] = [
       tokens: 'designer_tokens_lookup',
       drift: 'designer_drift',
       figma_parity: 'designer_figma_parity',
+      eval: 'designer_log_eval',
+      evals: 'designer_list_evals',
+      eval_history: 'designer_eval_history',
       lateral_session: 'designer_lateral_session',
       lateral_apply: 'designer_lateral_apply',
       lateral_close: 'designer_lateral_close',

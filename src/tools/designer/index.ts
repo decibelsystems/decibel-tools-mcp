@@ -25,6 +25,12 @@ import {
   DriftDetectionInput,
   figmaParity,
   FigmaParityInput,
+  logEval,
+  LogEvalInput,
+  listEvals,
+  ListEvalsInput,
+  evalHistory,
+  EvalHistoryInput,
 } from '../designer.js';
 import {
   logCrit,
@@ -611,6 +617,235 @@ export const designerFigmaParityTool: ToolSpec = {
 };
 
 // ============================================================================
+// Log Eval Tool
+// ============================================================================
+
+export const designerLogEvalTool: ToolSpec = {
+  definition: {
+    name: 'designer_log_eval',
+    description: 'Log a structured design evaluation. Records score (0-100), grade (A-F), and detailed findings for token drift, component parity, motion review, design compliance, visual review, or accessibility audits. Supports temporal tracking.',
+    annotations: {
+      title: 'Log Design Eval',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        evalType: {
+          type: 'string',
+          enum: ['token-drift', 'component-parity', 'motion-review', 'design-compliance', 'visual-review', 'accessibility'],
+          description: 'Type of evaluation being performed.',
+        },
+        scope: {
+          type: 'string',
+          enum: ['component', 'page', 'project'],
+          description: 'Scope of the evaluation.',
+        },
+        target: {
+          type: 'string',
+          description: 'What was evaluated — component name, page route, or "full-project".',
+        },
+        score: {
+          type: 'number',
+          description: 'Score from 0 to 100. Grade is derived automatically (A: 90+, B: 80-89, C: 70-79, D: 60-69, F: <60).',
+        },
+        summary: {
+          type: 'string',
+          description: '1-3 sentence overview of the evaluation results.',
+        },
+        findings: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              severity: { type: 'string', enum: ['critical', 'warning', 'info'] },
+              category: { type: 'string', description: 'e.g., "color-token", "spacing", "motion-timing", "contrast"' },
+              message: { type: 'string', description: 'Human-readable description of the finding.' },
+              location: { type: 'string', description: 'File:line or component path.' },
+              expected: { type: 'string', description: 'What the design system says it should be.' },
+              actual: { type: 'string', description: 'What was found.' },
+              suggestion: { type: 'string', description: 'How to fix.' },
+            },
+            required: ['severity', 'category', 'message'],
+          },
+          description: 'Detailed findings from the evaluation.',
+        },
+        platform: {
+          type: 'string',
+          description: 'Platform context: "web", "ios", "android", "cross-platform".',
+        },
+        branch: {
+          type: 'string',
+          description: 'Git branch at time of eval.',
+        },
+        commit: {
+          type: 'string',
+          description: 'Git commit hash at time of eval.',
+        },
+        evaluator: {
+          type: 'string',
+          description: 'Who performed the eval (default: "decibel-designer").',
+        },
+        requestedBy: {
+          type: 'string',
+          description: 'Peer ID or user who triggered the eval.',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Freeform tags for filtering (e.g., "q2-audit", "pre-launch").',
+        },
+      },
+      required: ['evalType', 'scope', 'target', 'score', 'summary', 'findings'],
+    },
+  },
+  handler: withRunTracking(
+    async (args) => {
+      try {
+        const rawInput = args as Record<string, unknown>;
+        normalizeProjectId(rawInput);
+        const input = rawInput as unknown as LogEvalInput;
+
+        requireFields(input, 'evalType', 'scope', 'target', 'score', 'summary', 'findings');
+
+        const result = await logEval(input);
+        return toolSuccess(result);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    {
+      toolName: 'designer_log_eval',
+      getProjectId: (args) => (args.projectId as string | undefined) || (args.project_id as string | undefined),
+      getSummary: (args) => `Design eval: ${args.evalType} on "${args.target}" — ${args.score}/100`,
+    }
+  ),
+};
+
+// ============================================================================
+// List Evals Tool
+// ============================================================================
+
+export const designerListEvalsTool: ToolSpec = {
+  definition: {
+    name: 'designer_list_evals',
+    description: 'List and filter design evaluations. Filter by eval type, scope, target, score range, or tags. Returns most recent first.',
+    annotations: {
+      title: 'List Design Evals',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        evalType: {
+          type: 'string',
+          enum: ['token-drift', 'component-parity', 'motion-review', 'design-compliance', 'visual-review', 'accessibility'],
+          description: 'Filter by evaluation type.',
+        },
+        scope: {
+          type: 'string',
+          enum: ['component', 'page', 'project'],
+          description: 'Filter by scope.',
+        },
+        target: {
+          type: 'string',
+          description: 'Filter by target (substring match).',
+        },
+        minScore: {
+          type: 'number',
+          description: 'Minimum score filter (inclusive).',
+        },
+        maxScore: {
+          type: 'number',
+          description: 'Maximum score filter (inclusive).',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Filter by tags (matches if any tag matches).',
+        },
+        limit: {
+          type: 'integer',
+          description: 'Maximum number of results to return.',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      normalizeProjectId(rawInput);
+      const input = rawInput as unknown as ListEvalsInput;
+
+      const result = await listEvals(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// Eval History Tool
+// ============================================================================
+
+export const designerEvalHistoryTool: ToolSpec = {
+  definition: {
+    name: 'designer_eval_history',
+    description: 'Get temporal trend data for a specific eval type and target. Shows score progression over time with trend analysis (improving/declining/stable). Use to track design system health over time.',
+    annotations: {
+      title: 'Eval History',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        evalType: {
+          type: 'string',
+          enum: ['token-drift', 'component-parity', 'motion-review', 'design-compliance', 'visual-review', 'accessibility'],
+          description: 'Type of evaluation to get history for.',
+        },
+        target: {
+          type: 'string',
+          description: 'Target to track (default: "full-project").',
+        },
+      },
+      required: ['evalType'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      normalizeProjectId(rawInput);
+      const input = rawInput as unknown as EvalHistoryInput;
+
+      requireFields(input, 'evalType');
+
+      const result = await evalHistory(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -626,5 +861,8 @@ export const designerTools: ToolSpec[] = [
   designerTokensLookupTool,
   designerDriftTool,
   designerFigmaParityTool,
+  designerLogEvalTool,
+  designerListEvalsTool,
+  designerEvalHistoryTool,
   ...lateralTools,
 ];

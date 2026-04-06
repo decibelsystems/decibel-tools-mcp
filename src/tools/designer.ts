@@ -1052,3 +1052,370 @@ export async function listPrinciples(
     path: principlesDir,
   };
 }
+
+// ============================================================================
+// Designer Evals — Structured Design System Evaluations
+// ============================================================================
+
+export type EvalType =
+  | 'token-drift'
+  | 'component-parity'
+  | 'motion-review'
+  | 'design-compliance'
+  | 'visual-review'
+  | 'accessibility';
+
+export type EvalScope = 'component' | 'page' | 'project';
+
+export type FindingSeverity = 'critical' | 'warning' | 'info';
+
+export interface EvalFinding {
+  severity: FindingSeverity;
+  category: string;
+  message: string;
+  location?: string;
+  expected?: string;
+  actual?: string;
+  suggestion?: string;
+}
+
+export interface LogEvalInput {
+  projectId?: string;
+  evalType: EvalType;
+  scope: EvalScope;
+  target: string;
+  score: number;
+  summary: string;
+  findings: EvalFinding[];
+  platform?: string;
+  branch?: string;
+  commit?: string;
+  evaluator?: string;
+  requestedBy?: string;
+  tags?: string[];
+}
+
+function deriveGrade(score: number): string {
+  if (score >= 90) return 'A';
+  if (score >= 80) return 'B';
+  if (score >= 70) return 'C';
+  if (score >= 60) return 'D';
+  return 'F';
+}
+
+export interface LogEvalOutput {
+  id: string;
+  grade: string;
+  score: number;
+  findingCounts: { critical: number; warning: number; info: number };
+  previousEvalId: string | null;
+  path: string;
+  timestamp: string;
+}
+
+export async function logEval(
+  input: LogEvalInput
+): Promise<LogEvalOutput | DesignerError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('log eval');
+  }
+
+  // Validate score range
+  if (input.score < 0 || input.score > 100) {
+    return {
+      error: 'INVALID_INPUT',
+      message: 'score must be between 0 and 100.',
+    };
+  }
+
+  const now = new Date();
+  const timestamp = now.toISOString();
+  const fileTimestamp = formatTimestampForFilename(now);
+  const grade = deriveGrade(input.score);
+  const id = `EVAL-${fileTimestamp}-${slugify(input.target)}`;
+
+  const evalsDir = resolved.subPath('designer', 'evals');
+  ensureDir(evalsDir);
+
+  // Auto-link to most recent eval with same evalType + target
+  let previousEvalId: string | null = null;
+  try {
+    const existingFiles = await fs.readdir(evalsDir);
+    const candidates: { id: string; timestamp: string }[] = [];
+    for (const f of existingFiles) {
+      if (!f.endsWith('.yaml') && !f.endsWith('.yml')) continue;
+      try {
+        const content = await fs.readFile(path.join(evalsDir, f), 'utf-8');
+        const data = YAML.parse(content);
+        if (data?.eval_type === input.evalType && data?.target === input.target && data?.id) {
+          candidates.push({ id: data.id, timestamp: data.timestamp });
+        }
+      } catch { /* skip malformed */ }
+    }
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      previousEvalId = candidates[0].id;
+    }
+  } catch { /* no evals dir yet */ }
+
+  const findingCounts = {
+    critical: input.findings.filter(f => f.severity === 'critical').length,
+    warning: input.findings.filter(f => f.severity === 'warning').length,
+    info: input.findings.filter(f => f.severity === 'info').length,
+  };
+
+  const evalData = {
+    id,
+    project: resolved.id,
+    eval_type: input.evalType,
+    scope: input.scope,
+    target: input.target,
+    score: input.score,
+    grade,
+    summary: input.summary,
+    findings: input.findings,
+    finding_counts: findingCounts,
+    previous_eval_id: previousEvalId,
+    platform: input.platform || null,
+    branch: input.branch || null,
+    commit: input.commit || null,
+    evaluator: input.evaluator || 'decibel-designer',
+    requested_by: input.requestedBy || null,
+    tags: input.tags || [],
+    timestamp,
+  };
+
+  const filePath = path.join(evalsDir, `${id}.yaml`);
+  validateWritePath(filePath, resolved);
+  await fs.writeFile(filePath, YAML.stringify(evalData), 'utf-8');
+
+  log(`Designer: Logged eval ${id} — ${input.evalType} ${input.scope} "${input.target}" → ${grade} (${input.score}/100, ${input.findings.length} findings)`);
+
+  await emitCreateProvenance(
+    `designer:eval:${id}`,
+    YAML.stringify(evalData),
+    `Design eval: ${input.evalType} on "${input.target}" — ${grade} (${input.score}/100)`,
+    input.projectId
+  );
+
+  return {
+    id,
+    grade,
+    score: input.score,
+    findingCounts,
+    previousEvalId,
+    path: filePath,
+    timestamp,
+  };
+}
+
+// ============================================================================
+// List / Filter Evals
+// ============================================================================
+
+export interface ListEvalsInput {
+  projectId?: string;
+  evalType?: EvalType;
+  scope?: EvalScope;
+  target?: string;
+  minScore?: number;
+  maxScore?: number;
+  tags?: string[];
+  limit?: number;
+}
+
+export interface EvalSummary {
+  id: string;
+  eval_type: EvalType;
+  scope: EvalScope;
+  target: string;
+  score: number;
+  grade: string;
+  summary: string;
+  finding_counts: { critical: number; warning: number; info: number };
+  tags: string[];
+  timestamp: string;
+}
+
+export interface ListEvalsOutput {
+  evals: EvalSummary[];
+  total: number;
+  path: string;
+}
+
+export async function listEvals(
+  input: ListEvalsInput
+): Promise<ListEvalsOutput | DesignerError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('list evals');
+  }
+
+  const evalsDir = resolved.subPath('designer', 'evals');
+
+  let files: string[];
+  try {
+    files = await fs.readdir(evalsDir);
+  } catch {
+    return { evals: [], total: 0, path: evalsDir };
+  }
+
+  const evals: EvalSummary[] = [];
+
+  for (const file of files) {
+    if (!file.endsWith('.yaml') && !file.endsWith('.yml')) continue;
+
+    try {
+      const content = await fs.readFile(path.join(evalsDir, file), 'utf-8');
+      const data = YAML.parse(content);
+      if (!data?.id) continue;
+
+      evals.push({
+        id: data.id,
+        eval_type: data.eval_type,
+        scope: data.scope,
+        target: data.target,
+        score: data.score,
+        grade: data.grade,
+        summary: data.summary,
+        finding_counts: data.finding_counts || { critical: 0, warning: 0, info: 0 },
+        tags: data.tags || [],
+        timestamp: data.timestamp,
+      });
+    } catch {
+      // Skip malformed files
+    }
+  }
+
+  // Apply filters
+  let filtered = evals;
+
+  if (input.evalType) {
+    filtered = filtered.filter(e => e.eval_type === input.evalType);
+  }
+  if (input.scope) {
+    filtered = filtered.filter(e => e.scope === input.scope);
+  }
+  if (input.target) {
+    const t = input.target.toLowerCase();
+    filtered = filtered.filter(e => e.target.toLowerCase().includes(t));
+  }
+  if (input.minScore !== undefined) {
+    filtered = filtered.filter(e => e.score >= input.minScore!);
+  }
+  if (input.maxScore !== undefined) {
+    filtered = filtered.filter(e => e.score <= input.maxScore!);
+  }
+  if (input.tags && input.tags.length > 0) {
+    filtered = filtered.filter(e =>
+      input.tags!.some(tag => e.tags.includes(tag))
+    );
+  }
+
+  // Sort by timestamp descending (most recent first)
+  filtered.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+  if (input.limit) {
+    filtered = filtered.slice(0, input.limit);
+  }
+
+  return {
+    evals: filtered,
+    total: filtered.length,
+    path: evalsDir,
+  };
+}
+
+// ============================================================================
+// Eval History — Temporal Trend for a Target
+// ============================================================================
+
+export interface EvalHistoryInput {
+  projectId?: string;
+  evalType: EvalType;
+  target?: string;       // defaults to "full-project"
+}
+
+export interface EvalHistoryPoint {
+  id: string;
+  score: number;
+  grade: string;
+  finding_counts: { critical: number; warning: number; info: number };
+  timestamp: string;
+  summary: string;
+}
+
+export interface EvalHistoryOutput {
+  eval_type: EvalType;
+  target: string;
+  history: EvalHistoryPoint[];
+  trend: 'improving' | 'declining' | 'stable' | 'insufficient_data';
+  delta: number | null;    // score change from first to last eval
+  path: string;
+}
+
+export async function evalHistory(
+  input: EvalHistoryInput
+): Promise<EvalHistoryOutput | DesignerError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('get eval history');
+  }
+
+  const target = input.target || 'full-project';
+
+  // Reuse listEvals to get all matching evals
+  const result = await listEvals({
+    projectId: input.projectId,
+    evalType: input.evalType,
+    target,
+  });
+
+  if ('error' in result) return result;
+
+  // Sort chronologically (oldest first) for trend analysis
+  const sorted = [...result.evals].sort((a, b) =>
+    a.timestamp.localeCompare(b.timestamp)
+  );
+
+  const history: EvalHistoryPoint[] = sorted.map(e => ({
+    id: e.id,
+    score: e.score,
+    grade: e.grade,
+    finding_counts: e.finding_counts,
+    timestamp: e.timestamp,
+    summary: e.summary,
+  }));
+
+  // Compute trend
+  let trend: EvalHistoryOutput['trend'] = 'insufficient_data';
+  let delta: number | null = null;
+
+  if (history.length >= 2) {
+    const first = history[0].score;
+    const last = history[history.length - 1].score;
+    delta = last - first;
+
+    if (delta > 5) trend = 'improving';
+    else if (delta < -5) trend = 'declining';
+    else trend = 'stable';
+  }
+
+  log(`Designer: Eval history for ${input.evalType} "${target}" — ${history.length} data points, trend: ${trend}`);
+
+  return {
+    eval_type: input.evalType,
+    target,
+    history,
+    trend,
+    delta,
+    path: resolved.subPath('designer', 'evals'),
+  };
+}
