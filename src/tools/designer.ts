@@ -707,6 +707,326 @@ export async function checkParity(
 // List Design Principles
 // ============================================================================
 
+// ============================================================================
+// Tokens Registry Lookup
+// ============================================================================
+
+export interface TokensLookupInput {
+  projectId?: string;
+  category?: string;  // e.g., 'color', 'spacing', 'typography'
+}
+
+export interface TokensLookupOutput {
+  tokens: DesignToken[];
+  total: number;
+  categories: string[];
+  source: string | null;
+  synced_at: string | null;
+  path: string;
+}
+
+export async function tokensLookup(
+  input: TokensLookupInput
+): Promise<TokensLookupOutput | DesignerError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('look up tokens');
+  }
+
+  const tokensFile = path.join(resolved.subPath('designer', 'tokens'), 'tokens.yaml');
+  let tokens: DesignToken[];
+  let source: string | null = null;
+  let synced_at: string | null = null;
+
+  try {
+    const content = await fs.readFile(tokensFile, 'utf-8');
+    const data = YAML.parse(content);
+    tokens = data?.tokens || [];
+    source = data?.source || null;
+    synced_at = data?.synced_at || null;
+  } catch {
+    return {
+      error: 'NO_TOKENS',
+      message: 'No tokens.yaml found. Sync tokens from Figma first or create a tokens file manually.',
+      hint: 'Use designer sync_tokens with a Figma fileKey, or place a tokens.yaml in .decibel/designer/tokens/',
+    };
+  }
+
+  // Derive categories from token types + collections
+  const categorySet = new Set<string>();
+  for (const t of tokens) {
+    if (t.type) categorySet.add(t.type);
+    if (t.collection) categorySet.add(t.collection.toLowerCase());
+  }
+
+  // Filter by category if specified
+  if (input.category) {
+    const cat = input.category.toLowerCase();
+    tokens = tokens.filter(t =>
+      t.type === cat ||
+      (t.collection && t.collection.toLowerCase() === cat)
+    );
+  }
+
+  log(`Designer: Tokens lookup — ${tokens.length} tokens${input.category ? ` (category: ${input.category})` : ''}`);
+
+  return {
+    tokens,
+    total: tokens.length,
+    categories: Array.from(categorySet).sort(),
+    source,
+    synced_at,
+    path: tokensFile,
+  };
+}
+
+// ============================================================================
+// Drift Detection (Token Registry vs Source Files)
+// ============================================================================
+
+export interface DriftDetectionInput {
+  projectId?: string;
+}
+
+export interface DriftEntry {
+  token_name: string;
+  expected: string;
+  actual: string;
+  file: string;
+  format: 'css' | 'tailwind' | 'swift' | 'json';
+}
+
+export interface DriftDetectionOutput {
+  drifted: DriftEntry[];
+  scanned_files: number;
+  total_tokens_checked: number;
+  drift_detected: boolean;
+  timestamp: string;
+}
+
+// Format-aware value normalizer: convert various color/value formats to comparable form
+function normalizeColorValue(value: unknown): string | null {
+  if (typeof value === 'string') return value.toLowerCase().replace(/\s/g, '');
+  // Figma RGBA object → hex
+  if (typeof value === 'object' && value !== null && 'r' in value) {
+    const v = value as { r: number; g: number; b: number; a?: number };
+    const toHex = (n: number) => Math.round(n * 255).toString(16).padStart(2, '0');
+    return `#${toHex(v.r)}${toHex(v.g)}${toHex(v.b)}`.toLowerCase();
+  }
+  if (typeof value === 'number') return String(value);
+  return null;
+}
+
+// Parsers for different source file formats
+const FORMAT_PARSERS: Record<string, { glob: string; extract: (content: string) => Map<string, string> }> = {
+  css: {
+    glob: '**/*.css',
+    extract(content: string): Map<string, string> {
+      const map = new Map<string, string>();
+      const re = /--([a-zA-Z0-9_-]+)\s*:\s*([^;]+)/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(content)) !== null) {
+        map.set(m[1].toLowerCase(), m[2].trim().toLowerCase());
+      }
+      return map;
+    },
+  },
+  tailwind: {
+    glob: '**/tailwind.config.{js,ts,cjs,mjs}',
+    extract(content: string): Map<string, string> {
+      const map = new Map<string, string>();
+      // Match hex/rgb values in tailwind config
+      const re = /['"]([a-zA-Z0-9_-]+)['"]\s*:\s*['"](#[0-9a-fA-F]{3,8}|rgb[a]?\([^)]+\))['"]/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(content)) !== null) {
+        map.set(m[1].toLowerCase(), m[2].toLowerCase());
+      }
+      return map;
+    },
+  },
+  swift: {
+    glob: '**/*.swift',
+    extract(content: string): Map<string, string> {
+      const map = new Map<string, string>();
+      // Match Color(hex: 0xRRGGBB) or Color(hex: "RRGGBB")
+      const re = /(?:let|var|static)\s+(\w+)\s*.*?Color\(\s*hex\s*:\s*(?:0x|"|')([0-9a-fA-F]{6,8})/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(content)) !== null) {
+        map.set(m[1].toLowerCase(), `#${m[2].toLowerCase()}`);
+      }
+      return map;
+    },
+  },
+  json: {
+    glob: '**/tokens.json',
+    extract(content: string): Map<string, string> {
+      const map = new Map<string, string>();
+      try {
+        const data = JSON.parse(content);
+        // Flatten nested token objects
+        function walk(obj: Record<string, unknown>, prefix: string) {
+          for (const [k, v] of Object.entries(obj)) {
+            const key = prefix ? `${prefix}/${k}` : k;
+            if (typeof v === 'object' && v !== null && 'value' in v) {
+              map.set(key.toLowerCase(), String((v as { value: unknown }).value).toLowerCase());
+            } else if (typeof v === 'object' && v !== null) {
+              walk(v as Record<string, unknown>, key);
+            }
+          }
+        }
+        walk(data, '');
+      } catch { /* not valid JSON, skip */ }
+      return map;
+    },
+  },
+};
+
+export async function driftDetection(
+  input: DriftDetectionInput
+): Promise<DriftDetectionOutput | DesignerError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('detect drift');
+  }
+
+  const now = new Date();
+
+  // Load token registry
+  const tokensFile = path.join(resolved.subPath('designer', 'tokens'), 'tokens.yaml');
+  let registryTokens: DesignToken[];
+  try {
+    const content = await fs.readFile(tokensFile, 'utf-8');
+    const data = YAML.parse(content);
+    registryTokens = data?.tokens || [];
+  } catch {
+    return {
+      error: 'NO_TOKENS',
+      message: 'No tokens.yaml found. Sync or create tokens first.',
+      hint: 'Use designer sync_tokens or manually place tokens.yaml in .decibel/designer/tokens/',
+    };
+  }
+
+  // Build a lookup from token name → normalized expected value
+  const expectedMap = new Map<string, string>();
+  for (const t of registryTokens) {
+    const norm = normalizeColorValue(t.value);
+    if (norm) {
+      // Use the last segment of slash-separated names for matching
+      const shortName = t.name.split('/').pop()!.toLowerCase();
+      expectedMap.set(shortName, norm);
+      expectedMap.set(t.name.toLowerCase(), norm);
+    }
+  }
+
+  const drifted: DriftEntry[] = [];
+  let scannedFiles = 0;
+
+  // Scan source files using each format parser
+  for (const [format, parser] of Object.entries(FORMAT_PARSERS)) {
+    // Use the project root to find source files
+    const projectRoot = resolved.projectPath.replace(/\/.decibel$/, '');
+    let files: string[];
+    try {
+      const { glob } = await import('glob');
+      files = await glob(parser.glob, {
+        cwd: projectRoot,
+        absolute: true,
+        ignore: ['**/node_modules/**', '**/dist/**', '**/.decibel/**'],
+      });
+    } catch {
+      continue; // glob not available or no matches
+    }
+
+    for (const file of files) {
+      scannedFiles++;
+      const content = await fs.readFile(file, 'utf-8');
+      const sourceValues = parser.extract(content);
+
+      for (const [name, actual] of sourceValues) {
+        const expected = expectedMap.get(name);
+        if (expected && expected !== actual.replace(/\s/g, '')) {
+          drifted.push({
+            token_name: name,
+            expected,
+            actual,
+            file: path.relative(projectRoot, file),
+            format: format as DriftEntry['format'],
+          });
+        }
+      }
+    }
+  }
+
+  log(`Designer: Drift detection — ${drifted.length} drifted tokens across ${scannedFiles} files`);
+
+  return {
+    drifted,
+    scanned_files: scannedFiles,
+    total_tokens_checked: expectedMap.size,
+    drift_detected: drifted.length > 0,
+    timestamp: now.toISOString(),
+  };
+}
+
+// ============================================================================
+// Figma Parity Diff (Component Implementation vs Figma Source)
+// ============================================================================
+
+export interface FigmaParityInput {
+  projectId?: string;
+  component: string;       // Component name or path in the codebase
+  figma_node_id?: string;  // Figma node ID for comparison (Phase 2)
+}
+
+export interface FigmaParityOutput {
+  component: string;
+  status: 'pending_figma_integration' | 'compared';
+  figma_node_id: string | null;
+  message: string;
+  timestamp: string;
+}
+
+export async function figmaParity(
+  input: FigmaParityInput
+): Promise<FigmaParityOutput | DesignerError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectError('check Figma parity');
+  }
+
+  // Input validation
+  if (!input.component || input.component.trim().length === 0) {
+    return {
+      error: 'INVALID_INPUT',
+      message: 'component parameter is required and must be non-empty.',
+      hint: 'Provide the component name or file path (e.g., "Button", "src/components/Button.tsx").',
+    };
+  }
+
+  const now = new Date();
+
+  // Phase 1: skeleton — real Figma MCP integration is pending
+  log(`Designer: Figma parity check requested for component "${input.component}" (Phase 2 integration pending)`);
+
+  return {
+    component: input.component,
+    status: 'pending_figma_integration',
+    figma_node_id: input.figma_node_id || null,
+    message: `Figma parity diff for "${input.component}" is registered. Real comparison requires Phase 2 Figma MCP integration. Node ID ${input.figma_node_id ? `"${input.figma_node_id}" saved for` : 'not provided — will need it for'} automated comparison.`,
+    timestamp: now.toISOString(),
+  };
+}
+
+// ============================================================================
+// List Design Principles
+// ============================================================================
+
 export async function listPrinciples(
   input: ListPrinciplesInput
 ): Promise<ListPrinciplesOutput | DesignerError> {

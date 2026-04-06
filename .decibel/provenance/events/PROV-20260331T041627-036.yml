@@ -1,0 +1,11 @@
+event_id: PROV-20260331T041627-036
+timestamp: 2026-03-31T04:16:27.036Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:epic:EPIC-0030
+reason_code: initial_creation
+summary: "Created epic: Agent Queue — Supabase Write Queue for Remote Agents"
+fingerprint_before: null
+fingerprint_after: sha256:e384f240a756f3a3

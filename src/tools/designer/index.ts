@@ -19,6 +19,12 @@ import {
   ListPrinciplesInput,
   checkParity,
   CheckParityInput,
+  tokensLookup,
+  TokensLookupInput,
+  driftDetection,
+  DriftDetectionInput,
+  figmaParity,
+  FigmaParityInput,
 } from '../designer.js';
 import {
   logCrit,
@@ -479,6 +485,132 @@ export const designerCheckParityTool: ToolSpec = {
 };
 
 // ============================================================================
+// Tokens Lookup Tool
+// ============================================================================
+
+export const designerTokensLookupTool: ToolSpec = {
+  definition: {
+    name: 'designer_tokens_lookup',
+    description: 'Look up design tokens from the project token registry. Returns colors, spacing, typography, etc. Optional category filter.',
+    annotations: {
+      title: 'Tokens Lookup',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        category: {
+          type: 'string',
+          description: 'Filter by category (e.g., "color", "spacing", "typography", or a collection name)',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      normalizeProjectId(rawInput);
+      const input = rawInput as unknown as TokensLookupInput;
+
+      const result = await tokensLookup(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// Drift Detection Tool
+// ============================================================================
+
+export const designerDriftTool: ToolSpec = {
+  definition: {
+    name: 'designer_drift',
+    description: 'Detect drift between the token registry and actual source files. Scans CSS custom properties, Tailwind config, Swift Color(hex:), and JSON token files against .decibel/designer/tokens/tokens.yaml.',
+    annotations: {
+      title: 'Drift Detection',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      normalizeProjectId(rawInput);
+      const input = rawInput as unknown as DriftDetectionInput;
+
+      const result = await driftDetection(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// Figma Parity Tool
+// ============================================================================
+
+export const designerFigmaParityTool: ToolSpec = {
+  definition: {
+    name: 'designer_figma_parity',
+    description: 'Compare a component implementation against its Figma source. Phase 2 Figma MCP integration pending — currently validates input and registers the parity check.',
+    annotations: {
+      title: 'Figma Parity',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        component: {
+          type: 'string',
+          description: 'Component name or file path (e.g., "Button", "src/components/Button.tsx")',
+        },
+        figma_node_id: {
+          type: 'string',
+          description: 'Figma node ID for comparison (optional, needed for Phase 2 automated diff)',
+        },
+      },
+      required: ['component'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const rawInput = args as Record<string, unknown>;
+      normalizeProjectId(rawInput);
+      const input = rawInput as unknown as FigmaParityInput;
+
+      requireFields(input, 'component');
+
+      const result = await figmaParity(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -491,5 +623,8 @@ export const designerTools: ToolSpec[] = [
   designerCheckParityTool,
   designerUpsertPrincipleTool,
   designerListPrinciplesTool,
+  designerTokensLookupTool,
+  designerDriftTool,
+  designerFigmaParityTool,
   ...lateralTools,
 ];
