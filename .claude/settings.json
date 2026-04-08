@@ -5,26 +5,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"DECIBEL SESSION INIT: Run these tools now before doing anything else:\\n1. oracle next_actions (project_id: decibel-tools-mcp) — see what is priority\\n2. voice_inbox_sync (project_id: decibel-tools-mcp) — pull queued voice notes\\n3. agentic queue_sync (project_id: decibel-tools-mcp) — replay remote agent writes\\nDo NOT skip these. They ensure you have full context.\"}}'",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"DECIBEL SESSION INIT: Run these tools now before doing anything else:\\n1. oracle next_actions (project_id: decibel-tools-mcp) — see what is priority\\n2. voice_inbox_sync (project_id: decibel-tools-mcp) — pull queued voice notes\\n3. agentic queue_sync (project_id: decibel-tools-mcp) — replay remote agent writes\\n4. sentinel listIssues (project_id: decibel-tools-mcp, status: open) — show open issues\\nDo NOT skip these. They ensure you have full context.\"}}'",
             "statusMessage": "Decibel session init..."
           }
         ]
       }
     ],
     "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "agent",
-            "if": "Bash(git commit:*)",
-            "prompt": "A git commit is about to be made. Use mcp__decibel-tools__sentinel with action listIssues (project_id: decibel-tools-mcp, status: open) to check for open issues. Review the commit arguments in $ARGUMENTS. If any open issues appear to be addressed by this commit, output JSON with a systemMessage reminding the developer to close them after committing (include the issue IDs). If no issues match, output {}.",
-            "model": "claude-sonnet-4-6",
-            "timeout": 20,
-            "statusMessage": "Sentinel: checking open issues..."
-          }
-        ]
-      },
       {
         "matcher": "Bash",
         "hooks": [

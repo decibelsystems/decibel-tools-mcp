@@ -1,0 +1,11 @@
+event_id: PROV-20260407T035601-736
+timestamp: 2026-04-07T03:56:01.736Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-04-07T03-56-01Z-remove-decibel-pro-env-var-bypass-from-server-side.md
+reason_code: initial_creation
+summary: "Created issue: Remove DECIBEL_PRO env var bypass from server-side tier gating"
+fingerprint_before: null
+fingerprint_after: sha256:f778a47dba0cd53c

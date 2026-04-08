@@ -289,8 +289,7 @@ Claude Code hooks in `.claude/settings.json` automatically trigger Decibel tools
 
 | Hook | Event | What It Does |
 |------|-------|-------------|
-| **Session Init** | `SessionStart` | Injects context reminding you to run `oracle next_actions`, `voice_inbox_sync`, and `agentic queue_sync` before starting work |
-| **Sentinel Pre-Commit** | `PreToolUse` on `git commit` | Agent checks open sentinel issues against the commit — reminds you to close resolved ones |
+| **Session Init** | `SessionStart` | Injects context reminding you to run `oracle next_actions`, `voice_inbox_sync`, `agentic queue_sync`, and `sentinel listIssues` (open) before starting work |
 | **Guardian Pre-Push** | `PreToolUse` on `git push` | Agent runs `guardian report` — **blocks the push** if any D/F grade findings exist |
 | **Architecture Nudge** | `PostToolUse` on `Edit\|Write` | Prompt checks if the edited file is architecture-sensitive — suggests recording an ADR if so |
 
