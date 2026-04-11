@@ -1,16 +1,5 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"DECIBEL SESSION INIT: Run these tools now before doing anything else:\\n1. oracle next_actions (project_id: decibel-tools-mcp) — see what is priority\\n2. voice_inbox_sync (project_id: decibel-tools-mcp) — pull queued voice notes\\n3. agentic queue_sync (project_id: decibel-tools-mcp) — replay remote agent writes\\n4. sentinel listIssues (project_id: decibel-tools-mcp, status: open) — show open issues\\nDo NOT skip these. They ensure you have full context.\"}}'",
-            "statusMessage": "Decibel session init..."
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -32,7 +21,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "A file was just edited. Check the tool_input in $ARGUMENTS for the file_path. If the file path matches ANY of these architecture-sensitive paths: src/kernel.ts, src/transports/, src/server.ts, src/httpServer.ts, src/facades/definitions.ts, src/facades/index.ts, src/license.ts, src/daemonConfig.ts — output: {\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ARCHITECTURE NUDGE: You just modified an architecture-sensitive file. If this is a non-trivial architectural change, consider recording an ADR via architect createAdr. Check existing ADRs first with architect list_adrs.\"}}. If the path does NOT match any of those, output exactly: {}",
+            "prompt": "A file was just edited. Check the tool_input in $ARGUMENTS for the file_path. If file_path is missing, or the path is outside the current project directory, output exactly: {}. If the file path matches ANY of these architecture-sensitive paths: src/kernel.ts, src/transports/, src/server.ts, src/httpServer.ts, src/facades/definitions.ts, src/facades/index.ts, src/license.ts, src/daemonConfig.ts — output: {\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ARCHITECTURE NUDGE: You just modified an architecture-sensitive file. If this is a non-trivial architectural change, consider recording an ADR via architect createAdr. Check existing ADRs first with architect list_adrs.\"}}. If the path does NOT match any of those, output exactly: {}",
             "statusMessage": "Checking architecture sensitivity..."
           }
         ]

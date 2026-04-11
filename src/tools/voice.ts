@@ -941,12 +941,12 @@ export const voiceToolDefinitions = [
     inputSchema: {
       type: 'object',
       properties: {
-        project_id: { type: 'string', description: 'Project ID to sync messages for (required)' },
+        project_id: { type: 'string', description: 'Project ID to sync messages for (auto-detected if omitted)' },
         unsynced_only: { type: 'boolean', description: 'Only sync messages not yet synced (default: true)' },
         limit: { type: 'number', description: 'Maximum messages to sync (default: 50)' },
         process_after_sync: { type: 'boolean', description: 'Process synced messages immediately (default: false)' },
       },
-      required: ['project_id'],
+      required: [],
     },
   },
 ];
