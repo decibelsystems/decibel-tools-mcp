@@ -11,6 +11,7 @@ import { isQueueable } from '../../config/queueableActions.js';
 import { createKernel } from '../../kernel.js';
 import type { ToolKernel } from '../../kernel.js';
 import { log } from '../../config.js';
+import { getDefaultProject } from '../../projectRegistry.js';
 
 // Lazy kernel singleton — created on first use to avoid boot-time overhead.
 let _kernel: ToolKernel | undefined;
@@ -110,8 +111,9 @@ export async function agentQueueSync(input: AgentQueueSyncInput): Promise<AgentQ
     throw new Error('Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_KEY.');
   }
 
-  if (!input.projectId) {
-    throw new Error('projectId is required for agent queue sync.');
+  const projectId = input.projectId || getDefaultProject()?.id;
+  if (!projectId) {
+    throw new Error('No project specified and no default project found. Pass projectId or ensure a default project is configured.');
   }
 
   const supabase = getSupabaseServiceClient();
@@ -121,7 +123,7 @@ export async function agentQueueSync(input: AgentQueueSyncInput): Promise<AgentQ
   let query = supabase
     .from('agent_queue')
     .select('*')
-    .eq('project_id', input.projectId)
+    .eq('project_id', projectId)
     .is('synced_at', null)
     .order('created_at', { ascending: true });
 
@@ -136,11 +138,11 @@ export async function agentQueueSync(input: AgentQueueSyncInput): Promise<AgentQ
   }
 
   if (!rows || rows.length === 0) {
-    log(`agentQueue: No unsynced items for project "${input.projectId}"`);
+    log(`agentQueue: No unsynced items for project "${projectId}"`);
     return { synced: 0, failed: 0, items: [] };
   }
 
-  log(`agentQueue: Found ${rows.length} unsynced items for project "${input.projectId}"`);
+  log(`agentQueue: Found ${rows.length} unsynced items for project "${projectId}"`);
 
   const items: AgentQueueSyncItem[] = [];
 
