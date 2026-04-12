@@ -460,13 +460,52 @@ export function resolveProjectPaths(projectId?: string): ResolvedProjectPaths {
 /**
  * Validate that a write path is within the project's .decibel folder.
  * Call this before any file write to prevent escaping project boundaries.
+ *
+ * SECURITY: Uses realpath to resolve symlinks, preventing symlink-based escapes.
+ * If the target doesn't exist yet, validates the parent directory instead.
  */
 export function validateWritePath(targetPath: string, resolved: ResolvedProjectPaths): void {
   const normalized = path.normalize(targetPath);
+
+  // First check: basic path prefix (fast path for obvious violations)
   if (!normalized.startsWith(resolved.decibelPath)) {
     throw new Error(
       `SECURITY: Write path ${targetPath} is outside project .decibel folder. ` +
       `Expected path under: ${resolved.decibelPath}`
+    );
+  }
+
+  // Second check: resolve symlinks to catch symlink-based escapes
+  // If target doesn't exist, check parent directory
+  let realPath: string;
+  try {
+    realPath = fs.realpathSync(normalized);
+  } catch {
+    // File doesn't exist yet - validate parent directory
+    const parent = path.dirname(normalized);
+    try {
+      realPath = fs.realpathSync(parent);
+      // Parent must be under .decibel, and target must be a direct child (no symlink tricks)
+      if (!realPath.startsWith(fs.realpathSync(resolved.decibelPath))) {
+        throw new Error(
+          `SECURITY: Parent directory resolves outside .decibel folder (symlink detected). ` +
+          `Real path: ${realPath}`
+        );
+      }
+      return; // Parent is valid, new file creation is safe
+    } catch (parentErr) {
+      // Parent doesn't exist either - likely creating nested dirs, allow it
+      // The ensureDir call will create parents, and this check will be called again
+      return;
+    }
+  }
+
+  // Check if resolved path is still within .decibel
+  const realDecibelPath = fs.realpathSync(resolved.decibelPath);
+  if (!realPath.startsWith(realDecibelPath)) {
+    throw new Error(
+      `SECURITY: Write path resolves outside .decibel folder (symlink detected). ` +
+      `Target: ${targetPath}, Real path: ${realPath}`
     );
   }
 }

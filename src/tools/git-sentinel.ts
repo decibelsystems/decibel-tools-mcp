@@ -128,20 +128,35 @@ async function findArtifactFile(
 }
 
 async function getCommitInfo(
-  projectId: string | undefined,
+  resolved: ResolvedProjectPaths,
   sha: string
 ): Promise<{ sha: string; shortSha: string; message: string } | null> {
-  const logResult = await gitLogRecent({ projectId, count: 100 });
-  
-  if (isGitErrorResult(logResult)) {
-    return null;
-  }
-  
-  const commit = logResult.commits.find(
-    c => c.sha.startsWith(sha) || c.shortSha === sha
-  );
-  
-  return commit || null;
+  // Use git show for O(1) lookup instead of fetching logs
+  const { spawn } = await import('child_process');
+
+  return new Promise((resolve) => {
+    const format = '%H|%h|%s';  // full SHA | short SHA | subject
+    const proc = spawn('git', ['show', '--format=' + format, '-s', sha], {
+      cwd: resolved.projectPath,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+
+    proc.on('error', () => resolve(null));
+    proc.on('close', (code) => {
+      if (code !== 0 || !stdout.trim()) {
+        resolve(null);
+        return;
+      }
+
+      const [fullSha, shortSha, message] = stdout.trim().split('|');
+      resolve({ sha: fullSha, shortSha, message });
+    });
+  });
 }
 
 // ============================================================================
@@ -168,7 +183,7 @@ export async function sentinelLinkCommit(
   }
 
   // Get commit info
-  const commitInfo = await getCommitInfo(input.projectId, input.commitSha);
+  const commitInfo = await getCommitInfo(resolved, input.commitSha);
   if (!commitInfo) {
     return makeError(
       `Commit not found: ${input.commitSha}`,
