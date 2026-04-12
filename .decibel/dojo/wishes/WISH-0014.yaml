@@ -1,0 +1,27 @@
+id: WISH-0014
+capability: "[IDEA] TCGPlayer Workflow Enhancer Agent"
+reason: Workflow enhancer agent for TCGPlayer - manages inventory pricing
+  dynamically, works on the computer to take orders, prep them for shipping, and
+  print labels (or prep PDF labels for print). Could be a value add for DeckScry
+  someday but also has standalone uses. Could plug into the existing scanner -
+  specifically a scan-for-TCGPlayer function.
+inputs:
+  - TCGPlayer inventory data
+  - order queue
+  - card scanner input
+  - shipping label templates
+outputs:
+  - dynamic price adjustments
+  - order prep workflow
+  - PDF shipping labels
+  - TCGPlayer scan results
+created_at: 2026-04-08T16:41:39.945Z
+status: open
+project_id: decibel-tools-mcp
+integration_point: DeckScry scanner, TCGPlayer API
+mvp: Scan-for-TCGPlayer function that plugs into the existing scanner to look up
+  cards and pull pricing/inventory data
+context: "spark: problem, scope: project. Multiple angles: standalone TCGPlayer
+  workflow tool, DeckScry value-add, scanner integration. Three pillars: (1)
+  dynamic inventory pricing, (2) order-to-ship automation, (3) scanner TCGPlayer
+  lookup."

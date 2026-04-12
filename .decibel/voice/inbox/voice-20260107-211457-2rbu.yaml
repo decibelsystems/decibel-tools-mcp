@@ -1,0 +1,14 @@
+id: voice-20260107-211457-2rbu
+transcript: Change the color to green
+source: mobile_app
+created_at: 2026-01-07T21:14:57.935+00:00
+status: queued
+intent: issue
+intent_confidence: 1
+parsed_params:
+  raw_transcript: Change the color to green
+tags:
+  - device:iPhone
+  - labeled:human
+  - user_intent:issue
+project_id: decibel-tools-mcp

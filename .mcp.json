@@ -2,8 +2,7 @@
     "mcpServers": {
       "decibel-tools": {
         "command": "node",
-        "args": ["dist/server.js"],
-        "env": {}
+        "args": ["--env-file=.env", "dist/server.js"]
       }
     }
   }

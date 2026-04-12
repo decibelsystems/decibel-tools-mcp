@@ -100,7 +100,7 @@ Plan: Decibel Daemon — Unified Runtime
  | learnings | Technical knowledge | append, list |
  | provenance | Audit trail | list |
 
- Pro facades (gated by DECIBEL_PRO):
+ Pro facades (gated by license key):
  | voice | Voice inbox & commands | inbox_add, inbox_list, inbox_process, inbox_sync, command |
  | studio | Creative asset generation | generate_image, get_image_status, create_artifact, update_artifact, list_artifacts, ... |
  | corpus | Pattern & playbook search | search, status |

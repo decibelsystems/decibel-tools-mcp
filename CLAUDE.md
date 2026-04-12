@@ -281,11 +281,58 @@ When investigating issues, bugs, or unexpected behavior:
 
 ---
 
+## Hooks — Automated Decibel Integration
+
+Claude Code hooks in `.claude/settings.json` automatically trigger Decibel tools at key moments. These fire without manual invocation.
+
+### Active Hooks (committed, always on)
+
+| Hook | Event | What It Does |
+|------|-------|-------------|
+| **Session Init** | `SessionStart` | Injects context reminding you to run `oracle next_actions`, `voice_inbox_sync`, `agentic queue_sync`, and `sentinel listIssues` (open) before starting work |
+| **Guardian Pre-Push** | `PreToolUse` on `git push` | Agent runs `guardian report` — **blocks the push** if any D/F grade findings exist |
+| **Architecture Nudge** | `PostToolUse` on `Edit\|Write` | Prompt checks if the edited file is architecture-sensitive — suggests recording an ADR if so |
+
+Architecture-sensitive paths: `src/kernel.ts`, `src/transports/`, `src/server.ts`, `src/httpServer.ts`, `src/facades/definitions.ts`, `src/facades/index.ts`, `src/license.ts`, `src/daemonConfig.ts`
+
+### Opt-In Hooks (add to `.claude/settings.local.json`)
+
+**Designer Review** — runs a visual-review eval after editing UI/template files:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "Check the file_path in $ARGUMENTS. If it matches templates/, docs/api-site/, .decibel/specs/, or has .css/.html/.svg extension, run mcp__decibel-tools__designer with action eval (evalType: visual-review, scope: component, target: <the file>, score: null, summary: 'Hook-triggered review', findings: []). Output a systemMessage with the eval result. If the path doesn't match, output {}.",
+            "model": "claude-sonnet-4-6",
+            "timeout": 30,
+            "statusMessage": "Designer: visual review..."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Disabling Hooks
+
+- **All hooks**: Set `"disableAllHooks": true` in settings
+- **Single hook**: Remove it from `.claude/settings.json` or override in `.claude/settings.local.json`
+- **Review active hooks**: Use `/hooks` in Claude Code
+
+---
+
 ## Voice Inbox Protocol
 
 Human sends voice notes via iOS → Supabase. **Messages don't go to local files directly.**
 
-**At session start**, run:
+The **SessionStart hook** now reminds you to sync, but you can also run manually:
 ```
 voice_inbox_sync with project_id: "decibel-tools-mcp"
 ```
@@ -294,7 +341,7 @@ This pulls queued messages from Supabase → local `.decibel/voice/inbox/` so yo
 
 ## Agent Queue Protocol
 
-Remote agents queue writes via Supabase. **Sync them at session start:**
+Remote agents queue writes via Supabase. **The SessionStart hook reminds you to sync.** Manual command:
 
 ```
 agentic queue_sync with project_id: "decibel-tools-mcp"

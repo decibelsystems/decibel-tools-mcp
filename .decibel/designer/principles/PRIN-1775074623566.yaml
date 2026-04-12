@@ -1,0 +1,13 @@
+id: PRIN-1775074623566
+title: Friction triggers change
+description: When we encounter friction in our workflow, we change the workflow.
+  Either by creating a new tool, adjusting our toolset, or adjusting the flow
+  itself. We learn and improve fanatically. The bar for "just live with it" is
+  extremely high.
+category: process
+checks:
+  - Does this workflow have recurring friction?
+  - Have we built or adjusted a tool to address it?
+  - Are we accepting friction we could eliminate?
+created_at: 2026-04-01T20:17:03.566Z
+updated_at: 2026-04-01T20:17:03.566Z

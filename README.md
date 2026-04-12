@@ -112,7 +112,7 @@ All tools are accessed through **facade commands** — one tool per domain, with
 | **bench** | Benchmarks | `run`, `compare` |
 | **guardian** | Security | `scan_deps`, `scan_secrets`, `scan_http`, `scan_config`, `report` |
 
-### Pro (requires `DECIBEL_PRO=1`)
+### Pro (requires license key)
 
 | Facade | Domain | Key Actions |
 |--------|--------|-------------|
@@ -121,7 +121,7 @@ All tools are accessed through **facade commands** — one tool per domain, with
 | **corpus** | Code patterns | `search`, `index` |
 | **agentic** | Config compilation | `compile_pack`, `render`, `lint`, `golden_eval` |
 
-> All tiers are auto-enabled in development (`NODE_ENV !== 'production'`).
+> Add your license key to `~/.decibel/config.yaml` under `license.key` to enable pro features.
 
 ---
 

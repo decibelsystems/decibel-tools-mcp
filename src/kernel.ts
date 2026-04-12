@@ -276,8 +276,13 @@ export async function createKernel(): Promise<ToolKernel> {
 
       // Flat params: action-specific fields are at root level.
       // Backward compat: also merge args.params if present (batch API, legacy callers).
-      const { action: _action, params: legacyParams, ...flatParams } = args;
-      const params = { ...(legacyParams as Record<string, unknown> || {}), ...flatParams };
+      // Normalize project_id → projectId (snake_case callers like hooks/agents).
+      const { action: _action, params: legacyParams, project_id, ...flatParams } = args;
+      const merged = { ...(legacyParams as Record<string, unknown> || {}), ...flatParams };
+      if (project_id !== undefined && merged.projectId === undefined) {
+        merged.projectId = project_id;
+      }
+      const params = merged;
 
       log(`Kernel: facade ${name}.${action} → ${internalName} (agent=${agentId}${runId ? ` run=${runId}` : ''})`);
       trackToolUse(internalName);

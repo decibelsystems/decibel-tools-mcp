@@ -1,0 +1,11 @@
+event_id: PROV-20260328T050328-423
+timestamp: 2026-03-28T05:03:28.423Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-03-28T05-03-28Z-publish-updated-npm-package-with-readme-projects-e.md
+reason_code: initial_creation
+summary: "Created issue: Publish updated npm package with README + projects.example.json changes"
+fingerprint_before: null
+fingerprint_after: sha256:f5849022fc25e483

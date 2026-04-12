@@ -4,28 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Decibel Tools API</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #09090b;
-      --surface: #111113;
-      --surface-2: #18181b;
-      --border: #27272a;
-      --text: #f4f4f5;
-      --text-muted: #71717a;
-      --accent: #7c3aed;
-      --accent-dim: #6d28d9;
-      --primary: #2563eb;
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --surface-2: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #e0e0e0;
+      --text-muted: #888;
+      --accent: #7c6aef;
+      --accent-dim: #5a4bbf;
       --green: #4ade80;
       --yellow: #fbbf24;
       --red: #f87171;
-      --blue: #2563eb;
+      --blue: #60a5fa;
       --orange: #fb923c;
       --cyan: #22d3ee;
-      --mono: 'JetBrains Mono', monospace;
-      --sans: 'Inter', system-ui, sans-serif;
+      --mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -35,7 +31,7 @@
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
     }
-    a { color: var(--primary); text-decoration: none; }
+    a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
     code, pre {
       font-family: var(--mono);
@@ -92,7 +88,7 @@
       font-weight: 700;
       letter-spacing: -0.02em;
     }
-    .sidebar-logo h1 span { color: var(--primary); }
+    .sidebar-logo h1 span { color: var(--accent); }
     .sidebar-logo p {
       font-size: 0.75rem;
       color: var(--text-muted);
@@ -139,7 +135,7 @@
       letter-spacing: -0.03em;
       margin-bottom: 0.5rem;
     }
-    .hero h1 span { color: var(--primary); }
+    .hero h1 span { color: var(--accent); }
     .hero p {
       font-size: 1.05rem;
       color: var(--text-muted);
@@ -236,10 +232,10 @@
       text-align: center;
       letter-spacing: 0.02em;
     }
-    .method-get { background: rgba(37, 99, 235, 0.12); color: var(--primary); }
-    .method-post { background: rgba(124, 58, 237, 0.12); color: var(--accent); }
-    .method-delete { background: rgba(248, 113, 113, 0.12); color: var(--red); }
-    .method-sse { background: rgba(37, 99, 235, 0.12); color: var(--primary); }
+    .method-get { background: rgba(74, 222, 128, 0.15); color: var(--green); }
+    .method-post { background: rgba(96, 165, 250, 0.15); color: var(--blue); }
+    .method-delete { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+    .method-sse { background: rgba(251, 191, 36, 0.15); color: var(--yellow); }
     .endpoint-path {
       font-family: var(--mono);
       font-size: 0.9rem;
@@ -322,12 +318,12 @@
     }
     .badge-auth { background: rgba(251, 191, 36, 0.15); color: var(--yellow); }
     .badge-none { background: rgba(74, 222, 128, 0.1); color: var(--green); }
-    .badge-tier { background: rgba(37, 99, 235, 0.12); color: var(--primary); }
+    .badge-tier { background: rgba(124, 106, 239, 0.15); color: var(--accent); }
 
     /* Info boxes */
     .info-box {
-      background: rgba(37, 99, 235, 0.08);
-      border: 1px solid rgba(37, 99, 235, 0.2);
+      background: rgba(124, 106, 239, 0.08);
+      border: 1px solid rgba(124, 106, 239, 0.2);
       border-radius: 8px;
       padding: 1rem 1.25rem;
       margin-bottom: 1.5rem;
@@ -390,9 +386,9 @@
         <h1><span>Decibel Tools</span> API</h1>
         <p>HTTP interface to the Decibel MCP server. Supports the MCP protocol (SSE + StreamableHTTP), a REST convenience layer, and multi-agent coordination.</p>
         <div class="hero-meta">
-          <span><span class="dot dot-green"></span> v{{VERSION}}</span>
-          <span>{{FACADE_COUNT}} facades</span>
-          <span>{{TOOL_COUNT}} actions</span>
+          <span><span class="dot dot-green"></span> v2.1.0</span>
+          <span>30 facades</span>
+          <span>170+ internal tools</span>
           <span>MCP + REST + SSE</span>
         </div>
       </div>
@@ -562,7 +558,7 @@
             <h4>Response</h4>
             <pre><code>{
   "status": "executed",
-  "version": "{{VERSION}}",
+  "version": "2.1.0",
   "api_version": "v1",
   "tools": [
     {
@@ -947,7 +943,7 @@
             <h4>Response</h4>
             <pre><code>{
   "status": "ok",
-  "version": "{{VERSION}}",
+  "version": "2.1.0",
   "api_version": "v1",
   "uptime_ms": 3600000,
   "uptime_human": "1h 0m 0s",
@@ -1065,7 +1061,7 @@
 
       <!-- Footer -->
       <div style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.8rem;">
-        <p>Decibel Tools v{{VERSION}} &middot; <code>@decibelsystems/tools</code> on npm &middot; Built by Decibel Systems</p>
+        <p>Decibel Tools v2.1.0 &middot; <code>@decibelsystems/tools</code> on npm &middot; Built by Decibel Systems</p>
       </div>
     </main>
   </div>

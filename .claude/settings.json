@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "if": "Bash(git push:*)",
+            "prompt": "Code is about to be pushed. Run mcp__decibel-tools__guardian with action report (project_id: decibel-tools-mcp) to scan for security issues. If ANY findings are grade D or F, output JSON: {\"continue\": false, \"stopReason\": \"Guardian found critical issues (grade D/F). Fix these before pushing: [list findings]\"}. If all findings are grade C or better, output {}.",
+            "model": "claude-sonnet-4-6",
+            "timeout": 30,
+            "statusMessage": "Guardian: scanning before push..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "A file was just edited. Check the tool_input in $ARGUMENTS for the file_path. If file_path is missing, or the path is outside the current project directory, output exactly: {}. If the file path matches ANY of these architecture-sensitive paths: src/kernel.ts, src/transports/, src/server.ts, src/httpServer.ts, src/facades/definitions.ts, src/facades/index.ts, src/license.ts, src/daemonConfig.ts — output: {\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ARCHITECTURE NUDGE: You just modified an architecture-sensitive file. If this is a non-trivial architectural change, consider recording an ADR via architect createAdr. Check existing ADRs first with architect list_adrs.\"}}. If the path does NOT match any of those, output exactly: {}",
+            "statusMessage": "Checking architecture sensitivity..."
+          }
+        ]
+      }
+    ]
+  }
+}
