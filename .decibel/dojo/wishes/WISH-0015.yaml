@@ -1,0 +1,30 @@
+id: WISH-0015
+capability: "[IDEA] Decibel as the Agent Operating System"
+reason: 'North star vision: Decibel is the "brain" layer for AI agents —
+  providing domain intelligence, project memory, and decision context that any
+  agent runtime plugs into. Not competing with infrastructure/runtime (Claude
+  Managed Agents, Agent SDK, custom agents) — complementary to all of them.
+  Continue building out opinionated project tracking, friction logging, design
+  evals, oracle priorities, provenance as the knowledge layer that makes agents
+  effective regardless of where they run.'
+inputs:
+  - project context (epics, issues, ADRs)
+  - friction signals
+  - design decisions
+  - oracle priorities
+  - provenance trail
+  - voice inbox
+outputs:
+  - domain intelligence for any agent runtime
+  - decision context
+  - project memory
+  - prioritized next actions
+created_at: 2026-04-09T18:23:13.757Z
+status: open
+project_id: decibel-tools-mcp
+integration_point: Claude Managed Agents, Claude Agent SDK, custom agent runtimes
+success_metric: Any agent runtime can plug into Decibel and immediately have
+  full project context — no cold start, no re-discovery
+context: "spark: conversation, scope: moonshot. Emerged from comparing Decibel
+  to Claude Managed Agents — realized they're complementary layers. Decibel =
+  brain (what agents know), runtimes = body (where agents run)."

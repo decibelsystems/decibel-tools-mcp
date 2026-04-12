@@ -1,0 +1,13 @@
+id: voice-20260102-154004-md31
+transcript: I wish we had a test from Claude terminal
+source: mobile_app
+created_at: 2026-01-02T15:40:04.72+00:00
+status: queued
+intent: add_wish
+intent_confidence: 0.9
+parsed_params:
+  reason: Voice-captured wish
+  capability: a test from Claude terminal
+tags:
+  - device:test
+project_id: decibel-tools-mcp

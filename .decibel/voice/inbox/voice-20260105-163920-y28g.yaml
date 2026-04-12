@@ -1,0 +1,16 @@
+id: voice-20260105-163920-y28g
+transcript: Probably need a wish to support new project ideas I think that might
+  even be a new category as opposed to wish it's bigger than a function
+source: mobile_app
+created_at: 2026-01-05T16:39:20.969+00:00
+status: queued
+intent: wish
+intent_confidence: 1
+parsed_params:
+  raw_transcript: Probably need a wish to support new project ideas I think that
+    might even be a new category as opposed to wish it's bigger than a function
+tags:
+  - device:iPhone
+  - labeled:human
+  - user_intent:wish
+project_id: decibel-tools-mcp

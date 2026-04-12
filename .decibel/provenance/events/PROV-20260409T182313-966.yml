@@ -1,0 +1,11 @@
+event_id: PROV-20260409T182313-966
+timestamp: 2026-04-09T18:23:13.966Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:wish:WISH-0015
+reason_code: initial_creation
+summary: "Created wish: [IDEA] Decibel as the Agent Operating System"
+fingerprint_before: null
+fingerprint_after: sha256:1fcc5c0320b3b595

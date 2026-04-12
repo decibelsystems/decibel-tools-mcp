@@ -1,0 +1,6 @@
+{"ts":"2026-04-11T04:42:01.147Z","run_id":"RUN-2026-04-11T04-42-01-146Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-04-11T04:41:50Z","run_id":"RUN-2026-04-11T04-42-01-146Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-04-11T04:41:50Z","run_id":"RUN-2026-04-11T04-42-01-146Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-04-11T04:41:50Z","run_id":"RUN-2026-04-11T04-42-01-146Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-04-11T04:41:58Z","run_id":"RUN-2026-04-11T04-42-01-146Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-04-11T04:42:01.416Z","run_id":"RUN-2026-04-11T04-42-01-146Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"sentinel_create_issue","result":"success","summary":"sentinel_create_issue completed"}}
