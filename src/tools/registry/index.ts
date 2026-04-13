@@ -16,6 +16,15 @@ import {
   resolveProject,
   getRegistryFilePath,
 } from '../../projectRegistry.js';
+import {
+  getToolConfig,
+  getAllToolConfig,
+  setToolConfigValue,
+  setProfile,
+  getEnabledFacades,
+  CONFIG_SCHEMA,
+  BUILT_IN_PROFILES,
+} from '../../toolConfig.js';
 
 // ============================================================================
 // Types
@@ -578,6 +587,211 @@ export const registryResolveTool: ToolSpec = {
 };
 
 // ============================================================================
+// Config Tools
+// ============================================================================
+
+export const configGetTool: ToolSpec = {
+  definition: {
+    name: 'config_get',
+    description: 'Get merged tool configuration for a project. Shows the effective config after merging all layers (defaults, profile, project config, global config, env vars).',
+    annotations: {
+      title: 'Get Config',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Project ID (uses default project if omitted)',
+        },
+        facade: {
+          type: 'string',
+          description: 'Specific facade to get config for (returns all if omitted)',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const projectId = args.projectId as string | undefined;
+
+      if (args.facade) {
+        const facadeConfig = getToolConfig(projectId, args.facade as string);
+        if (Object.keys(facadeConfig).length === 0) {
+          return toolError(`No configurable keys for facade "${args.facade}". Use config_list to see available facades.`);
+        }
+        return toolSuccess({
+          facade: args.facade,
+          projectId: projectId || '(default)',
+          config: facadeConfig,
+        });
+      }
+
+      const allConfig = getAllToolConfig(projectId);
+      const enabledFacades = getEnabledFacades(projectId);
+
+      return toolSuccess({
+        projectId: projectId || '(default)',
+        enabled_facades: enabledFacades || '(all)',
+        config: allConfig,
+      });
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+export const configSetTool: ToolSpec = {
+  definition: {
+    name: 'config_set',
+    description: 'Set a tool configuration value in the project\'s .decibel/config.yaml. Use config_list to discover available keys.',
+    annotations: {
+      title: 'Set Config',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Project ID',
+        },
+        facade: {
+          type: 'string',
+          description: 'Facade name (e.g., "sentinel", "guardian")',
+        },
+        key: {
+          type: 'string',
+          description: 'Config key to set (e.g., "fail_threshold")',
+        },
+        value: {
+          description: 'Value to set (type depends on key)',
+        },
+        profile: {
+          type: 'string',
+          description: 'Set a named profile instead of individual key (solo-dev|team|ci|minimal)',
+        },
+      },
+      required: ['projectId'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      requireFields(args, 'projectId');
+
+      // Profile mode
+      if (args.profile) {
+        const result = setProfile(args.projectId as string, args.profile as string);
+        if (!result.success) return toolError(result.message);
+        const profile = BUILT_IN_PROFILES[args.profile as string];
+        return toolSuccess({
+          ...result,
+          profile_description: profile.description,
+          overrides: profile.overrides,
+        });
+      }
+
+      // Key-value mode
+      if (!args.facade || !args.key) {
+        return toolError('Either provide facade + key + value, or profile. Use config_list to see options.');
+      }
+
+      const result = setToolConfigValue(
+        args.projectId as string,
+        args.facade as string,
+        args.key as string,
+        args.value,
+      );
+      if (!result.success) return toolError(result.message);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+export const configListTool: ToolSpec = {
+  definition: {
+    name: 'config_list',
+    description: 'List all configurable keys across all facades, with types, defaults, descriptions, and env var overrides. Optionally show current effective values for a project.',
+    annotations: {
+      title: 'List Config Keys',
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Project ID to show effective values (omit for schema only)',
+        },
+        facade: {
+          type: 'string',
+          description: 'Filter to a specific facade',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const projectId = args.projectId as string | undefined;
+      const facadeFilter = args.facade as string | undefined;
+      const currentConfig = projectId ? getAllToolConfig(projectId) : null;
+
+      const schema: Record<string, unknown[]> = {};
+
+      for (const [facade, keys] of Object.entries(CONFIG_SCHEMA)) {
+        if (facadeFilter && facade !== facadeFilter) continue;
+
+        schema[facade] = keys.map(def => ({
+          key: def.key,
+          type: def.type,
+          default: def.default,
+          description: def.description,
+          env: def.env || null,
+          current: currentConfig?.[facade]?.[def.key] ?? def.default,
+        }));
+      }
+
+      if (facadeFilter && !schema[facadeFilter]) {
+        return toolError(`No configurable keys for facade "${facadeFilter}". Configurable facades: ${Object.keys(CONFIG_SCHEMA).join(', ')}`);
+      }
+
+      const profiles = Object.entries(BUILT_IN_PROFILES).map(([name, p]) => ({
+        name,
+        description: p.description,
+        facades_affected: Object.keys(p.overrides),
+      }));
+
+      return toolSuccess({
+        configurable_facades: Object.keys(CONFIG_SCHEMA),
+        total_keys: Object.values(CONFIG_SCHEMA).reduce((sum, keys) => sum + keys.length, 0),
+        schema,
+        profiles,
+        env_vars: {
+          DECIBEL_FACADES: 'Comma-separated list of facades to enable (restricts available tools)',
+          DECIBEL_PROFILE: 'Active profile name (solo-dev|team|ci|minimal)',
+          ...Object.fromEntries(
+            Object.values(CONFIG_SCHEMA)
+              .flat()
+              .filter(d => d.env)
+              .map(d => [d.env!, `${d.description} [${d.type}]`])
+          ),
+        },
+        merge_order: 'defaults → profile → project .decibel/config.yaml → ~/.decibel/config.yaml → env vars',
+      });
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Domain Export
 // ============================================================================
 
@@ -589,4 +803,7 @@ export const registryTools: ToolSpec[] = [
   registryRemoveTool,
   registryAliasTool,
   registryResolveTool,
+  configGetTool,
+  configSetTool,
+  configListTool,
 ];
