@@ -406,6 +406,32 @@ export const coreFacades: FacadeSpec[] = [
     },
   },
 
+  {
+    name: 'peers',
+    description: 'List live Claude Code peer instances on this machine. Thin pass-through to the claude-peers broker (localhost:7899). Use list to populate a peer roster UI or check what other Claude sessions are active. Returns id, cwd, git_root, summary, last_seen. Actions: list',
+    compactDescription: 'List live Claude peers',
+    microEligible: true,
+    tier: 'core',
+    actions: {
+      list: 'peers_list',
+    },
+  },
+
+  {
+    name: 'concepts',
+    description: 'Capture and manage product concepts — pre-project ideas that do not yet have a project_id. Discrete from dojo (which is feature-scoped inside an existing project). Use add for a new product idea, list to browse, read for detail, commit when you decide to build (links to a project_id; project_init + registry_add stay separate), shelve to park with a reason. Storage: ~/.decibel/concepts/. Actions: add, list, read, commit, shelve',
+    compactDescription: 'Capture pre-project product concepts',
+    microEligible: true,
+    tier: 'core',
+    actions: {
+      add: 'concepts_add',
+      list: 'concepts_list',
+      read: 'concepts_read',
+      commit: 'concepts_commit',
+      shelve: 'concepts_shelve',
+    },
+  },
+
 ];
 
 // ============================================================================
