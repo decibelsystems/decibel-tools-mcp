@@ -1,0 +1,11 @@
+event_id: PROV-20260428T143657-048
+timestamp: 2026-04-28T14:36:57.048Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0105-smoke-test-iss-nnnn-format.md
+reason_code: initial_creation
+summary: "Created issue: Smoke test ISS-NNNN format"
+fingerprint_before: null
+fingerprint_after: sha256:89d497858a6e2012

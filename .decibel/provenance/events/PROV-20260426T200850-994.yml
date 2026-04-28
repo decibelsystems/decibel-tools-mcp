@@ -1,0 +1,11 @@
+event_id: PROV-20260426T200850-994
+timestamp: 2026-04-26T20:08:50.994Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:proposal:DOJO-PROP-0009
+reason_code: initial_creation
+summary: "Created proposal: Decibel HQ — desktop console for project + agent ops (project-scale)"
+fingerprint_before: null
+fingerprint_after: sha256:845c3f3e5d280f49

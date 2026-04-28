@@ -1,0 +1,13 @@
+event_id: PROV-20260426T200812-318
+timestamp: 2026-04-26T20:08:12.318Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - friction:log:2026-04-26T20-08-12Z-dojo-wishes-proposals-are-scoped-for-feature-level
+reason_code: initial_creation
+summary: |-
+  Logged friction: Dojo wishes/proposals are scoped for feature-level incubation, but project-scale ideas (whole new apps or repos — e.g. Decibel HQ) don't fit cleanly. The artifact type muddies when the same `create_proposal` is used for both a small capability and a multi-week, multi-repo initiative. We need either a new artifact type (e.g. `dojo_create_initiative`) or an explicit scope field on proposals (feature | project | platform).</description>
+  <parameter name="frequency">occasional
+fingerprint_before: null
+fingerprint_after: sha256:41b1c975438a9a24
