@@ -323,7 +323,7 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'registry',
-    description: 'Project discovery, management, and configuration. init to bootstrap .decibel/ in a new project; add to register an existing project; resolve to look up a project by ID or alias. If tools fail with "project not found", use list to see registered projects, then init or add to fix. config_list to discover configurable keys; config_get to see effective values; config_set to change a value or apply a profile (solo-dev|team|ci|minimal). Actions: add, remove, list, alias, resolve, init, snapshot, status, config_get, config_set, config_list',
+    description: 'Project discovery, management, and configuration. init to bootstrap .decibel/ in a new project; add to register an existing project; resolve to look up a project by ID or alias. scan walks filesystem roots for .decibel/ directories and reports drift (unregistered/orphans); pass apply=true to auto-register. If tools fail with "project not found", use list or scan to see what exists, then init/add/scan to fix. config_list to discover configurable keys; config_get to see effective values; config_set to change a value or apply a profile (solo-dev|team|ci|minimal). Actions: add, remove, list, alias, resolve, scan, init, snapshot, status, config_get, config_set, config_list',
     compactDescription: 'Manage project registry, discovery, and tool configuration',
     microEligible: false,
     tier: 'core',
@@ -333,6 +333,7 @@ export const coreFacades: FacadeSpec[] = [
       list: 'registry_list',
       alias: 'registry_alias',
       resolve: 'registry_resolve',
+      scan: 'registry_scan',
       init: 'project_init',
       snapshot: 'project_snapshot',
       status: 'project_status',

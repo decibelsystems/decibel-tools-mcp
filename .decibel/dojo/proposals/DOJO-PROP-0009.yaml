@@ -1,0 +1,98 @@
+id: DOJO-PROP-0009
+title: Decibel HQ — desktop console for project + agent ops (project-scale)
+problem: Ben needs a chairman's seat — a single desktop surface to (1) see live
+  status across all Decibel projects, (2) direct Claude agents and peers, (3)
+  act on oracle/sentinel/friction/voice queues without context-switching between
+  IDE, iOS app, and CLI. The previous attempt (Vector) failed because it
+  surfaced data without enabling action; it became a read-only experiment with
+  nothing the user could DO. Today, project intelligence is spread across
+  .decibel/ files, the daemon's /health endpoint, peer messaging, voice inbox,
+  and the VS Code extension. There is no aggregation layer that turns this into
+  actionable decisions, and no single place to dispatch work back into the
+  system.
+hypothesis: A focused, action-first desktop console — built as a fat client over
+  the existing daemon HTTP transport, observing the claude-peers network,
+  speaking through the 27 facades — will give Ben CEO-level steering of his
+  project portfolio and AI agents. The Paperclip metaphor (agents-as-employees,
+  projects-as-companies, governance-as-spine) maps unreasonably well onto
+  Decibel's existing infrastructure (peers, crons, queue, provenance, license
+  tiers). HQ provides only the missing UI shell on top of plumbing already
+  shipped — not new plumbing.
+owner: human
+state: draft
+created_at: 2026-04-26T20:08:50.938Z
+project_id: decibel-tools-mcp
+target_module: hq
+scope_in:
+  - "New repo: decibel-hq (sibling of decibel-tools-mcp)"
+  - "Stack: Vite + React + TypeScript + Tailwind + shadcn/ui + TanStack Query"
+  - "Five v1 surfaces: Morning Standup (decision-queue home), Portfolio (project
+    switcher), Roster (peers + scheduled triggers + queued ops with verbs),
+    Approval Queue (proposals/friction/voice/agent outputs triage), Command
+    Palette (Cmd-K across all 27 facades + projects + issues + peers)"
+  - "Backend: Decibel daemon HTTP transport (no new server)"
+  - "Realtime: SSE from daemon /health and dispatch log"
+  - "Peer integration: HQ as meta-observer of claude-peers network via daemon"
+  - "Phase A (now): web app served by dev server at localhost"
+  - "Phase B (later): Tauri shell wrapping the web app for menu bar / global
+    shortcut / native notifs"
+  - "Phase C (later): mobile evolution of existing iOS app — secondary surface
+    for monitoring + approvals on the go"
+  - Documented non-goals at repo root (NON_GOALS.md) before line 1 of feature
+    code
+scope_out:
+  - Not a chatbot UI — Claude Code and the VS Code extension already cover that
+  - Not a Linear/Jira replacement — Sentinel remains source of truth, HQ only
+    renders + dispatches
+  - Not a workflow builder (visual programming) — workflows are code in workflow
+    facade
+  - Not a duplicate of the VS Code extension — extension is in-IDE; HQ is a
+    dedicated app
+  - Not a new server — daemon is the only backend
+  - Not a read-only dashboard — Vector's grave; every panel must expose verbs
+  - Not Electron — if shelled, use Tauri
+  - Not BYO-agent abstractions in v1 — Claude-native + peer system is the
+    opinionated stack
+  - Not dollar-budget caps in v1 — license tier gating is the existing control
+acceptance:
+  - decibel-hq repo exists with README, NON_GOALS.md, ARCHITECTURE.md
+  - "Vite dev server runs (`pnpm dev`) and renders 5 routes: /standup,
+    /portfolio, /roster, /queue, /project/:id"
+  - Standup route fetches live data from daemon and shows at least one verb per
+    facade card (oracle next_actions → 'dispatch'; sentinel issues → 'triage';
+    friction → 'graduate'; voice inbox → 'process')
+  - "Roster shows peers from claude-peers network with at least: message,
+    assign-task, pause verbs"
+  - Cmd-K palette opens, fuzzy-searches across facades, can invoke any tool
+  - Approval Queue triages with keyboard (j/k/a/r/s)
+  - No analytics/charts in v1 surfaces — every UI element either decides,
+    dispatches, or dismisses
+risks:
+  - "Vector failure mode: drifting back into read-only data-surfacing —
+    mitigation: NON_GOALS.md as repo law, and a per-PR check 'what verb does
+    this enable?'"
+  - "Scope creep: 5 surfaces → 15 surfaces — mitigation: any new surface
+    requires deleting an existing one or earning its keep against the standup
+    view"
+  - "Daemon API gaps: HQ may need endpoints daemon doesn't expose yet —
+    mitigation: extend daemon kernel + transports with feature parity, not
+    parallel APIs"
+  - "Peer-network coupling: claude-peers MCP server is a separate project —
+    mitigation: HQ talks to peers via daemon proxy, not direct, so the daemon
+    stays the single integration surface"
+  - "Mobile divergence: iOS app and HQ web duplicate logic — mitigation: extract
+    a shared @decibel/hq-client TS package once both surfaces exist"
+  - "Tauri packaging complexity: signing, notarization, auto-update —
+    mitigation: defer to Phase B; ship web app first"
+insight: "Paperclip's company metaphor (https://paperclip.ing,
+  https://github.com/paperclipai/paperclip) — agents as employees, projects as
+  companies, governance as spine — maps onto Decibel's existing primitives
+  almost 1:1: projects.json ↔ companies, peers/crons ↔ employees, the 27 facades
+  ↔ department heads, provenance ↔ audit trail, dojo proposals ↔ board
+  approvals, license tiers ↔ budget gating. Vector tried to be the plumbing AND
+  the UI; HQ should be UI-only against the daemon. Stack overlap with Paperclip
+  (Node + Postgres + React monorepo) means we can lift their patterns directly
+  (heartbeat queue, agent runtime structure, audit trail front-and-center)
+  instead of inventing. Their explicit non-goals (not a chatbot, not a workflow
+  builder, not a prompt manager) are the discipline that kept Paperclip tight;
+  we adopt the same posture, sized for solo+peers ops."

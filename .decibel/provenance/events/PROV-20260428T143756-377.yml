@@ -1,0 +1,11 @@
+event_id: PROV-20260428T143756-377
+timestamp: 2026-04-28T14:37:56.377Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0106-second-smoke-test-verifies-sort.md
+reason_code: initial_creation
+summary: "Created issue: Second smoke test verifies sort"
+fingerprint_before: null
+fingerprint_after: sha256:40b235bbb5fd7453

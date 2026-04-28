@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { log } from '../config.js';
-import { resolveProjectPaths, ResolvedProjectPaths } from '../projectRegistry.js';
+import { resolveProjectPaths, ResolvedProjectPaths, scanForProjects } from '../projectRegistry.js';
 
 // ============================================================================
 // Project Resolution Error
@@ -367,6 +367,31 @@ export async function nextActions(
       domain: 'friction',
       location: 'project',
     });
+  }
+
+  // Registry drift check — cheap: scans parent dirs of registered projects for .decibel/ dirs not in the registry.
+  try {
+    const drift = scanForProjects();
+    if (drift.unregistered.length > 0 || drift.orphans.length > 0) {
+      const parts: string[] = [];
+      if (drift.unregistered.length > 0) {
+        const sample = drift.unregistered.slice(0, 5).map((f) => f.id).join(', ');
+        const more = drift.unregistered.length > 5 ? ` (+${drift.unregistered.length - 5} more)` : '';
+        parts.push(`${drift.unregistered.length} unregistered: ${sample}${more}`);
+      }
+      if (drift.orphans.length > 0) {
+        const sample = drift.orphans.slice(0, 3).map((o) => o.id).join(', ');
+        const more = drift.orphans.length > 3 ? ` (+${drift.orphans.length - 3} more)` : '';
+        parts.push(`${drift.orphans.length} orphaned: ${sample}${more}`);
+      }
+      actions.unshift({
+        description: `Registry drift detected (${parts.join('; ')}). Run registry.scan with apply=true to reconcile.`,
+        source: 'registry',
+        priority: 'med',
+      });
+    }
+  } catch {
+    // Drift check is best-effort; never fail the whole next_actions call.
   }
 
   // Prioritize sentinel issues first

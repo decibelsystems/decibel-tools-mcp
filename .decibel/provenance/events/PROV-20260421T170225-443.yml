@@ -1,0 +1,11 @@
+event_id: PROV-20260421T170225-443
+timestamp: 2026-04-21T17:02:25.443Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-04-21T17-02-25Z-close-stale-test-fixture-issues-from-2025-12-14-se.md
+reason_code: initial_creation
+summary: "Created issue: Close stale test-fixture issues from 2025-12-14 sentinel seed"
+fingerprint_before: null
+fingerprint_after: sha256:4a389296441e2331

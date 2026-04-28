@@ -1,0 +1,14 @@
+{"ts":"2026-04-21T17:02:25.451Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-04-21T16:57:50Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-04-21T16:57:57Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-04-21T16:58:12Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-04-21T16:58:18Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-04-21T16:58:33Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-04-21T16:58:40Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-04-21T16:58:53Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-04-21T16:59:04Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-04-21T16:59:09Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-04-21T16:59:18Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-04-21T17:00:04Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-04-21T17:00:09Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-04-21T17:02:25.731Z","run_id":"RUN-2026-04-21T17-02-25-450Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"sentinel_create_issue","result":"success","summary":"Created issue 2026-04-21T17-02-25Z-close-stale-test-fixture-issues-from-2025-12-14-se.md: Close stale test-fixture issues from 2025-12-14 sentinel seed"}}

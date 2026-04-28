@@ -310,6 +310,109 @@ export function getRegistryFilePath(): string {
   return getRegistryPath();
 }
 
+// ============================================================================
+// Registry Scan / Drift Detection
+// ============================================================================
+
+export interface ScanFinding {
+  id: string;
+  path: string;
+  registered: boolean;
+  registeredAs?: string;
+}
+
+export interface ScanResult {
+  roots: string[];
+  found: ScanFinding[];
+  unregistered: ScanFinding[];
+  orphans: Array<{ id: string; path: string; reason: string }>;
+}
+
+/**
+ * Resolve the roots to scan for `.decibel/` directories.
+ *
+ * Precedence:
+ *   1. Explicit `roots` argument
+ *   2. DECIBEL_SCAN_ROOTS env var (colon-separated)
+ *   3. Unique parent dirs of currently-registered projects
+ */
+export function getScanRoots(explicit?: string[]): string[] {
+  if (explicit && explicit.length > 0) {
+    return Array.from(new Set(explicit.map((r) => path.resolve(r))));
+  }
+  const envRoots = process.env.DECIBEL_SCAN_ROOTS;
+  if (envRoots) {
+    return Array.from(
+      new Set(
+        envRoots
+          .split(':')
+          .map((r) => r.trim())
+          .filter(Boolean)
+          .map((r) => path.resolve(r)),
+      ),
+    );
+  }
+  const registry = loadRegistry();
+  const parents = registry.projects
+    .map((p) => p.path)
+    .filter((p) => p && fs.existsSync(p))
+    .map((p) => path.dirname(path.resolve(p)));
+  return Array.from(new Set(parents));
+}
+
+/**
+ * Scan the given roots for `.decibel/` directories and reconcile against the
+ * registered project list.
+ *
+ * Does not mutate the registry. Callers use `registerProject` to apply.
+ */
+export function scanForProjects(explicitRoots?: string[]): ScanResult {
+  const roots = getScanRoots(explicitRoots);
+  const registry = loadRegistry();
+  const registeredByPath = new Map(
+    registry.projects.map((p) => [path.resolve(p.path), p] as const),
+  );
+
+  const found: ScanFinding[] = [];
+  const seenPaths = new Set<string>();
+
+  for (const root of roots) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(root, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const projectPath = path.join(root, entry.name);
+      if (seenPaths.has(projectPath)) continue;
+      if (!hasDecibelFolder(projectPath)) continue;
+      seenPaths.add(projectPath);
+      const registeredEntry = registeredByPath.get(path.resolve(projectPath));
+      found.push({
+        id: registeredEntry?.id ?? entry.name,
+        path: projectPath,
+        registered: Boolean(registeredEntry),
+        registeredAs: registeredEntry?.id,
+      });
+    }
+  }
+
+  const unregistered = found.filter((f) => !f.registered);
+
+  const orphans: Array<{ id: string; path: string; reason: string }> = [];
+  for (const project of registry.projects) {
+    if (!fs.existsSync(project.path)) {
+      orphans.push({ id: project.id, path: project.path, reason: 'path_missing' });
+    } else if (!hasDecibelFolder(project.path)) {
+      orphans.push({ id: project.id, path: project.path, reason: 'no_decibel_dir' });
+    }
+  }
+
+  return { roots, found, unregistered, orphans };
+}
+
 /**
  * Get the default project.
  * Resolution order:
