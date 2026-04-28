@@ -23,7 +23,7 @@ import { log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectRoot } from '../projectPaths.js';
 import { getDefaultProject, listProjects, ProjectEntry } from '../projectRegistry.js';
-import { CallerRole, enforceToolAccess, getSandboxPolicy, expandSandboxPaths } from './dojoPolicy.js';
+import { CallerRole, enforceToolAccess, getSandboxPolicy, expandSandboxPaths, isExecAllowed } from './dojoPolicy.js';
 import { emitCreateProvenance } from './provenance.js';
 import { checkRateLimit, recordRequestStart, recordRequestEnd } from './rateLimiter.js';
 
@@ -765,6 +765,17 @@ export async function runExperiment(
     // Run the experiment script
     const runner = scriptType === 'ts' ? 'npx' : 'python3';
     const runnerArgs = scriptType === 'ts' ? ['ts-node', entrypoint] : [entrypoint];
+
+    // SECURITY: Enforce sandbox exec allowlist
+    const executableToCheck = scriptType === 'ts' ? 'ts-node' : 'python3';
+    if (!isExecAllowed(executableToCheck, sandbox)) {
+      return {
+        error: `Sandbox policy violation: '${executableToCheck}' not in exec allowlist`,
+        exitCode: -1,
+        stderr: `Caller role '${ctx.callerRole}' is not permitted to execute '${executableToCheck}'. ` +
+          `Allowed executables: ${sandbox.exec_allowlist.join(', ') || 'none'}`,
+      };
+    }
 
     const { stdout, exitCode } = await new Promise<{ stdout: string; exitCode: number }>((resolve) => {
       const proc = spawn(runner, runnerArgs, {

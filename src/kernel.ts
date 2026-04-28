@@ -17,6 +17,7 @@ import type { ToolSpec, ToolResult } from './tools/types.js';
 import type { FacadeSpec, DetailTier, McpToolDefinition } from './facades/types.js';
 import { coreFacades, proFacades, appFacades } from './facades/definitions.js';
 import { buildMcpDefinitions, validateFacades } from './facades/index.js';
+import { getEnabledFacades } from './toolConfig.js';
 
 // ============================================================================
 // Dispatch Context — agent-readiness plumbing
@@ -142,11 +143,24 @@ export async function createKernel(): Promise<ToolKernel> {
   const toolMap = new Map(tools.map(t => [t.definition.name, t]));
 
   // Build facade registry (core + pro if enabled + apps if enabled)
-  const facades = [
+  let facades = [
     ...coreFacades,
     ...(PRO_ENABLED ? proFacades : []),
     ...(APPS_ENABLED ? appFacades : []),
   ];
+
+  // DECIBEL_FACADES env var or config: restrict to only these facades
+  // Always include 'registry' so config tools remain accessible
+  const enabledFacades = getEnabledFacades();
+  if (enabledFacades) {
+    const allowSet = new Set([...enabledFacades, 'registry']);
+    const before = facades.length;
+    facades = facades.filter(f => allowSet.has(f.name));
+    if (facades.length < before) {
+      log(`Kernel: DECIBEL_FACADES filter applied — ${facades.length}/${before} facades enabled`);
+    }
+  }
+
   const facadeMap = new Map(facades.map(f => [f.name, f]));
 
   // Validate all facade actions point to real tools

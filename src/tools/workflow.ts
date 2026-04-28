@@ -390,8 +390,8 @@ export async function workflowPreflight(
   }
 
   // Check 4: Blocked issues
-  const issuesResult = await listRepoIssues({ projectId: input.projectId, status: 'blocked' as any });
-  const blockedCount = !('error' in issuesResult) ? issuesResult.issues.length : 0;
+  const blockedIssuesResult = await listRepoIssues({ projectId: input.projectId, status: 'blocked' });
+  const blockedCount = !('error' in blockedIssuesResult) ? blockedIssuesResult.issues.length : 0;
 
   checks.push({
     name: 'Blocked Issues',
@@ -493,9 +493,9 @@ export async function workflowShip(
   }
 
   // Check for open blockers
-  const issuesResult = await listRepoIssues({ projectId: input.projectId, status: 'blocked' as any });
-  if (!('error' in issuesResult) && issuesResult.issues.length > 0) {
-    blockers.push(`${issuesResult.issues.length} blocked issues must be resolved`);
+  const shipBlockedResult = await listRepoIssues({ projectId: input.projectId, status: 'blocked' });
+  if (!('error' in shipBlockedResult) && shipBlockedResult.issues.length > 0) {
+    blockers.push(`${shipBlockedResult.issues.length} blocked issues must be resolved`);
     checklist.push({
       item: 'Resolve blocked issues',
       status: 'blocked',

@@ -39,7 +39,7 @@ function makeProjectResolutionError(operation: string): ProjectResolutionError {
 export type Severity = 'low' | 'med' | 'high' | 'critical';
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
 export type EpicStatus = 'planned' | 'in_progress' | 'shipped' | 'on_hold' | 'cancelled';
-export type IssueStatus = 'open' | 'closed' | 'wontfix';
+export type IssueStatus = 'open' | 'in_progress' | 'blocked' | 'closed' | 'wontfix';
 
 // ============================================================================
 // Issue Types

@@ -233,8 +233,42 @@ function wrapSuccess(data: Record<string, unknown>): StatusEnvelope {
 /**
  * Wrap an error in status envelope
  */
+/**
+ * Sanitize error messages to prevent information disclosure.
+ * Removes absolute file paths and replaces with generic placeholders.
+ * Preserves URLs and relative paths.
+ */
+function sanitizeErrorMessage(message: string): string {
+  let sanitized = message;
+
+  // Step 1: Preserve paths containing .decibel (keep the .decibel part, strip prefix)
+  // /home/user/project/.decibel/foo -> .decibel/foo
+  sanitized = sanitized.replace(/(?:\/[^\s:'"]+)?\/\.decibel\//g, '.decibel/');
+  sanitized = sanitized.replace(/(?:[A-Z]:\\[^\s:'"]+)?\\\.decibel\\/gi, '.decibel\\');
+
+  // Step 2: Remove absolute Unix paths (must start with / and have at least one more /)
+  // But exclude URLs (http://, https://, file://)
+  // Match: /home/user/file.txt, /var/log/app.log
+  // Don't match: http://example.com, ./relative/path
+  sanitized = sanitized.replace(
+    /(?<!:)\/(?:home|Users|var|tmp|opt|usr|etc|media|mnt)\/[^\s:'"]+/g,
+    '[path]'
+  );
+
+  // Step 3: Remove Windows absolute paths (C:\, D:\, etc.)
+  sanitized = sanitized.replace(/[A-Z]:\\[^\s:'"]+/gi, '[path]');
+
+  // Step 4: Sanitize any remaining usernames in paths that weren't caught
+  sanitized = sanitized.replace(/\/home\/[^\/\s]+\//g, '/home/[user]/');
+  sanitized = sanitized.replace(/\/Users\/[^\/\s]+\//g, '/Users/[user]/');
+  sanitized = sanitized.replace(/C:\\Users\\[^\\]+\\/gi, 'C:\\Users\\[user]\\');
+
+  return sanitized;
+}
+
 function wrapError(error: string, code?: string): ErrorEnvelope {
-  return { status: 'error', error, ...(code && { code }) };
+  const sanitized = sanitizeErrorMessage(error);
+  return { status: 'error', error: sanitized, ...(code && { code }) };
 }
 
 /**
@@ -2071,7 +2105,7 @@ export async function startHttpServer(
 ║    POST /mcp              Full MCP protocol                  ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  Base URL: http://${host}:${port}${' '.repeat(Math.max(0, 40 - port.toString().length - host.length))}║
-${authToken ? '║  Auth:     Bearer token required                             ║' : '║  Auth:     None (use --auth-token for security)              ║'}
+${authToken ? '║  Auth:     Bearer token required                             ║' : '║  Auth:     None (set DECIBEL_AUTH_TOKEN env var)             ║'}
 ╠══════════════════════════════════════════════════════════════╣
 ║  SSE Settings:                                               ║
 ║    Keepalive:  ${sseKeepaliveMs}ms${' '.repeat(Math.max(0, 43 - sseKeepaliveMs.toString().length))}║
@@ -2139,8 +2173,13 @@ export function parseHttpArgs(args: string[]): {
   // Render sets PORT env var - use it if available
   const defaultPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 8787;
   const port = portIndex !== -1 ? parseInt(args[portIndex + 1], 10) : defaultPort;
+
+  // SECURITY: Prefer env var for auth token (CLI args visible in ps/history)
+  // Fall back to --auth-token for backwards compatibility
   const authIndex = args.indexOf('--auth-token');
-  const authToken = authIndex !== -1 ? args[authIndex + 1] : undefined;
+  const authToken = process.env.DECIBEL_AUTH_TOKEN ||
+    (authIndex !== -1 ? args[authIndex + 1] : undefined);
+
   const hostIndex = args.indexOf('--host');
   const host = hostIndex !== -1 ? args[hostIndex + 1] : '0.0.0.0';
 

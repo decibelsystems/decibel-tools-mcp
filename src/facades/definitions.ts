@@ -323,8 +323,8 @@ export const coreFacades: FacadeSpec[] = [
 
   {
     name: 'registry',
-    description: 'Project discovery and management. init to bootstrap .decibel/ in a new project; add to register an existing project; resolve to look up a project by ID or alias. If tools fail with "project not found", use list to see registered projects, then init or add to fix. Actions: add, remove, list, alias, resolve, init, snapshot, status',
-    compactDescription: 'Manage project registry and discovery',
+    description: 'Project discovery, management, and configuration. init to bootstrap .decibel/ in a new project; add to register an existing project; resolve to look up a project by ID or alias. If tools fail with "project not found", use list to see registered projects, then init or add to fix. config_list to discover configurable keys; config_get to see effective values; config_set to change a value or apply a profile (solo-dev|team|ci|minimal). Actions: add, remove, list, alias, resolve, init, snapshot, status, config_get, config_set, config_list',
+    compactDescription: 'Manage project registry, discovery, and tool configuration',
     microEligible: false,
     tier: 'core',
     actions: {
@@ -336,6 +336,9 @@ export const coreFacades: FacadeSpec[] = [
       init: 'project_init',
       snapshot: 'project_snapshot',
       status: 'project_status',
+      config_get: 'config_get',
+      config_set: 'config_set',
+      config_list: 'config_list',
     },
   },
 
@@ -400,6 +403,32 @@ export const coreFacades: FacadeSpec[] = [
       scan_headers: 'guardian_scan_headers',
       scan_config: 'guardian_scan_config',
       report: 'guardian_report',
+    },
+  },
+
+  {
+    name: 'peers',
+    description: 'List live Claude Code peer instances on this machine. Thin pass-through to the claude-peers broker (localhost:7899). Use list to populate a peer roster UI or check what other Claude sessions are active. Returns id, cwd, git_root, summary, last_seen. Actions: list',
+    compactDescription: 'List live Claude peers',
+    microEligible: true,
+    tier: 'core',
+    actions: {
+      list: 'peers_list',
+    },
+  },
+
+  {
+    name: 'concepts',
+    description: 'Capture and manage product concepts — pre-project ideas that do not yet have a project_id. Discrete from dojo (which is feature-scoped inside an existing project). Use add for a new product idea, list to browse, read for detail, commit when you decide to build (links to a project_id; project_init + registry_add stay separate), shelve to park with a reason. Storage: ~/.decibel/concepts/. Actions: add, list, read, commit, shelve',
+    compactDescription: 'Capture pre-project product concepts',
+    microEligible: true,
+    tier: 'core',
+    actions: {
+      add: 'concepts_add',
+      list: 'concepts_list',
+      read: 'concepts_read',
+      commit: 'concepts_commit',
+      shelve: 'concepts_shelve',
     },
   },
 
