@@ -1,4 +1,5 @@
 ---
+id: ISS-0079
 projectId: decibel-tools-mcp
 severity: high
 status: open

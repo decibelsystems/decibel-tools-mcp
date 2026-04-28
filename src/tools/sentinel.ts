@@ -246,6 +246,40 @@ function formatEpicId(num: number): string {
   return `EPIC-${num.toString().padStart(4, '0')}`;
 }
 
+function formatIssueId(num: number): string {
+  return `ISS-${num.toString().padStart(4, '0')}`;
+}
+
+async function getNextIssueNumber(issuesDir: string): Promise<number> {
+  let max = 0;
+  try {
+    const files = await fs.readdir(issuesDir);
+    for (const file of files) {
+      const prefixMatch = file.match(/^ISS-(\d+)/i);
+      if (prefixMatch) {
+        max = Math.max(max, parseInt(prefixMatch[1], 10));
+        continue;
+      }
+      if (!file.endsWith('.md')) continue;
+      try {
+        const content = await fs.readFile(path.join(issuesDir, file), 'utf-8');
+        const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+        if (!fmMatch) continue;
+        const idLine = fmMatch[1].split('\n').find((l) => l.trim().toLowerCase().startsWith('id:'));
+        if (!idLine) continue;
+        const idVal = idLine.slice(idLine.indexOf(':') + 1).trim();
+        const idMatch = idVal.match(/^ISS-(\d+)$/i);
+        if (idMatch) max = Math.max(max, parseInt(idMatch[1], 10));
+      } catch {
+        // skip unreadable files
+      }
+    }
+  } catch {
+    // dir doesn't exist yet
+  }
+  return max + 1;
+}
+
 async function parseEpicFile(filePath: string): Promise<Epic | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
@@ -380,8 +414,12 @@ async function parseIssueFile(filePath: string): Promise<IssueSummary | null> {
     const titleMatch = content.match(/^# (.+)$/m);
     const title = titleMatch ? titleMatch[1] : path.basename(filePath, '.md');
 
+    // Prefer ISS-NNNN id from frontmatter; fall back to filename for legacy issues
+    const fmId = frontmatter.id?.match(/^ISS-\d+$/i)?.[0];
+    const id = fmId ?? path.basename(filePath);
+
     return {
-      id: path.basename(filePath),
+      id,
       title,
       severity: (frontmatter.severity as Severity) || 'low',
       status: frontmatter.status || 'open',
@@ -407,6 +445,36 @@ async function findIssueFile(projectId: string | undefined, issueId: string): Pr
     const withMd = issueId.endsWith('.md') ? issueId : `${issueId}.md`;
     if (files.includes(withMd)) {
       return { filePath: path.join(issuesDir, withMd), filename: withMd };
+    }
+
+    // ISS-NNNN: match filename prefix with word boundary, or frontmatter id
+    const issMatch = issueId.match(/^ISS-(\d+)$/i);
+    if (issMatch) {
+      const padded = `ISS-${issMatch[1].padStart(4, '0')}`.toLowerCase();
+      const prefixHit = files.find((f) => {
+        const lower = f.toLowerCase();
+        return lower.startsWith(`${padded}-`) || lower === `${padded}.md`;
+      });
+      if (prefixHit) {
+        return { filePath: path.join(issuesDir, prefixHit), filename: prefixHit };
+      }
+      // Scan frontmatter for legacy retroactively-stamped issues
+      for (const f of files) {
+        if (!f.endsWith('.md')) continue;
+        try {
+          const content = await fs.readFile(path.join(issuesDir, f), 'utf-8');
+          const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+          if (!fmMatch) continue;
+          const idLine = fmMatch[1].split('\n').find((l) => l.trim().toLowerCase().startsWith('id:'));
+          if (!idLine) continue;
+          const idVal = idLine.slice(idLine.indexOf(':') + 1).trim().toLowerCase();
+          if (idVal === padded) {
+            return { filePath: path.join(issuesDir, f), filename: f };
+          }
+        } catch {
+          // skip unreadable
+        }
+      }
     }
 
     // Fuzzy match - find file containing the query
@@ -482,17 +550,20 @@ export async function createIssue(
 
   const now = new Date();
   const timestamp = now.toISOString();
-  const fileTimestamp = formatTimestampForFilename(now);
   const slug = slugify(input.title);
-  const filename = `${fileTimestamp}-${slug}.md`;
 
   ensureDir(issuesDir);
+  const issueNum = await getNextIssueNumber(issuesDir);
+  const issueId = formatIssueId(issueNum);
+  const filename = `${issueId}-${slug}.md`;
+
   const filePath = path.join(issuesDir, filename);
   validateWritePath(filePath, resolved);
 
   // Build frontmatter with optional epic_id
   const frontmatterLines = [
     '---',
+    `id: ${issueId}`,
     `projectId: ${resolved.id}`,
     `severity: ${input.severity}`,
     `status: open`,
@@ -530,7 +601,7 @@ export async function createIssue(
   );
 
   return {
-    id: filename,
+    id: issueId,
     timestamp,
     path: filePath,
     status: 'open',
@@ -611,8 +682,19 @@ export async function closeIssue(
   await fs.writeFile(filePath, updatedContent, 'utf-8');
   log(`Sentinel: Closed issue at ${filePath}`);
 
+  // Prefer ISS-NNNN id from filename or frontmatter for the return value
+  const filenamePrefix = filename.match(/^(ISS-\d+)/i)?.[1];
+  const fmIdMatch = updatedContent.match(/^---\n([\s\S]*?)\n---/);
+  const fmId = fmIdMatch?.[1]
+    .split('\n')
+    .find((l) => l.trim().toLowerCase().startsWith('id:'))
+    ?.split(':')[1]
+    ?.trim()
+    ?.match(/^ISS-\d+$/i)?.[0];
+  const returnedId = filenamePrefix ?? fmId ?? filename;
+
   return {
-    id: filename,
+    id: returnedId,
     path: filePath,
     status: newStatus,
     closed_at: closedAt,
