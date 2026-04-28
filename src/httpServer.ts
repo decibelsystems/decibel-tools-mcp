@@ -39,6 +39,7 @@ import type { ToolKernel, DispatchContext, DispatchEvent } from './kernel.js';
 import { getLicenseValidator } from './license.js';
 import { listProjects } from './projectRegistry.js';
 import type { AgentRegistry } from './daemon.js';
+import { setDaemonPort } from './daemon.js';
 import type { DaemonConfig } from './daemonConfig.js';
 import {
   listEpics,
@@ -2085,6 +2086,12 @@ export async function startHttpServer(
 
   httpServer.listen(port, host, () => {
     log(`HTTP Server listening on http://${host}:${port}`);
+    // Advertise port + pid in daemon.meta so clients can discover the daemon.
+    try {
+      setDaemonPort(port);
+    } catch (err) {
+      log(`Daemon: failed to write port to meta: ${err instanceof Error ? err.message : String(err)}`);
+    }
     console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║  Decibel MCP Server - HTTP Mode  v${PKG.version}${' '.repeat(Math.max(0, 24 - PKG.version.length))}║
