@@ -15,6 +15,7 @@ import {
   addProjectAlias,
   resolveProject,
   getRegistryFilePath,
+  scanForProjects,
 } from '../../projectRegistry.js';
 import {
   getToolConfig,
@@ -546,6 +547,88 @@ export const registryAliasTool: ToolSpec = {
   },
 };
 
+export const registryScanTool: ToolSpec = {
+  definition: {
+    name: 'registry_scan',
+    description: `Scan filesystem roots for .decibel/ directories and reconcile against the registry.
+
+Returns a diff:
+- found: every project directory discovered
+- unregistered: has .decibel/ on disk but not in registry
+- orphans: registered in projects.json but path/.decibel missing on disk
+
+Roots resolution order: explicit roots arg → DECIBEL_SCAN_ROOTS env var → parent dirs of registered projects.
+
+Pass apply=true to register all unregistered projects (ID = directory basename). Does not touch orphans — use registry_remove to clean those up.`,
+    annotations: {
+      title: 'Scan Registry',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        roots: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Absolute directories to scan. Scans immediate children only.',
+        },
+        apply: {
+          type: 'boolean',
+          description: 'If true, register all unregistered found projects. Default: false (dry run).',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    try {
+      const result = scanForProjects(args.roots as string[] | undefined);
+
+      const applied: Array<{ id: string; path: string }> = [];
+      const applyFailures: Array<{ id: string; path: string; error: string }> = [];
+
+      if (args.apply) {
+        for (const finding of result.unregistered) {
+          try {
+            registerProject({ id: finding.id, path: finding.path, name: finding.id });
+            applied.push({ id: finding.id, path: finding.path });
+          } catch (err) {
+            applyFailures.push({
+              id: finding.id,
+              path: finding.path,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      }
+
+      return toolSuccess({
+        roots: result.roots,
+        summary: {
+          found: result.found.length,
+          registered: result.found.filter((f) => f.registered).length,
+          unregistered: result.unregistered.length,
+          orphans: result.orphans.length,
+          applied: applied.length,
+          apply_failures: applyFailures.length,
+        },
+        unregistered: result.unregistered,
+        orphans: result.orphans,
+        applied,
+        apply_failures: applyFailures,
+        hint: args.apply
+          ? undefined
+          : result.unregistered.length > 0
+            ? 'Re-run with apply=true to register the unregistered projects.'
+            : undefined,
+      });
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
 export const registryResolveTool: ToolSpec = {
   definition: {
     name: 'registry_resolve',
@@ -803,6 +886,7 @@ export const registryTools: ToolSpec[] = [
   registryRemoveTool,
   registryAliasTool,
   registryResolveTool,
+  registryScanTool,
   configGetTool,
   configSetTool,
   configListTool,
