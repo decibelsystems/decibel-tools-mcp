@@ -159,6 +159,8 @@ const HEALTH_RESET_MS = 5 * 60_000; // 5 minutes
 interface DaemonMeta {
   started_at: string;
   crash_count: number;
+  port?: number;
+  pid?: number;
 }
 
 function readMeta(): DaemonMeta | null {
@@ -172,6 +174,21 @@ function readMeta(): DaemonMeta | null {
 function writeMeta(meta: DaemonMeta): void {
   ensureDir(DECIBEL_HOME);
   writeFileSync(META_PATH, JSON.stringify(meta), 'utf-8');
+}
+
+/**
+ * Record the bound port and pid in daemon.meta so clients (HQ, CLI, scripts)
+ * can discover the daemon without hardcoding 8787. Called after the HTTP
+ * server has actually bound the port.
+ */
+export function setDaemonPort(port: number): void {
+  const existing = readMeta();
+  writeMeta({
+    started_at: existing?.started_at ?? new Date().toISOString(),
+    crash_count: existing?.crash_count ?? 0,
+    port,
+    pid: process.pid,
+  });
 }
 
 /**
