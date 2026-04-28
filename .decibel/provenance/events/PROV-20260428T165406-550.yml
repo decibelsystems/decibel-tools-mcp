@@ -1,0 +1,11 @@
+event_id: PROV-20260428T165406-550
+timestamp: 2026-04-28T16:54:06.550Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0105-yaml-cleanup-converge-sentinel-issue-stores-on-md.md
+reason_code: initial_creation
+summary: "Created issue: YAML cleanup: converge sentinel issue stores on .md"
+fingerprint_before: null
+fingerprint_after: sha256:0199357fc3bfcc9c
