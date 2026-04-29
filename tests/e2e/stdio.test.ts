@@ -1,16 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   createTestContext,
   cleanupTestContext,
   TestContext,
 } from '../utils/test-context.js';
 
-// Capture the project root at module load — createTestContext() chdir's into
-// a tmp dir before each test, which would point spawn() at a dir with no
-// node_modules/tsx and no src/. The server child would exit immediately with
-// ERR_MODULE_NOT_FOUND, leaving the test waiting on a response that never comes.
-const PROJECT_ROOT = process.cwd();
+// Resolve the project root from this test file's location, not from
+// process.cwd(). createTestContext() chdirs into a tmp dir, so any spawn
+// that depends on cwd-relative module resolution (e.g. `--import tsx`) breaks.
+const PROJECT_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../..'
+);
 
 interface JsonRpcRequest {
   jsonrpc: '2.0';
@@ -26,7 +30,7 @@ interface JsonRpcResponse {
   error?: { code: number; message: string };
 }
 
-describe('MCP Server E2E (stdio)', () => {
+describe('MCP Server E2E (stdio)', { timeout: 45000 }, () => {
   let ctx: TestContext;
   let serverProcess: ChildProcess | null = null;
 
@@ -50,15 +54,47 @@ describe('MCP Server E2E (stdio)', () => {
           ...process.env,
           DECIBEL_MCP_ROOT: ctx.rootDir,
           DECIBEL_PROJECT_ROOT: ctx.rootDir,
-          DECIBEL_ENV: 'test',
+          // Use 'dev' so the server emits its lifecycle logs to stderr —
+          // startServer() waits for the "running on stdio" line as a ready
+          // signal. With env='test', config.log() is a no-op (config.ts:25).
+          DECIBEL_ENV: 'dev',
         },
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
-      proc.on('error', reject);
+      const spawnTimeout = setTimeout(() => {
+        proc.kill();
+        reject(
+          new Error(
+            `Server failed to emit ready signal within 30s. stderr so far: ${stderrBuf}`
+          )
+        );
+      }, 30000);
 
-      // Give server time to start
-      setTimeout(() => resolve(proc), 500);
+      proc.on('error', (err) => {
+        clearTimeout(spawnTimeout);
+        reject(err);
+      });
+
+      // Wait for the transport to be attached. server.ts logs this line to
+      // stderr immediately after `await server.connect(transport)`, so seeing
+      // it guarantees stdin is being read.
+      let stderrBuf = '';
+      let resolved = false;
+      const onStderr = (chunk: Buffer) => {
+        if (!resolved) {
+          stderrBuf += chunk.toString();
+          if (stderrBuf.includes('running on stdio')) {
+            resolved = true;
+            clearTimeout(spawnTimeout);
+            resolve(proc);
+          }
+        }
+        // Keep the listener attached after resolve so the stderr buffer stays
+        // drained; otherwise post-startup log writes could fill the pipe and
+        // block the child process.
+      };
+      proc.stderr?.on('data', onStderr);
     });
   }
 
@@ -172,11 +208,10 @@ describe('MCP Server E2E (stdio)', () => {
 
     expect(response.error).toBeUndefined();
     const result = response.result as { tools: Array<{ name: string }> };
-    // The MCP layer now exposes facade-level tools (e.g. `designer`, `sentinel`)
-    // and operations are invoked via an `action` parameter on the facade. Older
-    // versions exposed each operation as its own MCP tool (`designer.record_*`).
+    // The MCP layer exposes facade-level tools (e.g. `designer`, `sentinel`),
+    // and operations are invoked via an `action` parameter on the facade.
     // Assert facade names + a lower bound on count so new facades don't churn.
-    expect(result.tools.length).toBeGreaterThanOrEqual(9);
+    expect(result.tools.length).toBeGreaterThan(20);
     const names = result.tools.map((t) => t.name);
     expect(names).toContain('designer');
     expect(names).toContain('sentinel');
@@ -211,7 +246,7 @@ describe('MCP Server E2E (stdio)', () => {
       id: 3,
       method: 'tools/call',
       params: {
-        // The MCP API now routes through a facade tool with an `action` enum
+        // The MCP API routes through a facade tool with an `action` enum
         // rather than exposing every operation as its own tool.
         name: 'designer',
         arguments: {
