@@ -16,6 +16,53 @@ const PROJECT_ROOT = path.resolve(
   '../..'
 );
 
+// Allowlist of parent-environment variables to forward to the spawned server.
+// Anything outside this list (e.g. OPENAI_API_KEY in the developer's shell) is
+// dropped, plus all DECIBEL_* keys are forwarded by name-prefix.
+const SAFE_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'USER',
+  'SHELL',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'NODE_PATH',
+  'NODE_OPTIONS',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+];
+
+// Bound on the stderr buffer that `startServer()` accumulates. A hung server
+// could otherwise fill memory before the spawn timeout fires.
+const STDERR_BUF_LIMIT = 16 * 1024;
+
+const REQUEST_TIMEOUT_MS = 5000;
+const SPAWN_READY_TIMEOUT_MS = 30000;
+
+export function buildServerEnv(rootDir: string): Record<string, string> {
+  const env: Record<string, string> = {};
+
+  for (const key of SAFE_ENV_KEYS) {
+    const v = process.env[key];
+    if (v !== undefined) env[key] = v;
+  }
+
+  for (const [k, v] of Object.entries(process.env)) {
+    if (k.startsWith('DECIBEL_') && v !== undefined) env[k] = v;
+  }
+
+  // Explicit overrides — these win over any DECIBEL_* values inherited above.
+  env.DECIBEL_MCP_ROOT = rootDir;
+  env.DECIBEL_PROJECT_ROOT = rootDir;
+  // 'dev' so config.log() emits the "running on stdio" line we wait on as a
+  // ready signal. With env='test', logging is suppressed (config.ts:25).
+  env.DECIBEL_ENV = 'dev';
+
+  return env;
+}
+
 interface JsonRpcRequest {
   jsonrpc: '2.0';
   id: number;
@@ -50,26 +97,21 @@ describe('MCP Server E2E (stdio)', { timeout: 45000 }, () => {
     return new Promise((resolve, reject) => {
       const proc = spawn('node', ['--import', 'tsx', 'src/server.ts'], {
         cwd: PROJECT_ROOT,
-        env: {
-          ...process.env,
-          DECIBEL_MCP_ROOT: ctx.rootDir,
-          DECIBEL_PROJECT_ROOT: ctx.rootDir,
-          // Use 'dev' so the server emits its lifecycle logs to stderr —
-          // startServer() waits for the "running on stdio" line as a ready
-          // signal. With env='test', config.log() is a no-op (config.ts:25).
-          DECIBEL_ENV: 'dev',
-        },
+        env: buildServerEnv(ctx.rootDir),
         stdio: ['pipe', 'pipe', 'pipe'],
       });
+
+      let stderrBuf = '';
+      let resolved = false;
 
       const spawnTimeout = setTimeout(() => {
         proc.kill();
         reject(
           new Error(
-            `Server failed to emit ready signal within 30s. stderr so far: ${stderrBuf}`
+            `Server failed to emit ready signal within ${SPAWN_READY_TIMEOUT_MS}ms. stderr so far: ${stderrBuf}`
           )
         );
-      }, 30000);
+      }, SPAWN_READY_TIMEOUT_MS);
 
       proc.on('error', (err) => {
         clearTimeout(spawnTimeout);
@@ -79,20 +121,20 @@ describe('MCP Server E2E (stdio)', { timeout: 45000 }, () => {
       // Wait for the transport to be attached. server.ts logs this line to
       // stderr immediately after `await server.connect(transport)`, so seeing
       // it guarantees stdin is being read.
-      let stderrBuf = '';
-      let resolved = false;
       const onStderr = (chunk: Buffer) => {
         if (!resolved) {
           stderrBuf += chunk.toString();
+          if (stderrBuf.length > STDERR_BUF_LIMIT) {
+            stderrBuf = stderrBuf.slice(-STDERR_BUF_LIMIT);
+          }
           if (stderrBuf.includes('running on stdio')) {
             resolved = true;
             clearTimeout(spawnTimeout);
             resolve(proc);
           }
         }
-        // Keep the listener attached after resolve so the stderr buffer stays
-        // drained; otherwise post-startup log writes could fill the pipe and
-        // block the child process.
+        // Listener stays attached after resolve so the stderr buffer keeps
+        // draining; otherwise the OS pipe could fill and block the child.
       };
       proc.stderr?.on('data', onStderr);
     });
@@ -103,46 +145,82 @@ describe('MCP Server E2E (stdio)', { timeout: 45000 }, () => {
     request: JsonRpcRequest
   ): Promise<JsonRpcResponse> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Request timed out'));
-      }, 5000);
+      // Server may have already exited before this call.
+      if (proc.exitCode !== null || proc.signalCode !== null) {
+        reject(
+          new Error(
+            `Cannot send request: server already exited (code=${proc.exitCode}, signal=${proc.signalCode})`
+          )
+        );
+        return;
+      }
 
       let buffer = '';
 
+      const cleanup = () => {
+        clearTimeout(timeout);
+        proc.stdout?.off('data', onData);
+        proc.off('exit', onExit);
+      };
+
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error('Request timed out'));
+      }, REQUEST_TIMEOUT_MS);
+
+      const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+        cleanup();
+        reject(
+          new Error(
+            `Server exited before responding (code=${code}, signal=${signal})`
+          )
+        );
+      };
+
       const onData = (data: Buffer) => {
         buffer += data.toString();
-
-        // Try to parse complete JSON-RPC response
         const lines = buffer.split('\n');
         for (const line of lines) {
-          if (line.trim()) {
-            try {
-              const response = JSON.parse(line) as JsonRpcResponse;
-              if (response.id === request.id) {
-                clearTimeout(timeout);
-                proc.stdout?.off('data', onData);
-                resolve(response);
-                return;
-              }
-            } catch {
-              // Not complete JSON yet, continue buffering
+          if (!line.trim()) continue;
+          try {
+            const response = JSON.parse(line) as JsonRpcResponse;
+            if (response.id === request.id) {
+              cleanup();
+              resolve(response);
+              return;
             }
+          } catch {
+            // Not complete JSON yet, continue buffering
           }
         }
       };
 
       proc.stdout?.on('data', onData);
+      proc.once('exit', onExit);
 
-      // Send the request
       proc.stdin?.write(JSON.stringify(request) + '\n');
     });
   }
 
-  it('should start server without errors', async () => {
+  it('should start, expose ready signal, and exit cleanly when killed', async () => {
     serverProcess = await startServer();
-
     expect(serverProcess.pid).toBeDefined();
     expect(serverProcess.killed).toBe(false);
+
+    const exitPromise = new Promise<{
+      code: number | null;
+      signal: NodeJS.Signals | null;
+    }>((resolve) => {
+      serverProcess!.once('exit', (code, signal) =>
+        resolve({ code, signal })
+      );
+    });
+
+    serverProcess.kill();
+    const { code, signal } = await exitPromise;
+    // SIGTERM produces signal='SIGTERM' code=null, or code=0 if the server
+    // installed a graceful handler.
+    expect(code === 0 || signal === 'SIGTERM').toBe(true);
   });
 
   it('should respond to initialize request', async () => {
@@ -267,5 +345,88 @@ describe('MCP Server E2E (stdio)', { timeout: 45000 }, () => {
     const toolResult = JSON.parse(result.content[0].text);
     expect(toolResult.id).toMatch(/\.md$/);
     expect(toolResult.path).toContain('e2e-test');
+  });
+
+  // ── Regression tests for the recent fixes ───────────────────────────────
+
+  it('removes its stdout listener after a successful sendRequest', async () => {
+    serverProcess = await startServer();
+
+    const before = serverProcess.stdout!.listenerCount('data');
+    await sendRequest(serverProcess, {
+      jsonrpc: '2.0',
+      id: 42,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'leak-test', version: '1.0.0' },
+      },
+    });
+    const after = serverProcess.stdout!.listenerCount('data');
+    expect(after).toBe(before);
+  });
+
+  it('rejects sendRequest fast when the server exits mid-call', async () => {
+    serverProcess = await startServer();
+
+    // Kill the server before sending. Without the exit-aware fix this would
+    // wait the full REQUEST_TIMEOUT_MS (5s).
+    serverProcess.kill('SIGKILL');
+    await new Promise<void>((resolve) =>
+      serverProcess!.once('exit', () => resolve())
+    );
+
+    const start = Date.now();
+    await expect(
+      sendRequest(serverProcess, {
+        jsonrpc: '2.0',
+        id: 99,
+        method: 'tools/list',
+      })
+    ).rejects.toThrow(/already exited/);
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(1000);
+  });
+});
+
+// ── buildServerEnv unit tests ─────────────────────────────────────────────
+// These don't spawn anything — they verify the env-allowlist logic directly.
+
+describe('buildServerEnv', () => {
+  const SECRET_KEY = 'TEST_FAKE_SECRET_LIBJV';
+
+  afterEach(() => {
+    delete process.env[SECRET_KEY];
+    delete process.env.DECIBEL_PRO;
+  });
+
+  it('drops parent env vars not on the allowlist', () => {
+    process.env[SECRET_KEY] = 'leaked-credentials';
+    const env = buildServerEnv('/tmp/whatever');
+    expect(env[SECRET_KEY]).toBeUndefined();
+  });
+
+  it('forwards DECIBEL_* parent env vars by name prefix', () => {
+    process.env.DECIBEL_PRO = '1';
+    const env = buildServerEnv('/tmp/whatever');
+    expect(env.DECIBEL_PRO).toBe('1');
+  });
+
+  it('overrides DECIBEL_ENV to "dev" regardless of parent value', () => {
+    process.env.DECIBEL_ENV = 'production';
+    const env = buildServerEnv('/tmp/whatever');
+    expect(env.DECIBEL_ENV).toBe('dev');
+  });
+
+  it('forwards PATH so the spawned node can resolve binaries', () => {
+    const env = buildServerEnv('/tmp/whatever');
+    expect(env.PATH).toBe(process.env.PATH);
+  });
+
+  it('sets DECIBEL_MCP_ROOT and DECIBEL_PROJECT_ROOT to the rootDir argument', () => {
+    const env = buildServerEnv('/tmp/some-test-dir');
+    expect(env.DECIBEL_MCP_ROOT).toBe('/tmp/some-test-dir');
+    expect(env.DECIBEL_PROJECT_ROOT).toBe('/tmp/some-test-dir');
   });
 });
