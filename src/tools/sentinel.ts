@@ -171,6 +171,20 @@ export interface IssueSummary {
   title: string;
   severity: Severity;
   status: string;
+  /**
+   * Linked epic id (e.g., "EPIC-0001") if the issue's frontmatter declares one.
+   * Surfaced via list_issues / list_epic_issues so consumers (HQ, MCP clients)
+   * can build the epic→issue relationship without a per-issue read_issue call.
+   */
+  epic_id?: string;
+  /** Priority level (low / medium / high / critical) when set. */
+  priority?: string;
+  /** Optional tags array. Parsed from inline-flow YAML (`tags: [a, b]`). */
+  tags?: string[];
+  /** ISO timestamp of issue creation. */
+  created_at?: string;
+  /** ISO timestamp of last modification. */
+  updated_at?: string;
 }
 
 export interface GetEpicIssuesOutput {
@@ -394,35 +408,98 @@ function calculateFuzzyScore(query: string, text: string): number {
   return 0;
 }
 
+/**
+ * Parse an issue file. Two on-disk formats are supported:
+ *
+ *   1. Markdown-style with frontmatter delimiters:
+ *      ---
+ *      key: value
+ *      epic_id: EPIC-0001
+ *      ---
+ *      # Title
+ *      body...
+ *
+ *   2. YAML-style (no delimiters) — what `updateIssue` writes after stringifyYaml:
+ *      key: value
+ *      epic_id: EPIC-0001
+ *      description: |-
+ *        body...
+ *
+ * Previously this function required format (1) and silently returned null on
+ * format (2), which caused list_issues / list_epic_issues to drop any issue
+ * that had been touched by update_issue. After this change both formats parse;
+ * the response surfaces epic_id and a few other useful frontmatter fields so
+ * callers don't need a per-issue read_issue follow-up.
+ */
 async function parseIssueFile(filePath: string): Promise<IssueSummary | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-    if (!frontmatterMatch) return null;
+
+    // Pick the YAML region: text between --- markers if present, else the
+    // entire file (YAML-style as written by updateIssue).
+    const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    const yamlText = fmMatch ? fmMatch[1] : content;
 
     const frontmatter: Record<string, string> = {};
-    for (const line of frontmatterMatch[1].split('\n')) {
-      const colonIndex = line.indexOf(':');
-      if (colonIndex > 0) {
-        const key = line.slice(0, colonIndex).trim();
-        const value = line.slice(colonIndex + 1).trim();
-        frontmatter[key] = value;
+    let inMultilineValue = false;
+    for (const line of yamlText.split('\n')) {
+      // Inside a multi-line literal block (`description: |-`), skip until we
+      // see a column-0 top-level `key: value` line that resumes the YAML
+      // top level. Heuristic — handles the common case create_issue writes.
+      if (inMultilineValue) {
+        if (/^[a-zA-Z_][a-zA-Z0-9_]*\s*:/.test(line)) {
+          inMultilineValue = false;
+          // fall through to parse this line
+        } else {
+          continue;
+        }
       }
+      if (!line.trim() || line.startsWith('#')) continue;
+      const colonIndex = line.indexOf(':');
+      if (colonIndex <= 0) continue;
+      const key = line.slice(0, colonIndex).trim();
+      const value = line.slice(colonIndex + 1).trim();
+      // Multi-line literal block markers — value continues over multiple
+      // indented lines. We don't need the body for the summary, so flag and
+      // skip until the next top-level key.
+      if (value === '|-' || value === '|' || value === '|+' || value === '>' || value === '>-' || value === '>+') {
+        inMultilineValue = true;
+        continue;
+      }
+      frontmatter[key] = value;
     }
 
-    // Extract title from first heading
+    // Title: first markdown heading wins, else explicit `title:` key, else
+    // the filename without extension as a last-resort fallback.
     const titleMatch = content.match(/^# (.+)$/m);
-    const title = titleMatch ? titleMatch[1] : path.basename(filePath, '.md');
+    const title = titleMatch ? titleMatch[1] : (frontmatter.title || path.basename(filePath, '.md'));
 
-    // Prefer ISS-NNNN id from frontmatter; fall back to filename for legacy issues
+    // ID: prefer canonical ISS-NNNN form from frontmatter, else filename.
     const fmId = frontmatter.id?.match(/^ISS-\d+$/i)?.[0];
     const id = fmId ?? path.basename(filePath);
+
+    // Tags: support inline-flow YAML (`tags: [a, b]`). Multi-line array
+    // form (`tags:\n  - a\n  - b`) is out-of-scope for the simple parser.
+    let tags: string[] | undefined;
+    if (frontmatter.tags?.startsWith('[')) {
+      try {
+        // YAML inline flow allows single quotes; JSON.parse needs double.
+        tags = JSON.parse(frontmatter.tags.replace(/'/g, '"'));
+      } catch {
+        // Malformed — leave undefined rather than half-parsed garbage.
+      }
+    }
 
     return {
       id,
       title,
       severity: (frontmatter.severity as Severity) || 'low',
       status: frontmatter.status || 'open',
+      epic_id: frontmatter.epic_id || frontmatter.epicId,
+      priority: frontmatter.priority,
+      tags,
+      created_at: frontmatter.created_at,
+      updated_at: frontmatter.updated_at,
     };
   } catch {
     return null;
@@ -922,16 +999,15 @@ export async function getEpicIssues(
 
     for (const file of issueFiles) {
       if (!file.endsWith('.md')) continue;
-
       const filePath = path.join(issuesDir, file);
-      const content = await fs.readFile(filePath, 'utf-8');
-
-      // Check if this issue belongs to the epic
-      if (content.includes(`epic_id: ${input.epic_id}`)) {
-        const issue = await parseIssueFile(filePath);
-        if (issue) {
-          issues.push(issue);
-        }
+      // Parse first, then filter on the parsed epic_id field. Previously this
+      // used a brittle `content.includes('epic_id: ${epic_id}')` substring
+      // check, which (a) matched commented-out epic_id lines, (b) didn't
+      // handle quoted values like `epic_id: "EPIC-0001"`, and (c) ran before
+      // parseIssueFile could fail and silently drop the issue regardless.
+      const issue = await parseIssueFile(filePath);
+      if (issue && issue.epic_id === input.epic_id) {
+        issues.push(issue);
       }
     }
   } catch {
