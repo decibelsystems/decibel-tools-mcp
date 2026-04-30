@@ -42,8 +42,12 @@ describe('projectPaths', () => {
     });
 
     it('should throw error for unknown projectId when not in a project', async () => {
-      // Point to temp dir without .decibel
+      // Point to temp dir without .decibel AND chdir there. resolveProject
+      // has a Strategy 7 fallback that walks up from cwd looking for any
+      // .decibel/ ancestor — without chdir'ing, the test still inherits the
+      // daemon repo's cwd which has its own .decibel/ and that gets returned.
       process.env.DECIBEL_PROJECT_ROOT = tempDir;
+      process.chdir(tempDir);
 
       await expect(resolveProjectRoot('unknown-project')).rejects.toThrow(
         'PROJECT_NOT_FOUND: "unknown-project"'

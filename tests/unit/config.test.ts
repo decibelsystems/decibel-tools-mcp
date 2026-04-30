@@ -21,7 +21,10 @@ describe('Config', () => {
       const config = getConfig();
 
       expect(config.env).toBe('dev');
-      expect(config.org).toBe('mediareason');
+      // Default org is 'default' (see src/config.ts: DECIBEL_ORG || 'default').
+      // Was 'mediareason' historically but flipped to a vendor-neutral default
+      // for OSS distribution; the test was never updated.
+      expect(config.org).toBe('default');
       expect(config.rootDir).toContain('data');
     });
 

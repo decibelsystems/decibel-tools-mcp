@@ -120,7 +120,10 @@ describe('MCP Server Integration', () => {
       expect(result.isError).toBeFalsy();
 
       const response = JSON.parse(result.content[0].text);
-      expect(response.id).toMatch(/\.md$/);
+      // Post-PR#8 issue ids are sequential ISS-NNNN labels, not filenames.
+      // The on-disk file follows ISS-NNNN-<slug>.md and lives at response.path.
+      expect(response.id).toMatch(/^ISS-\d{4}$/);
+      expect(response.path).toMatch(/\.md$/);
       expect(response.timestamp).toBeValidTimestamp();
       expect(response.path).toContain('sentinel');
       expect(response.status).toBe('open');
