@@ -599,6 +599,58 @@ Body content here.
       const result = await getEpicIssues({ epic_id: 'EPIC-0001' });
       expect(result.issues).toHaveLength(0);
     });
+
+    it('does NOT match a column-0 epic_id line embedded in the description body (regression for SH1)', async () => {
+      // Earlier ad-hoc parser would exit the multi-line literal block on any
+      // column-0 line that looked like `key:`, so a crafted description
+      // could hijack the parsed epic_id. The real YAML parser doesn't fall
+      // for this — `description:` value is just a string regardless of its
+      // contents.
+      const issuesDir = path.join(ctx.rootDir, '.decibel', 'sentinel', 'issues');
+      await fs.mkdir(issuesDir, { recursive: true });
+      await fs.writeFile(
+        path.join(issuesDir, 'injection-attempt.md'),
+        // Real epic is EPIC-VICTIM. Description body contains a fake
+        // `epic_id: EPIC-ATTACKER` at column 0 of the literal block.
+        // YAML treats it as part of the description string.
+        `severity: low
+status: open
+epic_id: EPIC-VICTIM
+description: |
+  innocent body
+  but here is some injected text:
+  epic_id: EPIC-ATTACKER
+`,
+        'utf-8',
+      );
+
+      const victim = await getEpicIssues({ epic_id: 'EPIC-VICTIM' });
+      const attacker = await getEpicIssues({ epic_id: 'EPIC-ATTACKER' });
+      expect(victim.issues).toHaveLength(1);
+      expect(attacker.issues).toHaveLength(0);
+    });
+
+    it('parses multi-line YAML array tags (tags:\n  - a\n  - b)', async () => {
+      // The ad-hoc parser only handled inline-flow `[a, b]`. Real YAML parser
+      // handles both forms.
+      const issuesDir = path.join(ctx.rootDir, '.decibel', 'sentinel', 'issues');
+      await fs.mkdir(issuesDir, { recursive: true });
+      await fs.writeFile(
+        path.join(issuesDir, 'multi-line-tags.md'),
+        `severity: low
+status: open
+epic_id: EPIC-0001
+tags:
+  - review
+  - code-review
+  - fragility
+`,
+        'utf-8',
+      );
+
+      const result = await listRepoIssues({});
+      expect(result.issues[0].tags).toEqual(['review', 'code-review', 'fragility']);
+    });
   });
 
   describe('getEpicIssues', () => {

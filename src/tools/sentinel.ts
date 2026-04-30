@@ -4,6 +4,7 @@ import { getConfig, log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
 import { emitCreateProvenance } from './provenance.js';
+import { safeParseYaml } from '../sentinelIssues.js';
 
 // ============================================================================
 // Project Resolution Error
@@ -409,97 +410,72 @@ function calculateFuzzyScore(query: string, text: string): number {
 }
 
 /**
- * Parse an issue file. Two on-disk formats are supported:
+ * Parse an issue file using the real YAML parser. Handles both on-disk formats
+ * the daemon writes today:
  *
- *   1. Markdown-style with frontmatter delimiters:
+ *   1. Markdown-style with frontmatter delimiters (createIssue):
  *      ---
  *      key: value
  *      epic_id: EPIC-0001
  *      ---
  *      # Title
- *      body...
+ *      body
  *
- *   2. YAML-style (no delimiters) — what `updateIssue` writes after stringifyYaml:
+ *   2. YAML-only (updateIssue, after stringifyYaml):
  *      key: value
  *      epic_id: EPIC-0001
  *      description: |-
- *        body...
+ *        body
  *
- * Previously this function required format (1) and silently returned null on
- * format (2), which caused list_issues / list_epic_issues to drop any issue
- * that had been touched by update_issue. After this change both formats parse;
- * the response surfaces epic_id and a few other useful frontmatter fields so
- * callers don't need a per-issue read_issue follow-up.
+ * Uses `safeParseYaml` (shared with sentinelIssues.ts) which handles single-
+ * doc and multi-doc YAML automatically. The previous ad-hoc parser was both
+ * format-fragile (dropped YAML-only files) AND vulnerable to description-body
+ * `epic_id` injection via crafted column-0 lines. The real parser closes both.
  */
 async function parseIssueFile(filePath: string): Promise<IssueSummary | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
 
-    // Pick the YAML region: text between --- markers if present, else the
-    // entire file (YAML-style as written by updateIssue).
-    const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-    const yamlText = fmMatch ? fmMatch[1] : content;
-
-    const frontmatter: Record<string, string> = {};
-    let inMultilineValue = false;
-    for (const line of yamlText.split('\n')) {
-      // Inside a multi-line literal block (`description: |-`), skip until we
-      // see a column-0 top-level `key: value` line that resumes the YAML
-      // top level. Heuristic — handles the common case create_issue writes.
-      if (inMultilineValue) {
-        if (/^[a-zA-Z_][a-zA-Z0-9_]*\s*:/.test(line)) {
-          inMultilineValue = false;
-          // fall through to parse this line
-        } else {
-          continue;
-        }
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = safeParseYaml(content);
+    } catch {
+      // safeParseYaml threw — likely the markdown body after `---` confused
+      // the multi-doc parser. Last-resort: extract just the frontmatter region
+      // manually and parse that.
+      const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      if (!fmMatch) return null;
+      try {
+        parsed = safeParseYaml(fmMatch[1]);
+      } catch {
+        return null;
       }
-      if (!line.trim() || line.startsWith('#')) continue;
-      const colonIndex = line.indexOf(':');
-      if (colonIndex <= 0) continue;
-      const key = line.slice(0, colonIndex).trim();
-      const value = line.slice(colonIndex + 1).trim();
-      // Multi-line literal block markers — value continues over multiple
-      // indented lines. We don't need the body for the summary, so flag and
-      // skip until the next top-level key.
-      if (value === '|-' || value === '|' || value === '|+' || value === '>' || value === '>-' || value === '>+') {
-        inMultilineValue = true;
-        continue;
-      }
-      frontmatter[key] = value;
     }
 
-    // Title: first markdown heading wins, else explicit `title:` key, else
-    // the filename without extension as a last-resort fallback.
+    // Title: first markdown heading wins (legacy markdown-frontmatter format),
+    // else explicit `title:` key in YAML, else filename as last-resort.
     const titleMatch = content.match(/^# (.+)$/m);
-    const title = titleMatch ? titleMatch[1] : (frontmatter.title || path.basename(filePath, '.md'));
+    const title =
+      titleMatch?.[1] ??
+      (typeof parsed.title === 'string' ? parsed.title : undefined) ??
+      path.basename(filePath, '.md');
 
     // ID: prefer canonical ISS-NNNN form from frontmatter, else filename.
-    const fmId = frontmatter.id?.match(/^ISS-\d+$/i)?.[0];
+    const fmId = typeof parsed.id === 'string' ? parsed.id.match(/^ISS-\d+$/i)?.[0] : undefined;
     const id = fmId ?? path.basename(filePath);
-
-    // Tags: support inline-flow YAML (`tags: [a, b]`). Multi-line array
-    // form (`tags:\n  - a\n  - b`) is out-of-scope for the simple parser.
-    let tags: string[] | undefined;
-    if (frontmatter.tags?.startsWith('[')) {
-      try {
-        // YAML inline flow allows single quotes; JSON.parse needs double.
-        tags = JSON.parse(frontmatter.tags.replace(/'/g, '"'));
-      } catch {
-        // Malformed — leave undefined rather than half-parsed garbage.
-      }
-    }
 
     return {
       id,
       title,
-      severity: (frontmatter.severity as Severity) || 'low',
-      status: frontmatter.status || 'open',
-      epic_id: frontmatter.epic_id || frontmatter.epicId,
-      priority: frontmatter.priority,
-      tags,
-      created_at: frontmatter.created_at,
-      updated_at: frontmatter.updated_at,
+      severity: (parsed.severity as Severity) || 'low',
+      status: (typeof parsed.status === 'string' ? parsed.status : undefined) || 'open',
+      epic_id:
+        (typeof parsed.epic_id === 'string' ? parsed.epic_id : undefined) ??
+        (typeof parsed.epicId === 'string' ? parsed.epicId : undefined),
+      priority: typeof parsed.priority === 'string' ? parsed.priority : undefined,
+      tags: Array.isArray(parsed.tags) ? (parsed.tags as string[]) : undefined,
+      created_at: typeof parsed.created_at === 'string' ? parsed.created_at : undefined,
+      updated_at: typeof parsed.updated_at === 'string' ? parsed.updated_at : undefined,
     };
   } catch {
     return null;
