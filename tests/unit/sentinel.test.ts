@@ -39,7 +39,11 @@ describe('Sentinel Tool', () => {
         details: 'Process memory grows unbounded',
       });
 
-      expect(result.id).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-.*\.md$/);
+      // Issue IDs migrated from ISO-timestamp filenames to sequential
+      // ISS-NNNN labels in PR #8 (feat: ISS-NNNN issue IDs in sentinel).
+      // The filename on disk follows ISS-NNNN-<slug>.md.
+      expect(result.id).toMatch(/^ISS-\d{4}$/);
+      expect(result.path).toMatch(/ISS-\d{4}-.*\.md$/);
       expect(result.timestamp).toBeValidTimestamp();
       expect(result.path).toContain('sentinel/issues');
       expect(result.status).toBe('open');
@@ -116,7 +120,9 @@ describe('Sentinel Tool', () => {
         details: 'Details here',
       });
 
-      const match = result.id.match(/Z-(.*)\.md$/);
+      // Post-PR#8 the slug lives in the filename (ISS-NNNN-<slug>.md), not
+      // in the issue id itself. Extract from result.path instead.
+      const match = result.path.match(/ISS-\d{4}-(.*)\.md$/);
       expect(match).not.toBeNull();
       const slug = match![1];
       expect(slug).toBeSafeSlug();

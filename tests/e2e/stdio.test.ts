@@ -1,11 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
-import path from 'path';
 import {
   createTestContext,
   cleanupTestContext,
   TestContext,
 } from '../utils/test-context.js';
+
+// Capture the project root at module load — createTestContext() chdir's into
+// a tmp dir before each test, which would point spawn() at a dir with no
+// node_modules/tsx and no src/. The server child would exit immediately with
+// ERR_MODULE_NOT_FOUND, leaving the test waiting on a response that never comes.
+const PROJECT_ROOT = process.cwd();
 
 interface JsonRpcRequest {
   jsonrpc: '2.0';
@@ -40,7 +45,7 @@ describe('MCP Server E2E (stdio)', () => {
   function startServer(): Promise<ChildProcess> {
     return new Promise((resolve, reject) => {
       const proc = spawn('node', ['--import', 'tsx', 'src/server.ts'], {
-        cwd: path.resolve(process.cwd()),
+        cwd: PROJECT_ROOT,
         env: {
           ...process.env,
           DECIBEL_MCP_ROOT: ctx.rootDir,
@@ -167,16 +172,15 @@ describe('MCP Server E2E (stdio)', () => {
 
     expect(response.error).toBeUndefined();
     const result = response.result as { tools: Array<{ name: string }> };
-    expect(result.tools).toHaveLength(9);
-    expect(result.tools.map((t) => t.name)).toContain(
-      'designer.record_design_decision'
-    );
-    expect(result.tools.map((t) => t.name)).toContain(
-      'sentinel.log_epic'
-    );
-    expect(result.tools.map((t) => t.name)).toContain(
-      'sentinel.resolve_epic'
-    );
+    // The MCP layer now exposes facade-level tools (e.g. `designer`, `sentinel`)
+    // and operations are invoked via an `action` parameter on the facade. Older
+    // versions exposed each operation as its own MCP tool (`designer.record_*`).
+    // Assert facade names + a lower bound on count so new facades don't churn.
+    expect(result.tools.length).toBeGreaterThanOrEqual(9);
+    const names = result.tools.map((t) => t.name);
+    expect(names).toContain('designer');
+    expect(names).toContain('sentinel');
+    expect(names).toContain('oracle');
   });
 
   it('should execute tool call via stdio', async () => {
@@ -207,9 +211,12 @@ describe('MCP Server E2E (stdio)', () => {
       id: 3,
       method: 'tools/call',
       params: {
-        name: 'designer.record_design_decision',
+        // The MCP API now routes through a facade tool with an `action` enum
+        // rather than exposing every operation as its own tool.
+        name: 'designer',
         arguments: {
-          project_id: 'e2e-test',
+          action: 'create_decision',
+          projectId: 'e2e-test',
           area: 'Testing',
           summary: 'E2E test decision',
         },
