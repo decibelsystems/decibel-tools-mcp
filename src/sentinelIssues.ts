@@ -90,7 +90,7 @@ async function ensureDir(dirPath: string): Promise<void> {
  * Safely parse YAML content that might contain multiple documents (frontmatter format).
  * Returns the first document's contents, or throws if no valid document found.
  */
-function safeParseYaml(content: string): Record<string, unknown> {
+export function safeParseYaml(content: string): Record<string, unknown> {
   // First, try simple parse (most common case)
   try {
     return parseYaml(content) as Record<string, unknown>;

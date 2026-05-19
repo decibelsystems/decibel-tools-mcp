@@ -1,0 +1,11 @@
+event_id: PROV-20260430T001316-870
+timestamp: 2026-04-30T00:13:16.870Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:epic:EPIC-0033
+reason_code: initial_creation
+summary: "Created epic: PROVENANCE-TOKENS — record tokens_in / tokens_out / model / cost on every dispatch"
+fingerprint_before: null
+fingerprint_after: sha256:ef1161e5840b5680

@@ -1,0 +1,11 @@
+event_id: PROV-20260430T003923-110
+timestamp: 2026-04-30T00:39:23.110Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-04-30T00-39-23Z-review-security-parseissuefile-follows-symlinks-de.md
+reason_code: initial_creation
+summary: "Created issue: [review/security] parseIssueFile follows symlinks (defense-in-depth)"
+fingerprint_before: null
+fingerprint_after: sha256:35a5580dc88f2765

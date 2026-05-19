@@ -1,0 +1,11 @@
+event_id: PROV-20260430T001329-194
+timestamp: 2026-04-30T00:13:29.194Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:epic:EPIC-0034
+reason_code: initial_creation
+summary: "Created epic: COST-FACADE — new cost.estimate / cost.summary / cost.trends actions"
+fingerprint_before: null
+fingerprint_after: sha256:36a172f82e7d4b13

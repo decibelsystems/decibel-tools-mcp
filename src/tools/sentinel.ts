@@ -4,6 +4,7 @@ import { getConfig, log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
 import { emitCreateProvenance } from './provenance.js';
+import { safeParseYaml } from '../sentinelIssues.js';
 
 // ============================================================================
 // Project Resolution Error
@@ -171,6 +172,20 @@ export interface IssueSummary {
   title: string;
   severity: Severity;
   status: string;
+  /**
+   * Linked epic id (e.g., "EPIC-0001") if the issue's frontmatter declares one.
+   * Surfaced via list_issues / list_epic_issues so consumers (HQ, MCP clients)
+   * can build the epic→issue relationship without a per-issue read_issue call.
+   */
+  epic_id?: string;
+  /** Priority level (low / medium / high / critical) when set. */
+  priority?: string;
+  /** Optional tags array. Parsed from inline-flow YAML (`tags: [a, b]`). */
+  tags?: string[];
+  /** ISO timestamp of issue creation. */
+  created_at?: string;
+  /** ISO timestamp of last modification. */
+  updated_at?: string;
 }
 
 export interface GetEpicIssuesOutput {
@@ -394,35 +409,73 @@ function calculateFuzzyScore(query: string, text: string): number {
   return 0;
 }
 
+/**
+ * Parse an issue file using the real YAML parser. Handles both on-disk formats
+ * the daemon writes today:
+ *
+ *   1. Markdown-style with frontmatter delimiters (createIssue):
+ *      ---
+ *      key: value
+ *      epic_id: EPIC-0001
+ *      ---
+ *      # Title
+ *      body
+ *
+ *   2. YAML-only (updateIssue, after stringifyYaml):
+ *      key: value
+ *      epic_id: EPIC-0001
+ *      description: |-
+ *        body
+ *
+ * Uses `safeParseYaml` (shared with sentinelIssues.ts) which handles single-
+ * doc and multi-doc YAML automatically. The previous ad-hoc parser was both
+ * format-fragile (dropped YAML-only files) AND vulnerable to description-body
+ * `epic_id` injection via crafted column-0 lines. The real parser closes both.
+ */
 async function parseIssueFile(filePath: string): Promise<IssueSummary | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-    if (!frontmatterMatch) return null;
 
-    const frontmatter: Record<string, string> = {};
-    for (const line of frontmatterMatch[1].split('\n')) {
-      const colonIndex = line.indexOf(':');
-      if (colonIndex > 0) {
-        const key = line.slice(0, colonIndex).trim();
-        const value = line.slice(colonIndex + 1).trim();
-        frontmatter[key] = value;
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = safeParseYaml(content);
+    } catch {
+      // safeParseYaml threw — likely the markdown body after `---` confused
+      // the multi-doc parser. Last-resort: extract just the frontmatter region
+      // manually and parse that.
+      const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      if (!fmMatch) return null;
+      try {
+        parsed = safeParseYaml(fmMatch[1]);
+      } catch {
+        return null;
       }
     }
 
-    // Extract title from first heading
+    // Title: first markdown heading wins (legacy markdown-frontmatter format),
+    // else explicit `title:` key in YAML, else filename as last-resort.
     const titleMatch = content.match(/^# (.+)$/m);
-    const title = titleMatch ? titleMatch[1] : path.basename(filePath, '.md');
+    const title =
+      titleMatch?.[1] ??
+      (typeof parsed.title === 'string' ? parsed.title : undefined) ??
+      path.basename(filePath, '.md');
 
-    // Prefer ISS-NNNN id from frontmatter; fall back to filename for legacy issues
-    const fmId = frontmatter.id?.match(/^ISS-\d+$/i)?.[0];
+    // ID: prefer canonical ISS-NNNN form from frontmatter, else filename.
+    const fmId = typeof parsed.id === 'string' ? parsed.id.match(/^ISS-\d+$/i)?.[0] : undefined;
     const id = fmId ?? path.basename(filePath);
 
     return {
       id,
       title,
-      severity: (frontmatter.severity as Severity) || 'low',
-      status: frontmatter.status || 'open',
+      severity: (parsed.severity as Severity) || 'low',
+      status: (typeof parsed.status === 'string' ? parsed.status : undefined) || 'open',
+      epic_id:
+        (typeof parsed.epic_id === 'string' ? parsed.epic_id : undefined) ??
+        (typeof parsed.epicId === 'string' ? parsed.epicId : undefined),
+      priority: typeof parsed.priority === 'string' ? parsed.priority : undefined,
+      tags: Array.isArray(parsed.tags) ? (parsed.tags as string[]) : undefined,
+      created_at: typeof parsed.created_at === 'string' ? parsed.created_at : undefined,
+      updated_at: typeof parsed.updated_at === 'string' ? parsed.updated_at : undefined,
     };
   } catch {
     return null;
@@ -922,16 +975,15 @@ export async function getEpicIssues(
 
     for (const file of issueFiles) {
       if (!file.endsWith('.md')) continue;
-
       const filePath = path.join(issuesDir, file);
-      const content = await fs.readFile(filePath, 'utf-8');
-
-      // Check if this issue belongs to the epic
-      if (content.includes(`epic_id: ${input.epic_id}`)) {
-        const issue = await parseIssueFile(filePath);
-        if (issue) {
-          issues.push(issue);
-        }
+      // Parse first, then filter on the parsed epic_id field. Previously this
+      // used a brittle `content.includes('epic_id: ${epic_id}')` substring
+      // check, which (a) matched commented-out epic_id lines, (b) didn't
+      // handle quoted values like `epic_id: "EPIC-0001"`, and (c) ran before
+      // parseIssueFile could fail and silently drop the issue regardless.
+      const issue = await parseIssueFile(filePath);
+      if (issue && issue.epic_id === input.epic_id) {
+        issues.push(issue);
       }
     }
   } catch {

@@ -1,0 +1,11 @@
+event_id: PROV-20260430T001343-751
+timestamp: 2026-04-30T00:13:43.751Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:epic:EPIC-0035
+reason_code: initial_creation
+summary: "Created epic: AGENT-PROFILES — coordinator.register({profile, facades, max_context}) + dispatch-time scope enforcement"
+fingerprint_before: null
+fingerprint_after: sha256:cf994deebda8d3c7
