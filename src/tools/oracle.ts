@@ -370,28 +370,31 @@ export async function nextActions(
   }
 
   // Registry drift check — cheap: scans parent dirs of registered projects for .decibel/ dirs not in the registry.
-  try {
-    const drift = scanForProjects();
-    if (drift.unregistered.length > 0 || drift.orphans.length > 0) {
-      const parts: string[] = [];
-      if (drift.unregistered.length > 0) {
-        const sample = drift.unregistered.slice(0, 5).map((f) => f.id).join(', ');
-        const more = drift.unregistered.length > 5 ? ` (+${drift.unregistered.length - 5} more)` : '';
-        parts.push(`${drift.unregistered.length} unregistered: ${sample}${more}`);
+  // Skip when a domain focus is set: drift is a global hint, not a per-domain action.
+  if (!input.focus) {
+    try {
+      const drift = scanForProjects();
+      if (drift.unregistered.length > 0 || drift.orphans.length > 0) {
+        const parts: string[] = [];
+        if (drift.unregistered.length > 0) {
+          const sample = drift.unregistered.slice(0, 5).map((f) => f.id).join(', ');
+          const more = drift.unregistered.length > 5 ? ` (+${drift.unregistered.length - 5} more)` : '';
+          parts.push(`${drift.unregistered.length} unregistered: ${sample}${more}`);
+        }
+        if (drift.orphans.length > 0) {
+          const sample = drift.orphans.slice(0, 3).map((o) => o.id).join(', ');
+          const more = drift.orphans.length > 3 ? ` (+${drift.orphans.length - 3} more)` : '';
+          parts.push(`${drift.orphans.length} orphaned: ${sample}${more}`);
+        }
+        actions.unshift({
+          description: `Registry drift detected (${parts.join('; ')}). Run registry.scan with apply=true to reconcile.`,
+          source: 'registry',
+          priority: 'med',
+        });
       }
-      if (drift.orphans.length > 0) {
-        const sample = drift.orphans.slice(0, 3).map((o) => o.id).join(', ');
-        const more = drift.orphans.length > 3 ? ` (+${drift.orphans.length - 3} more)` : '';
-        parts.push(`${drift.orphans.length} orphaned: ${sample}${more}`);
-      }
-      actions.unshift({
-        description: `Registry drift detected (${parts.join('; ')}). Run registry.scan with apply=true to reconcile.`,
-        source: 'registry',
-        priority: 'med',
-      });
+    } catch {
+      // Drift check is best-effort; never fail the whole next_actions call.
     }
-  } catch {
-    // Drift check is best-effort; never fail the whole next_actions call.
   }
 
   // Prioritize sentinel issues first
