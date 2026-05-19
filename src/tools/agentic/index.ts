@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
-import { toolSuccess, toolError, requireFields } from '../shared/index.js';
+import { toolSuccess, toolError, requireFields, withRunTracking } from '../shared/index.js';
 import {
   compilePack,
   renderPayload,
@@ -22,6 +22,14 @@ import {
   AgentQueueSyncInput,
   AgentQueueStatusInput,
 } from './agentQueue.js';
+import {
+  enqueueJob,
+  listJobs,
+  cancelJob,
+  EnqueueJobInput,
+  CancelJobInput,
+} from '../../agenticJobs.js';
+import { resolveProjectPaths } from '../../projectRegistry.js';
 
 // ============================================================================
 // Compile Pack Tool
@@ -297,6 +305,165 @@ export const agenticQueueStatusTool: ToolSpec = {
 };
 
 // ============================================================================
+// Dispatch / Job Queue Tools
+// ============================================================================
+// User-queued prompts that agents execute against the project. See
+// docs/AGENTIC_DISPATCH.md in the HQ repo for the 3-layer contract.
+// Distinct from queue_sync / queue_status above — those manage the agent-
+// pack-sync state machine; these manage user-dispatched job prompts.
+// ============================================================================
+
+export const agenticEnqueueTool: ToolSpec = {
+  definition: {
+    name: 'agentic_enqueue',
+    description: 'Enqueue a prompt for an agent (Claude Code, Codex, etc.) to execute against the project. Writes a YAML job file to .decibel/agentic/jobs/JOB-NNNN.yml. Agents poll via agentic.list_queue and claim jobs by editing the file. Returns the job id and queue position.',
+    annotations: {
+      title: 'Enqueue Agentic Job',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Project identifier the agent should run against. Uses default project if not specified.',
+        },
+        prompt: {
+          type: 'string',
+          description: 'The instruction the agent should execute. Written as if typed to the agent directly.',
+        },
+        createdBy: {
+          type: 'string',
+          description: 'Optional identifier of the user/actor that dispatched. Recorded for audit.',
+        },
+      },
+      required: ['prompt'],
+    },
+  },
+  handler: withRunTracking(
+    async (args: Record<string, unknown>) => {
+      try {
+        requireFields(args, 'prompt');
+        const input = args as { projectId?: string; prompt: string; createdBy?: string };
+        const projectId = resolveProjectPaths(input.projectId).id;
+        const enqueueInput: EnqueueJobInput = {
+          projectId,
+          prompt: input.prompt,
+          createdBy: input.createdBy,
+        };
+        const result = await enqueueJob(enqueueInput);
+        return toolSuccess({
+          job_id: result.jobId,
+          queue_position: result.queuePosition,
+          file_path: result.filePath,
+          project_id: projectId,
+        });
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    {
+      toolName: 'agentic_enqueue',
+      getSummary: (args, result) => {
+        const r = result as { job_id?: string };
+        const prompt = (args.prompt as string) || '';
+        const preview = prompt.length > 60 ? `${prompt.slice(0, 60)}…` : prompt;
+        return `Enqueued ${r.job_id || 'job'}: ${preview}`;
+      },
+    },
+  ),
+};
+
+export const agenticListQueueTool: ToolSpec = {
+  definition: {
+    name: 'agentic_list_queue',
+    description: 'List dispatched jobs for a project — both active (queued/claimed/running) and terminal (done/cancelled/failed). Sorted oldest-first. Returns empty array if no jobs.',
+    annotations: {
+      title: 'List Agentic Queue',
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+      },
+      required: [],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as { projectId?: string };
+      const projectId = resolveProjectPaths(input.projectId).id;
+      const jobs = await listJobs(projectId);
+      return toolSuccess({ jobs, count: jobs.length, project_id: projectId });
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+export const agenticCancelJobTool: ToolSpec = {
+  definition: {
+    name: 'agentic_cancel_job',
+    description: 'Cancel a queued or claimed dispatch job. No-op for already-terminal jobs (done / cancelled / failed). Returns the updated job state.',
+    annotations: {
+      title: 'Cancel Agentic Job',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        jobId: {
+          type: 'string',
+          description: 'The job id to cancel (e.g. "JOB-0007").',
+        },
+        job_id: {
+          type: 'string',
+          description: 'Snake-case alias for jobId.',
+        },
+      },
+      required: [],
+    },
+  },
+  handler: withRunTracking(
+    async (args: Record<string, unknown>) => {
+      try {
+        const input = args as { projectId?: string; jobId?: string; job_id?: string };
+        const projectId = resolveProjectPaths(input.projectId).id;
+        const jobId = input.jobId ?? input.job_id;
+        if (!jobId) return toolError('Missing required field: jobId');
+
+        const cancelInput: CancelJobInput = { projectId, jobId };
+        const job = await cancelJob(cancelInput);
+        return toolSuccess(job);
+      } catch (err) {
+        return toolError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    {
+      toolName: 'agentic_cancel_job',
+      getSummary: (args, result) => {
+        const r = result as { id?: string; status?: string };
+        return `Cancelled ${r.id || args.jobId || args.job_id || 'job'} → ${r.status || 'cancelled'}`;
+      },
+    },
+  ),
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
@@ -307,4 +474,7 @@ export const agenticTools: ToolSpec[] = [
   agenticGoldenEvalTool,
   agenticQueueSyncTool,
   agenticQueueStatusTool,
+  agenticEnqueueTool,
+  agenticListQueueTool,
+  agenticCancelJobTool,
 ];
