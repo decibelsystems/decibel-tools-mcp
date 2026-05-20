@@ -27,6 +27,7 @@
     "start:http": "node dist/server.js --http",
     "start:daemon": "node dist/server.js --daemon",
     "start:bridge": "node dist/server.js --bridge",
+    "agent:worker": "tsx scripts/agent-worker.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:int": "vitest run tests/integration",
