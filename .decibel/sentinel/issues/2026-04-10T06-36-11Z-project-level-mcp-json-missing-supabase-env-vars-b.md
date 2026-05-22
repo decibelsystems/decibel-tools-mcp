@@ -36,3 +36,16 @@ The global config at `~/.claude/.mcp.json` works fine — it has an explicit `en
 - `.env` (has the vars, gitignored)
 - `src/tools/voice.ts:735` — throws on missing Supabase
 - `src/tools/agentic/agentQueue.ts:109,285` — throws on missing Supabase
+
+## Proposed Fix (triage 2026-05-19)
+
+**Fix**: Recommended **Option 3** (split config):
+- `.mcp.json` (committed) — keeps `--env-file=.env` but adds a minimal `env` block with non-secret values only (`DECIBEL_PROJECT_ROOT` etc.)
+- `.mcp.local.json` (gitignored) — the actual Supabase URL + key
+- Add `.mcp.local.example.json` as a template
+- Document in README that fresh clones / worktree agents must `cp .mcp.local.example.json .mcp.local.json` and fill in values
+
+**Effort**: ~30 minutes
+**Risk**: low
+**PR shape**: 3 files (`.mcp.json`, `.gitignore`, `.mcp.local.example.json`) + README note
+**Priority**: #1 in recommended sequence — quickest unblocker; fixes fresh clones and worktree agents immediately

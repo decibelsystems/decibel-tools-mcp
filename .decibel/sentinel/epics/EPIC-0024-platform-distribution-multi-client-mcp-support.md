@@ -3,7 +3,9 @@ id: EPIC-0024
 projectId: decibel-tools-mcp
 title: Platform Distribution: Multi-Client MCP Support
 summary: Enable Decibel Tools across major AI platforms: Cursor, Replit, ChatGPT, Vercel v0, and Lovable. Phased rollout starting with local stdio platforms, then remote MCP infrastructure.
-status: planned
+status: in_progress
+status_updated_at: 2026-05-20T18:08:33.000Z
+status_evidence: "dual-transport layer present; 11 open client-enablement issues"
 priority: high
 tags: [distribution, mcp, platforms, codex, cursor, replit, chatgpt, vercel, lovable]
 owner: 

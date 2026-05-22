@@ -1,22 +1,181 @@
 objectives:
   - id: OBJ-0001
-    title: Example Objective
-    timeframe: 2026-Q1
-    owner: team
+    title: v2 Architecture Foundation
+    timeframe: 2026-H1
+    owner: core
     key_results:
-      - metric: example_metric
-        target: ">90%"
-        current: ~70%
+      - metric: facades replacing raw tools
+        target: 33 facades over 250+ tools
+        current: shipped
+      - metric: unified kernel dispatch path
+        target: 1 path serving stdio + HTTP
+        current: shipped
+  - id: OBJ-0002
+    title: Universal Client Reach
+    timeframe: 2026-H2
+    owner: core
+    key_results:
+      - metric: AI clients supported
+        target: ">=5 (Cursor, Replit, ChatGPT, v0, Lovable)"
+        current: "3"
+      - metric: VS Code extension on marketplace
+        target: live + post-launch polish complete
+        current: v0.4.1 live
+  - id: OBJ-0003
+    title: Remote Agent Operations
+    timeframe: 2026-H2
+    owner: core
+    key_results:
+      - metric: agent write queue
+        target: enqueue / dispatch / sync in production
+        current: MVP dispatch shipped
+      - metric: cloud-backed persistence
+        target: Supabase-backed roadmap + sentinel stores
+        current: in progress
+  - id: OBJ-0004
+    title: Domain Tooling & Demos
+    timeframe: 2026 ongoing
+    owner: core
+    key_results:
+      - metric: domain facades shipped
+        target: figma + deck intel
+        current: deck shipped (10 tools)
 themes:
-  - id: foundations
-    label: Foundations
-    description: Core infrastructure and tooling
-  - id: features
-    label: Features
-    description: User-facing functionality
+  - id: platform
+    label: Platform & Architecture
+    description: Core engine — kernel, facades, transports, daemon, hooks
+  - id: distribution
+    label: Distribution & Reach
+    description: Decibel usable from every major AI client and device
+  - id: agents
+    label: Agents & Cloud
+    description: Remote multi-agent operations and cloud-backed persistence
+  - id: tooling
+    label: Domain Tooling
+    description: Vertical tool suites and live demos
 milestones:
   - id: M-0001
-    label: v1.0 - Initial Release
+    label: v2.0 - Kernel & Facades
     target_date: 2026-03-01
-    epics: []
-epic_context: {}
+    epics:
+      - EPIC-0025
+      - EPIC-0026
+  - id: M-0002
+    label: v2.1 - Multi-Client Distribution
+    target_date: 2026-07-15
+    epics:
+      - EPIC-0024
+      - EPIC-0028
+      - EPIC-0032
+  - id: M-0003
+    label: v2.2 - Remote Agents & Cloud
+    target_date: 2026-09-15
+    epics:
+      - EPIC-0020
+      - EPIC-0022
+      - EPIC-0030
+  - id: M-0004
+    label: Domain Tooling
+    target_date: 2026-10-31
+    epics:
+      - EPIC-0023
+      - EPIC-0027
+      - EPIC-0029
+      - EPIC-0031
+epic_context:
+  EPIC-0025:
+    epic_id: EPIC-0025
+    theme: platform
+    objectives:
+      - OBJ-0001
+    milestone: M-0001
+    work_type: refactor
+    adrs: []
+  EPIC-0026:
+    epic_id: EPIC-0026
+    theme: platform
+    objectives:
+      - OBJ-0001
+    milestone: M-0001
+    work_type: infra
+    adrs: []
+  EPIC-0032:
+    epic_id: EPIC-0032
+    theme: platform
+    objectives:
+      - OBJ-0001
+    milestone: M-0002
+    work_type: feature
+    adrs: []
+  EPIC-0024:
+    epic_id: EPIC-0024
+    theme: distribution
+    objectives:
+      - OBJ-0002
+    milestone: M-0002
+    work_type: feature
+    adrs: []
+  EPIC-0028:
+    epic_id: EPIC-0028
+    theme: distribution
+    objectives:
+      - OBJ-0002
+    milestone: M-0002
+    work_type: feature
+    adrs: []
+  EPIC-0023:
+    epic_id: EPIC-0023
+    theme: distribution
+    objectives:
+      - OBJ-0002
+    milestone: M-0004
+    work_type: feature
+    adrs: []
+  EPIC-0022:
+    epic_id: EPIC-0022
+    theme: agents
+    objectives:
+      - OBJ-0003
+    milestone: M-0003
+    work_type: infra
+    adrs: []
+  EPIC-0030:
+    epic_id: EPIC-0030
+    theme: agents
+    objectives:
+      - OBJ-0003
+    milestone: M-0003
+    work_type: feature
+    adrs: []
+  EPIC-0020:
+    epic_id: EPIC-0020
+    theme: agents
+    objectives:
+      - OBJ-0003
+    milestone: M-0003
+    work_type: feature
+    adrs: []
+  EPIC-0027:
+    epic_id: EPIC-0027
+    theme: tooling
+    objectives:
+      - OBJ-0004
+    milestone: M-0004
+    work_type: feature
+    adrs: []
+  EPIC-0029:
+    epic_id: EPIC-0029
+    theme: tooling
+    objectives:
+      - OBJ-0004
+    milestone: M-0004
+    work_type: feature
+    adrs: []
+  EPIC-0031:
+    epic_id: EPIC-0031
+    theme: tooling
+    objectives:
+      - OBJ-0004
+    milestone: M-0004
+    work_type: experiment
+    adrs: []

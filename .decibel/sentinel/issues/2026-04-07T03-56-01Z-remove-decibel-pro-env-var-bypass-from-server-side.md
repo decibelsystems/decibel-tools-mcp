@@ -36,3 +36,20 @@ Setting `DECIBEL_PRO=1` bypasses the entire license validation system, even in p
 ## Why This Matters
 
 The license validator (Phase 8a) validates keys against Supabase with 24h cache and 72h offline grace. The env var completely sidesteps all of that — anyone who sets it gets pro for free, forever, with no validation.
+
+## Proposed Fix (triage 2026-05-19)
+
+**Fix**: At each of the 6 cited lines, replace `process.env.DECIBEL_PRO === '1' || <dev-fallback>` with a license-validator call. Keep the `NODE_ENV !== 'production'` dev fallback so local development still works; drop the env-var bypass entirely.
+- `src/kernel.ts:54` — remove env check, keep dev fallback
+- `src/tools/index.ts:47` — same
+- `src/httpServer.ts:465` (`resolveTier()`) — use validator
+- `src/httpServer.ts:661` — same
+- `src/server.ts:50` — drop the log line
+- `extension/src/proGate.ts:101` — replace env check with `devMode` setting only
+
+Also pass the config license key into `createKernel()` so stdio mode can resolve tier from `~/.decibel/config.yaml` at startup.
+
+**Effort**: ~3–4 hours
+**Risk**: medium — could break dev environments if the dev-fallback is removed accidentally
+**PR shape**: single PR touching 6 files + a regression test asserting `DECIBEL_PRO=1` alone does NOT unlock pro in production mode
+**Priority**: #3 in recommended sequence (clean security boundary)

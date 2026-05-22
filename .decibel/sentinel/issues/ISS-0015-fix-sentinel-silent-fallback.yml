@@ -1,7 +1,9 @@
 id: ISS-0015
 title: Fix Sentinel Silent Fallback
 project: decibel-tools-mcp
-status: open
+status: closed
+closed_at: 2026-05-20T00:55:20.000Z
+closed_reason: "duplicate of more-detailed ISS-0015 (sentinel-falls-back-to-decibel-mcp-data)"
 priority: high
 tags:
   - sentinel
