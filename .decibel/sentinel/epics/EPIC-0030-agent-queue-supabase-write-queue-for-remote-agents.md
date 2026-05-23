@@ -3,7 +3,9 @@ id: EPIC-0030
 projectId: decibel-tools-mcp
 title: Agent Queue — Supabase Write Queue for Remote Agents
 summary: Generic Supabase queue enabling remote agents to perform write operations (create issues, ADRs, friction logs, wishes, etc.) that get synced locally on demand. Mirrors the voice inbox pattern — Supabase as queue, local files as source of truth.
-status: planned
+status: in_progress
+status_updated_at: 2026-05-20T18:08:33.000Z
+status_evidence: "agentQueue.ts + agenticJobs.ts present; MVP dispatch shipped (PR #21)"
 priority: high
 tags: [agent-queue, supabase, infrastructure, phase-9]
 owner: 

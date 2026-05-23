@@ -1,8 +1,10 @@
-id: ISS-0016
+id: ISS-0108
 title: "HTTP /call endpoint missing most tools"
 status: open
 priority: medium
 created: 2025-12-25
+renumbered_from: ISS-0016
+renumbered_at: 2026-05-20T00:55:20.000Z
 tags:
   - httpServer
   - tech-debt
@@ -32,3 +34,17 @@ fix_options:
 
 related:
   - EPIC-0022 (cloud persistence may change this anyway)
+
+proposed_fix:
+  triage_date: 2026-05-19
+  chosen_option: "Refactor to use MCP server tool registry for HTTP /call"
+  detail: |-
+    Replace the executeDojoTool() switch in httpServer.ts with a registry
+    lookup against the same getAllTools() set the MCP transport uses. Each
+    HTTP /call request maps { name, arguments } -> kernel dispatch. Removes
+    the manual switch (matches the legacy note in CLAUDE.md).
+  effort: "~4-6 hours"
+  risk: "low — if existing /call consumers all use tool names present in the registry; grep HQ/Mother for /call callers first"
+  pr_shape: "single PR in src/httpServer.ts + regression tests for /call"
+  priority: "#4 in recommended sequence"
+  caveat: "Check EPIC-0022 (cloud persistence) status with maintainer before starting — may obsolete this."

@@ -1,7 +1,9 @@
 id: ISS-0028
 title: Voice Input for Decibel - DOJO-EXP-0001 complete
 project: decibel-tools-mcp
-status: open
+status: closed
+closed_at: 2026-05-20T00:55:20.000Z
+closed_reason: "shipped — src/tools/voice.ts present, 18/18 tests pass per body"
 priority: medium
 tags:
   - voice

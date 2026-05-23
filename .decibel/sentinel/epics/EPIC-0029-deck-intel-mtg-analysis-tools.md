@@ -3,7 +3,10 @@ id: EPIC-0029
 projectId: decibel-tools-mcp
 title: Deck Intel — MTG Analysis Tools
 summary: Enhanced the deck module from 4 basic tools to 10 analysis tools. Added format-aware deal finding, tribal/archetype type search, multi-filter price bracket queries, set EV analysis (via deck_set_stats RPC), price volatility scoring (broad scan via deck_volatility_scores RPC + single-card CV analysis), and cross-printing reprint arbitrage detection. Also switched from requiring DECK_SUPABASE_KEY to bundling the anon key (tables have public SELECT RLS).
-status: planned
+status: shipped
+status_updated_at: 2026-05-20T18:08:33.000Z
+status_evidence: "deck facade present with 10 analysis tools"
+shipped_at: 2026-05-20T18:08:33.000Z
 priority: medium
 tags: [deck, mtg, supabase, analysis]
 owner: 

@@ -2,7 +2,9 @@
 id: EPIC-0015
 title: Low Priority
 summary: Summary
-status: planned
+status: cancelled
+cancelled_at: 2026-05-20T17:55:46.000Z
+cancelled_reason: "test fixture — 2025-12-14 epic-support test batch"
 priority: low
 tags: []
 owner: 

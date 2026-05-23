@@ -371,3 +371,25 @@ We built Streamable HTTP transport (not SSE) which is actually the newer, better
 3. Write example Python client using OpenAI SDK with these endpoints
 
 ---
+### [2026-05-20 01:30:00] Roadmap Wiring Playbook — connecting orphaned epics to the roadmap
+**Category:** process | **Tags:** `roadmap`, `sentinel`, `oracle`, `epics`, `playbook`, `reusable`
+
+A repeatable procedure for fixing a Decibel project where epics exist but were never linked to the roadmap, and the roadmap itself is stale placeholder data. Full version in `docs/ROADMAP-WIRING-PLAYBOOK.md`.
+
+**Symptom:** `oracle roadmap` reports `epics_total: 0` and milestones show `0%, behind` — not because work isn't happening, but because the strategy layer can't see it. The `roadmap link_epic` step was never run.
+
+**The 6 phases (paste as one instruction to Claude):**
+1. **Audit (read-only)** — count epics, count how many are in `epic_context`, check if `roadmap.yaml` is real or scaffold, report `get_health`.
+2. **Triage epics — STOP for approval** — classify real vs fixture (timestamp clustering, generic names, duplicate titles); cancel approved fixtures with `cancelled_reason`.
+3. **Design structure — STOP for approval** — propose themes/objectives/milestones + epic→milestone mapping table; dates and groupings are the owner's call.
+4. **Write the wiring** — write `roadmap.yaml` objectives/themes/milestones + an `epic_context` entry per epic; validate all cross-references resolve.
+5. **Correct epic statuses from evidence** — `planned|in_progress|shipped` decided by code presence + linked-issue states, never by summary tone; record `status_evidence`.
+6. **Regenerate health** — run `roadmap get_health` / `oracle roadmap` to refresh `oracle/progress.yaml`.
+
+**Why the two hard stops:** Phase 2 mutates shared data on the agent's inference — the safety classifier *will* block an unapproved bulk-cancel. Phase 3 is strategic judgment only the owner holds. Every other phase is safe unattended.
+
+**Load-bearing rule:** "evidence, not guesswork" in Phase 5 — without it Claude marks epics `shipped` from optimistic summary text instead of checking the code.
+
+**Lesson:** Sentinel and Roadmap are separate facades by design (Sentinel owns epic records, Roadmap owns the epic↔objective link). The bridge tool (`roadmap link_epic`) commonly just never gets run, so the two layers silently drift apart. This playbook is the reconciliation.
+
+---

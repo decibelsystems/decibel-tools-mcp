@@ -77,3 +77,13 @@ Migration `20250124000005_mother_daemon.sql` created these tables with:
 
 - `MOTHER_DATABASE_URL` — Postgres connection string for mother tables
 - `DECIBEL_APPS=1` — enables apps-tier facades (mother, senken, deck, terminal)
+
+## Proposed Fix (triage 2026-05-19)
+
+**Fix**: Create `src/tools/mother.ts` following the `senken.ts` pattern (lazy `pg.Pool` via `MOTHER_DATABASE_URL`). Five tools — `mother_write_advice_snapshot`, `mother_propose_policy_patch`, `mother_publish_incident` (WRITE), `mother_get_advice_snapshot`, `mother_list_incidents` (READ). Register the facade in `src/facades/definitions.ts` (`name: 'mother'`, tier `apps`) and add tool registration in `src/tools/index.ts` gated by `MOTHER_DATABASE_URL` presence.
+
+**Effort**: ~1–2 days (5 tools + schema validation + tests)
+**Risk**: medium — Postgres writes, same risk class as senken; follow senken.ts parameterized-query discipline
+**PR shape**: one new module file + facade registration + tests
+**Priority**: #7 in recommended sequence (biggest scope, save for last)
+**Note**: DB tables already exist (migration `20250124000005_mother_daemon.sql`); decibel-agent side is complete.

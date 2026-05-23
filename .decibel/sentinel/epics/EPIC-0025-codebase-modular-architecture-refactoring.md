@@ -3,7 +3,10 @@ id: EPIC-0025
 projectId: decibel-tools-mcp-wip
 title: Codebase Modular Architecture Refactoring
 summary: Refactor the 3 largest monolithic files into modular, testable, maintainable architectures
-status: planned
+status: shipped
+status_updated_at: 2026-05-20T18:08:33.000Z
+status_evidence: "modular kernel/facades/transports/tools split exists; superseded by EPIC-0026"
+shipped_at: 2026-05-20T18:08:33.000Z
 priority: high
 tags: [refactoring, architecture, maintainability, testing]
 owner: 

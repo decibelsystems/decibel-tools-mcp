@@ -34,3 +34,15 @@ Low. The .yml store is parallel-but-not-used by the active MCP surface. Tests in
 ## Cross-project legacy data
 
 Per audit on 2026-04-28, .yml issue counts: senken-trading-agent=171, deck=55, decibel-tools-mcp=56, frontend_v0.2=77, machina=37, decibel-studio=24. These won't be visible via listRepoIssues until converted or until sentinel.ts learns to read .yml too.
+
+## Proposed Fix (triage 2026-05-19)
+
+**Fix**: Two-PR sequence:
+1. Port `safeParseYaml` (the multi-document parser) from `sentinelIssues.ts` into the MD side as a fallback reader, so `sentinel.ts` can list legacy `.yml` issues read-only during transition.
+2. Delete `src/sentinelIssues.ts` + remove its imports; add a one-off migration script `scripts/migrate-yml-issues.ts` that converts existing `.yml` → `.md` (preserving id + body) and run it across `.decibel/` worldwide.
+
+**Effort**: ~1 day
+**Risk**: medium — **PR #14 is a prerequisite**: PR #14 just added a `tools/sentinel.ts → ../sentinelIssues.js` import (the first cross-import between the two CRUD paths). That import must merge and then be migrated/removed before `sentinelIssues.ts` can be deleted. See ISS-0107 for the related open question about that cross-import.
+**PR shape**: PR (a) port helpers + add fallback reader; PR (b) delete YAML path + run migration
+**Priority**: #6 in recommended sequence (after PR #14 merges)
+**Blocked by**: PR #14 merge

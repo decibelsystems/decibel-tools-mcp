@@ -48,3 +48,16 @@ DX_WALLET_PASSWORD_FILE=~/.decibel/dx-tournament.pass
 - Error messages from `cast` failures do not include the private key
 - `DX_TERMINAL_PRIVATE_KEY` not passed to subprocess env in keystore mode
 - Existing tests pass, new tests cover both auth paths
+
+## Proposed Fix (triage 2026-05-19)
+
+**Fix**:
+1. Replace every `--private-key ${key}` with `--account ${DX_WALLET_ACCOUNT} --password-file ${DX_WALLET_PASSWORD_FILE}` in `src/facades/terminal.ts`.
+2. Drop `DX_TERMINAL_PRIVATE_KEY` from env handling; require `DX_WALLET_ACCOUNT` + `DX_WALLET_PASSWORD_FILE` instead (keep `--private-key` as fallback only when account is unset).
+3. Wrap `execSync` failure paths to redact arguments before they reach the error string (strip anything after `--password-file` from the shown error).
+4. Update README / `.env.example` if those mention `DX_TERMINAL_PRIVATE_KEY`.
+
+**Effort**: ~2 hours
+**Risk**: low — terminal facade has no existing tests to break
+**PR shape**: single file change (`src/facades/terminal.ts`) + docs; add tests covering both auth paths
+**Priority**: #2 in recommended sequence (small surface, real exposure)
