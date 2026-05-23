@@ -335,9 +335,19 @@ async function parseEpicFile(filePath: string): Promise<Epic | null> {
           frontmatter[key] = value
             .slice(1, -1)
             .split(',')
-            .map((s) => s.trim())
+            .map((s) => s.trim().replace(/^"(.*)"$/s, '$1'))
             .filter((s) => s.length > 0);
         } else {
+          // Strip YAML-style outer quoting. yamlScalar writes values containing
+          // '#', ':' etc. as JSON-style double-quoted strings; without this,
+          // the naive parser returns the literal "..."-wrapped string.
+          if (value.length >= 2) {
+            if (value.startsWith('"') && value.endsWith('"')) {
+              try { value = JSON.parse(value); } catch { /* keep as-is on bad escape */ }
+            } else if (value.startsWith("'") && value.endsWith("'")) {
+              value = value.slice(1, -1).replace(/''/g, "'");
+            }
+          }
           frontmatter[key] = value;
         }
       }
