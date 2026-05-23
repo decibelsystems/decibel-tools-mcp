@@ -328,6 +328,21 @@ describe('Sentinel Tool', () => {
       expect(fm.title).toBe(title);
     });
 
+    // Read-side counterpart to bug 3: the naive epic-frontmatter parser must
+    // strip the outer quotes that yamlScalar wrote, so getEpic returns the
+    // logical value (not the literal "…"-wrapped string).
+    it('getEpic dequotes yamlScalar-quoted title and summary', async () => {
+      const title = 'Phase 7: HQ rollout — Fix #42 + integrate w/ PR #99';
+      const summary = 'Track work after #100 milestone; uses tags: [a, b]';
+      const created = await logEpic({ title, summary });
+
+      const read = await getEpic({ epic_id: created.epic_id } as { epic_id: string });
+      if ('error' in read) throw new Error(`getEpic failed: ${read.error}`);
+      expect(read.epic).not.toBeNull();
+      expect(read.epic!.title).toBe(title);
+      expect(read.epic!.summary).toBe(summary);
+    });
+
     it('should include outcomes section', async () => {
       const result = await logEpic({
         title: 'Outcome Epic',
