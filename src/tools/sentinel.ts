@@ -6,6 +6,28 @@ import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '..
 import { emitCreateProvenance } from './provenance.js';
 import { safeParseYaml } from '../sentinelIssues.js';
 
+/**
+ * Quote a scalar for use as a YAML frontmatter value when the string contains
+ * characters that would otherwise change parser behaviour. Plain titles like
+ * "Fix the auth bug" pass through unchanged; values containing `#`, leading
+ * whitespace, or YAML indicator chars get JSON-style double-quoted.
+ *
+ * Without this, hand-assembled frontmatter `title: ${input.title}` silently
+ * truncates values like "Fix bug from PR #42" because YAML treats `#` as a
+ * comment indicator on read-back.
+ */
+function yamlScalar(value: string): string {
+  if (value === '') return '""';
+  // Characters that change YAML interpretation in a plain scalar.
+  const needsQuoting = /[#:{}[\],&*!|>'"%@`]/.test(value)
+    || /^[\s\-?]/.test(value)
+    || /\s$/.test(value)
+    || /^(true|false|null|yes|no|on|off|~)$/i.test(value)
+    || /^[-+]?\d/.test(value);
+  if (!needsQuoting) return value;
+  return JSON.stringify(value);
+}
+
 // ============================================================================
 // Project Resolution Error
 // ============================================================================
@@ -820,18 +842,19 @@ export async function logEpic(input: LogEpicInput): Promise<LogEpicOutput | Proj
   const owner = input.owner || '';
   const squad = input.squad || '';
 
-  // Build frontmatter
+  // Build frontmatter — use yamlScalar on free-text fields so values containing
+  // `#`, `:` etc. don't truncate on read-back (see ISS-0110 bug 3).
   const frontmatter = [
     '---',
     `id: ${epicId}`,
-    `projectId: ${resolved.id}`,
-    `title: ${input.title}`,
-    `summary: ${input.summary}`,
+    `projectId: ${yamlScalar(resolved.id)}`,
+    `title: ${yamlScalar(input.title)}`,
+    `summary: ${yamlScalar(input.summary)}`,
     `status: planned`,
     `priority: ${priority}`,
-    `tags: [${tags.join(', ')}]`,
-    `owner: ${owner}`,
-    `squad: ${squad}`,
+    `tags: [${tags.map(yamlScalar).join(', ')}]`,
+    `owner: ${yamlScalar(owner)}`,
+    `squad: ${yamlScalar(squad)}`,
     `created_at: ${timestamp}`,
     '---',
   ].join('\n');
