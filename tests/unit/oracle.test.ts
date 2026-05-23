@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { nextActions } from '../../src/tools/oracle.js';
+import fs from 'fs/promises';
+import path from 'path';
+import { nextActions, roadmapProgress, isOracleError } from '../../src/tools/oracle.js';
 import { recordDesignDecision } from '../../src/tools/designer.js';
 import { recordArchDecision } from '../../src/tools/architect.js';
 import { createIssue } from '../../src/tools/sentinel.js';
@@ -282,6 +284,110 @@ describe('Oracle Tool', () => {
 
       // Should fall back to all files
       expect(result.actions.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ============================================================================
+  // ISS-0110: roadmap reporting bug fixes
+  // ============================================================================
+
+  describe('roadmapProgress — ISS-0110 fixes', () => {
+    async function writeRoadmap(content: string): Promise<void> {
+      const dir = path.join(ctx.rootDir, '.decibel', 'architect', 'roadmap');
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, 'roadmap.yaml'), content, 'utf-8');
+    }
+
+    async function writeEpic(id: string, status: string): Promise<void> {
+      const dir = path.join(ctx.rootDir, '.decibel', 'sentinel', 'epics');
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(
+        path.join(dir, `${id}-test.md`),
+        `---\nid: ${id}\nstatus: ${status}\n---\n# ${id}\n`,
+        'utf-8'
+      );
+    }
+
+    it('bug 1: maps sentinel "shipped" status to completed', async () => {
+      await writeEpic('EPIC-0001', 'shipped');
+      await writeEpic('EPIC-0002', 'shipped');
+      await writeRoadmap(`
+objectives: []
+themes: []
+milestones:
+  - id: M-0001
+    label: Test
+    target_date: 2026-01-01
+    epics: [EPIC-0001, EPIC-0002]
+epic_context:
+  EPIC-0001: { epic_id: EPIC-0001, milestone: M-0001, work_type: feature }
+  EPIC-0002: { epic_id: EPIC-0002, milestone: M-0001, work_type: feature }
+`);
+
+      const result = await roadmapProgress({ projectId: 'proj', dryRun: true });
+      if (isOracleError(result)) throw new Error(`unexpected error: ${result.message}`);
+
+      expect(result.epics).toHaveLength(2);
+      expect(result.epics.every(e => e.status === 'completed')).toBe(true);
+      expect(result.milestones[0].epics_completed).toBe(2);
+      expect(result.milestones[0].progress_percent).toBe(100);
+      expect(result.milestones[0].status).toBe('completed');
+    });
+
+    it('bug 1: maps on_hold to blocked', async () => {
+      await writeEpic('EPIC-0001', 'on_hold');
+      await writeRoadmap(`
+objectives: []
+themes: []
+milestones:
+  - id: M-0001
+    label: Test
+    target_date: 2026-12-01
+    epics: [EPIC-0001]
+epic_context:
+  EPIC-0001: { epic_id: EPIC-0001, milestone: M-0001, work_type: feature }
+`);
+
+      const result = await roadmapProgress({ projectId: 'proj', dryRun: true });
+      if (isOracleError(result)) throw new Error(`unexpected error: ${result.message}`);
+      expect(result.epics[0].status).toBe('blocked');
+    });
+
+    it('bug 2: milestone.status=shipped overrides date-based classification', async () => {
+      // Past target date but milestone declares shipped — should be completed,
+      // not "behind".
+      await writeEpic('EPIC-0001', 'in_progress');  // would otherwise read as in_progress
+      await writeRoadmap(`
+objectives: []
+themes: []
+milestones:
+  - id: M-0001
+    label: Past-dated shipped milestone
+    target_date: 2020-01-01
+    status: shipped
+    epics: [EPIC-0001]
+epic_context:
+  EPIC-0001: { epic_id: EPIC-0001, milestone: M-0001, work_type: feature }
+`);
+
+      const result = await roadmapProgress({ projectId: 'proj', dryRun: true });
+      if (isOracleError(result)) throw new Error(`unexpected error: ${result.message}`);
+      expect(result.milestones[0].status).toBe('completed');
+    });
+
+    it('bug 4: surfaces a warning when a shadow .decibel/roadmap.yml exists', async () => {
+      await writeRoadmap('objectives: []\nthemes: []\nmilestones: []\nepic_context: {}\n');
+      // Shadow at .decibel/roadmap.yml
+      await fs.writeFile(
+        path.join(ctx.rootDir, '.decibel', 'roadmap.yml'),
+        'shadow: true\n',
+        'utf-8'
+      );
+
+      const result = await roadmapProgress({ projectId: 'proj', dryRun: true });
+      if (isOracleError(result)) throw new Error(`unexpected error: ${result.message}`);
+      expect(result.warnings).toBeDefined();
+      expect(result.warnings!.some(w => w.includes('Shadow roadmap detected'))).toBe(true);
     });
   });
 });

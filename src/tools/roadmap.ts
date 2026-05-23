@@ -35,11 +35,16 @@ export interface Theme {
   description?: string;
 }
 
+export type MilestoneStatus = 'planned' | 'in_progress' | 'shipped' | 'completed' | 'on_hold' | 'cancelled';
+
 export interface Milestone {
   id: string;
   label: string;
   target_date: string;
   epics?: string[];
+  /** Optional declared status. When 'shipped'/'completed', overrides the
+   * date-based health classification in `calculateMilestoneStatus`. */
+  status?: MilestoneStatus;
 }
 
 export interface EpicContext {

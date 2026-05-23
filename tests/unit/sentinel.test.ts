@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
+import { parse as parseYaml } from 'yaml';
 import {
   createIssue,
   listRepoIssues,
@@ -296,6 +297,35 @@ describe('Sentinel Tool', () => {
       expect(body).toContain('## Motivation');
       expect(body).toContain('- Reason 1');
       expect(body).toContain('- Reason 2');
+    });
+
+    // ISS-0110 bug 3: hand-crafted YAML frontmatter must quote values
+    // containing '#' (and other YAML indicator chars) so they round-trip
+    // through a *real* YAML parser. The naive test-helper parser doesn't
+    // interpret '#' as a comment indicator, so we use yaml.parse directly.
+    async function parseFrontmatterStrict(filePath: string): Promise<Record<string, unknown>> {
+      const content = await fs.readFile(filePath, 'utf-8');
+      const m = content.match(/^---\n([\s\S]*?)\n---/);
+      if (!m) throw new Error(`No frontmatter in ${filePath}`);
+      return parseYaml(m[1]) as Record<string, unknown>;
+    }
+
+    it('should round-trip title containing # without truncation', async () => {
+      const title = 'Fix bug from PR #42';
+      const summary = 'A # in summary too';
+      const result = await logEpic({ title, summary });
+
+      const fm = await parseFrontmatterStrict(result.path);
+      expect(fm.title).toBe(title);
+      expect(fm.summary).toBe(summary);
+    });
+
+    it('should round-trip title containing a colon without losing the suffix', async () => {
+      const title = 'Phase 6: Distribution & Reach';
+      const result = await logEpic({ title, summary: 'Summary' });
+
+      const fm = await parseFrontmatterStrict(result.path);
+      expect(fm.title).toBe(title);
     });
 
     it('should include outcomes section', async () => {
