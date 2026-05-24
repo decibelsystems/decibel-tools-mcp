@@ -152,8 +152,8 @@
         },
         "decibel.daemonUrl": {
           "type": "string",
-          "default": "http://localhost:4888",
-          "description": "URL of the Decibel daemon when useDaemon is enabled."
+          "default": "",
+          "description": "URL of the Decibel daemon when useDaemon is enabled. Leave empty to auto-discover the port from ~/.decibel/daemon.meta (falls back to http://localhost:4888)."
         },
         "decibel.autoRefresh": {
           "type": "boolean",
