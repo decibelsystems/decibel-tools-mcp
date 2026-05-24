@@ -354,6 +354,7 @@ async function executeTool(
       scope: req.headers['x-scope'] as string | undefined,
       engagementMode: req.headers['x-engagement-mode'] as string | undefined,
       userKey: req.headers['x-user-key'] as string | undefined,
+      orgId: req.headers['x-org-key'] as string | undefined,
       requestId: req.headers['x-request-id'] as string | undefined,
       tier: tierOverride,
       allowedFacades,
@@ -648,7 +649,7 @@ export async function startHttpServer(
       }
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, Accept, X-Agent-Id, X-Run-Id, X-License-Key, X-Allowed-Facades, X-Scope, X-Request-Id, X-Parent-Call-Id, X-Engagement-Mode, X-User-Key');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, Accept, X-Agent-Id, X-Run-Id, X-License-Key, X-Allowed-Facades, X-Scope, X-Request-Id, X-Parent-Call-Id, X-Engagement-Mode, X-User-Key, X-Org-Key');
     res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
     // (a) Handle preflight OPTIONS requests
@@ -1058,6 +1059,7 @@ export async function startHttpServer(
           scope: (req.headers['x-scope'] as string) || bodyContext.scope,
           engagementMode: (req.headers['x-engagement-mode'] as string) || bodyContext.engagementMode,
           userKey: (req.headers['x-user-key'] as string) || bodyContext.userKey,
+          orgId: (req.headers['x-org-key'] as string) || bodyContext.orgId,
           requestId: (req.headers['x-request-id'] as string) || bodyContext.requestId,
           allowedFacades: bodyContext.allowedFacades as unknown as string[] | undefined,
           tier,
