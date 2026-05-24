@@ -12,7 +12,15 @@ set -euo pipefail
 
 DAEMON_DIR="/Volumes/Ashitaka/Documents/GitHub/decibel-tools-mcp"
 AGENT_DIR="/Volumes/Ashitaka/Documents/GitHub/decibel-agent"
-DAEMON_PORT=4888
+# Discover the live daemon port from ~/.decibel/daemon.meta (written by the daemon),
+# falling back to the canonical default 4888 for a fresh launch.
+DAEMON_META="$HOME/.decibel/daemon.meta"
+if [ -f "$DAEMON_META" ]; then
+  DAEMON_PORT="$(python3 -c "import json; print(json.load(open('$DAEMON_META')).get('port') or 4888)" 2>/dev/null || echo 4888)"
+else
+  DAEMON_PORT=4888
+fi
+DAEMON_PORT="${DAEMON_PORT:-4888}"
 SESSION="decibel-multi"
 
 RED='\033[0;31m'
