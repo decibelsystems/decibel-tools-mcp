@@ -18,7 +18,7 @@ export class HttpAdapter implements TransportAdapter {
   async start(kernel: ToolKernel, config: TransportConfig): Promise<void> {
     const server = createMcpServer(kernel);
     this.handle = await startHttpServer(server, kernel, {
-      port: config.port || 8787,
+      port: config.port || 4888,
       host: config.host || '0.0.0.0',
       authToken: config.authToken,
       sseKeepaliveMs: config.sseKeepaliveMs,
