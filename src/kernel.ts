@@ -45,8 +45,10 @@ export interface DispatchContext {
   tier?: 'core' | 'pro' | 'apps';
   /** Engagement mode: 'suggest' | 'curate' | 'compose' */
   engagementMode?: string;
-  /** Identity of the calling user */
+  /** Identity of the calling user (Supabase access token / JWT, via X-User-Key) */
   userKey?: string;
+  /** Tenant org id (hq.orgs.id) for the multi-tenant store, via X-Org-Key */
+  orgId?: string;
   /** Request correlation ID (crypto.randomUUID) — set by client, threaded through events */
   requestId?: string;
 }
