@@ -1,0 +1,11 @@
+event_id: PROV-20260524T121627-806
+timestamp: 2026-05-24T12:16:27.806Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-05-24T12-16-27Z-user-jwt-write-identity-passthrough-x-user-key-sup.md
+reason_code: initial_creation
+summary: "Created issue: User-JWT write-identity passthrough (X-User-Key → Supabase) so RLS holds end-to-end"
+fingerprint_before: null
+fingerprint_after: sha256:d659f1faf4f06e86

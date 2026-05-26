@@ -1,0 +1,11 @@
+event_id: PROV-20260428T203237-680
+timestamp: 2026-04-28T20:32:37.680Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-04-28T20-32-37Z-registry-scan-add-first-seen-timestamp-to-findings.md
+reason_code: initial_creation
+summary: "Created issue: registry.scan: add first_seen timestamp to findings"
+fingerprint_before: null
+fingerprint_after: sha256:583071252ab56b38

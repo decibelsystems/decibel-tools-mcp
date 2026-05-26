@@ -1,0 +1,11 @@
+event_id: PROV-20260524T121614-436
+timestamp: 2026-05-24T12:16:14.436Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:epic:EPIC-0033
+reason_code: initial_creation
+summary: "Created epic: Daemon data layer: multi-tenant Supabase project-intelligence store"
+fingerprint_before: null
+fingerprint_after: sha256:c0a3f5a21af91d39

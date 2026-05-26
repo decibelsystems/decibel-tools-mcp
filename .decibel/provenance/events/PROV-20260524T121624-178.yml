@@ -1,0 +1,11 @@
+event_id: PROV-20260524T121624-178
+timestamp: 2026-05-24T12:16:24.178Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-05-24T12-16-24Z-supabasestore-impl-for-oracle-sentinel-architect-f.md
+reason_code: initial_creation
+summary: "Created issue: SupabaseStore impl for oracle/sentinel/architect/friction (org-scoped)"
+fingerprint_before: null
+fingerprint_after: sha256:53eeb68f53a17dcf
