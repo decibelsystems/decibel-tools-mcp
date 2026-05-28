@@ -354,6 +354,7 @@ async function executeTool(
       scope: req.headers['x-scope'] as string | undefined,
       engagementMode: req.headers['x-engagement-mode'] as string | undefined,
       userKey: req.headers['x-user-key'] as string | undefined,
+      orgId: req.headers['x-org-key'] as string | undefined,
       requestId: req.headers['x-request-id'] as string | undefined,
       tier: tierOverride,
       allowedFacades,
@@ -648,7 +649,7 @@ export async function startHttpServer(
       }
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, Accept, X-Agent-Id, X-Run-Id, X-License-Key, X-Allowed-Facades, X-Scope, X-Request-Id, X-Parent-Call-Id, X-Engagement-Mode, X-User-Key');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, Accept, X-Agent-Id, X-Run-Id, X-License-Key, X-Allowed-Facades, X-Scope, X-Request-Id, X-Parent-Call-Id, X-Engagement-Mode, X-User-Key, X-Org-Key');
     res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
     // (a) Handle preflight OPTIONS requests
@@ -1058,6 +1059,7 @@ export async function startHttpServer(
           scope: (req.headers['x-scope'] as string) || bodyContext.scope,
           engagementMode: (req.headers['x-engagement-mode'] as string) || bodyContext.engagementMode,
           userKey: (req.headers['x-user-key'] as string) || bodyContext.userKey,
+          orgId: (req.headers['x-org-key'] as string) || bodyContext.orgId,
           requestId: (req.headers['x-request-id'] as string) || bodyContext.requestId,
           allowedFacades: bodyContext.allowedFacades as unknown as string[] | undefined,
           tier,
@@ -2168,7 +2170,7 @@ ${authToken ? '║  Auth:     Bearer token required                             
  */
 export function parseHttpArgs(args: string[]): {
   httpMode: boolean;
-  port: number;
+  port?: number;
   authToken?: string;
   host?: string;
   sseKeepaliveMs?: number;
@@ -2177,9 +2179,14 @@ export function parseHttpArgs(args: string[]): {
 } {
   const httpMode = args.includes('--http');
   const portIndex = args.indexOf('--port');
-  // Render sets PORT env var - use it if available
-  const defaultPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 8787;
-  const port = portIndex !== -1 ? parseInt(args[portIndex + 1], 10) : defaultPort;
+  // --port flag wins; else honor PORT env (Render sets it); else leave undefined
+  // so daemonConfig's default (4888) applies downstream instead of being
+  // short-circuited by a baked-in default here. See server.ts port/host resolution.
+  const port = portIndex !== -1
+    ? parseInt(args[portIndex + 1], 10)
+    : process.env.PORT
+      ? parseInt(process.env.PORT, 10)
+      : undefined;
 
   // SECURITY: Prefer env var for auth token (CLI args visible in ps/history)
   // Fall back to --auth-token for backwards compatibility
@@ -2188,7 +2195,9 @@ export function parseHttpArgs(args: string[]): {
     (authIndex !== -1 ? args[authIndex + 1] : undefined);
 
   const hostIndex = args.indexOf('--host');
-  const host = hostIndex !== -1 ? args[hostIndex + 1] : '0.0.0.0';
+  // --host flag wins; else leave undefined so daemonConfig host (127.0.0.1, daemon
+  // mode) or the transport default applies instead of being short-circuited here.
+  const host = hostIndex !== -1 ? args[hostIndex + 1] : undefined;
 
   // SSE/Connection tuning arguments
   const keepaliveIndex = args.indexOf('--sse-keepalive');

@@ -1,0 +1,11 @@
+event_id: PROV-20260523T233249-295
+timestamp: 2026-05-23T23:32:49.295Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-05-23T23-32-49Z-daemon-clients-hardcode-port-4888-but-daemon-runs-.md
+reason_code: initial_creation
+summary: "Created issue: Daemon clients hardcode port 4888 but daemon runs on 8787 — discover from daemon.meta + reconcile default + fix sentinel action casing"
+fingerprint_before: null
+fingerprint_after: sha256:fbf3c1bd5f4833b5

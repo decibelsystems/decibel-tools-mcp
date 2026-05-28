@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -35,7 +36,7 @@ export class DecibelMcpClient {
 
     const config = vscode.workspace.getConfiguration('decibel');
     const useDaemon = config.get<boolean>('useDaemon', false);
-    const daemonUrl = config.get<string>('daemonUrl', 'http://localhost:4888');
+    const daemonUrl = this.resolveDaemonUrl(config);
 
     // Determine launch mode
     const args = [serverPath];
@@ -151,6 +152,29 @@ export class DecibelMcpClient {
     }
 
     return null;
+  }
+
+  /**
+   * Resolve the daemon URL. An explicit `decibel.daemonUrl` setting wins; otherwise
+   * discover the live port from ~/.decibel/daemon.meta (written by the daemon),
+   * mirroring HQ's vite.config. Falls back to the canonical default 4888.
+   */
+  private resolveDaemonUrl(config: vscode.WorkspaceConfiguration): string {
+    const explicit = (config.get<string>('daemonUrl', '') || '').trim();
+    if (explicit) {
+      return explicit;
+    }
+    try {
+      const metaPath = path.join(os.homedir(), '.decibel', 'daemon.meta');
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+      if (meta && typeof meta.port === 'number') {
+        this.log(`Discovered daemon port ${meta.port} from daemon.meta`);
+        return `http://localhost:${meta.port}`;
+      }
+    } catch {
+      // daemon.meta missing or unreadable — fall back to the canonical default
+    }
+    return 'http://localhost:4888';
   }
 
   /**
