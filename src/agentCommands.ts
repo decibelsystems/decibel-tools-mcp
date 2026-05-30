@@ -96,11 +96,13 @@ async function brokerSend(to: string, message: string): Promise<{ ok: boolean; e
       headers: { 'Content-Type': 'application/json' },
       // Broker contract: {from_id, to_id, text} (claude-peers broker.ts:280,
       // shared/types.ts:59 — confirmed line-by-line by the claude-peers owner).
-      // from_id="system": the broker pre-inserts a synthetic "system" peer for
-      // FK safety (broker.ts:74-78, SYSTEM_PEER_ID), so this is FK-proof even if
-      // foreign_keys is ever enabled, and matches how disconnect notices are sent.
-      // The human identity rides in `text` ("HQ · ben: ..."), not from_id.
-      body: JSON.stringify({ from_id: 'system', to_id: to, text: message }),
+      // from_id="decibel-daemon": a plainly NON-privileged relay label. Deliberately
+      // NOT "system" — a "system" sender reads to the receiving agent as a trusted/
+      // privileged directive, the OPPOSITE of the required posture (an HQ command is
+      // untrusted-channel DATA, not an auto-executed instruction). Human provenance
+      // rides in `text` ("HQ · <issuer>: ..."). FK is off in the broker so any
+      // from_id delivers; if FK is ever enabled, register decibel-daemon then.
+      body: JSON.stringify({ from_id: 'decibel-daemon', to_id: to, text: message }),
       signal: AbortSignal.timeout(3000),
     });
     const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
