@@ -40,6 +40,7 @@ import { loadConfig } from './daemonConfig.js';
 import { getLicenseValidator } from './license.js';
 import { coordGarbageCollect } from './tools/coordinator/index.js';
 import { listProjects } from './projectRegistry.js';
+import { startPresenceWriter } from './agentPresence.js';
 
 const config = getConfig();
 
@@ -207,6 +208,13 @@ async function main() {
     log(`Daemon: GC interval set to ${gcIntervalSecs}s`);
   }
 
+  // Agent-presence writer: heartbeats live claude-peers sessions to hq.agent_sessions
+  // (Plan D agent-presence domain). No-ops if SUPABASE_URL/SERVICE_KEY unset.
+  let stopPresence: () => void = () => {};
+  if (daemonMode) {
+    stopPresence = startPresenceWriter();
+  }
+
   // Start transport(s)
   if (daemonMode) {
     // Daemon always starts HTTP
@@ -225,6 +233,7 @@ async function main() {
     installShutdownHandlers(async () => {
       log('Daemon: stopping all transports...');
       if (gcInterval) clearInterval(gcInterval);
+      stopPresence();
       await Promise.all(adapters.map(a => a.stop()));
     });
   } else if (httpMode) {
