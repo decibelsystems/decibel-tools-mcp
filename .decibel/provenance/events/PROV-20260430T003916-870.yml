@@ -1,0 +1,11 @@
+event_id: PROV-20260430T003916-870
+timestamp: 2026-04-30T00:39:16.870Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-04-30T00-39-16Z-review-code-two-coexisting-issue-file-formats-cons.md
+reason_code: initial_creation
+summary: "Created issue: [review/code] Two coexisting issue file formats — consolidate to one"
+fingerprint_before: null
+fingerprint_after: sha256:889e0fc138ea37d4

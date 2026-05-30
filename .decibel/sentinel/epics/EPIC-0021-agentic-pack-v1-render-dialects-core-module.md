@@ -3,7 +3,9 @@ id: EPIC-0021
 projectId: decibel-tools-mcp
 title: Agentic Pack v1 — Render Dialects Core Module
 summary: Implement portable Render Module system that transforms canonical agent payloads into human-parseable outputs via deterministic dialects. Core abstraction: Payload is truth, Renderer is voice.
-status: planned
+status: cancelled
+cancelled_at: 2026-05-20T17:55:46.000Z
+cancelled_reason: "duplicate of EPIC-0020 (identical title, created 1.5s apart)"
 priority: high
 tags: [agentic, render, dialect, mother, avatars, portable]
 owner: ben

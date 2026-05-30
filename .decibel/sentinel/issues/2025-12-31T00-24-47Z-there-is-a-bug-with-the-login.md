@@ -1,4 +1,5 @@
 ---
+id: ISS-0076
 projectId: decibel-tools-mcp
 severity: med
 status: closed

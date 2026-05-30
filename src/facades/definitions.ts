@@ -494,8 +494,8 @@ export const proFacades: FacadeSpec[] = [
 
   {
     name: 'agentic',
-    description: 'Agentic operations: render, lint, compile, evaluation, queue sync. render to produce human-readable output from structured data; lint for code quality checks; compile_pack to bundle context for another agent; golden_eval to test agent output against known-good examples; queue_sync to replay remote agent writes locally; queue_status to check queued write results. Actions: render, lint, compile_pack, golden_eval, queue_sync, queue_status',
-    compactDescription: 'Render, lint, compile, evaluate, queue sync',
+    description: 'Agentic operations: render, lint, compile, evaluation, queue sync, and job dispatch. render produces human-readable output from structured data; lint checks code quality; compile_pack bundles context for another agent; golden_eval tests agent output against known-good examples; queue_sync replays remote agent writes locally; queue_status checks queued write results. Dispatch: enqueue writes a user prompt as a JOB-NNNN.yml file for agents to pick up; list_queue lists dispatched jobs (queued/claimed/running/done/cancelled/failed); cancel_job marks a queued job cancelled. Actions: render, lint, compile_pack, golden_eval, queue_sync, queue_status, enqueue, list_queue, cancel_job',
+    compactDescription: 'Render, lint, compile, evaluate, queue sync, dispatch',
     microEligible: false,
     tier: 'pro',
     actions: {
@@ -505,6 +505,9 @@ export const proFacades: FacadeSpec[] = [
       golden_eval: 'agentic_golden_eval',
       queue_sync: 'agentic_queue_sync',
       queue_status: 'agentic_queue_status',
+      enqueue: 'agentic_enqueue',
+      list_queue: 'agentic_list_queue',
+      cancel_job: 'agentic_cancel_job',
     },
   },
 ];

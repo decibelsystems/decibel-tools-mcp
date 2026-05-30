@@ -3,7 +3,9 @@ id: EPIC-0032
 projectId: decibel-tools-mcp
 title: Claude Code Hooks for Decibel Tool Integration
 summary: Automated Claude Code hooks that trigger Decibel tools at key development moments — session init, pre-commit, pre-push, and post-edit.
-status: planned
+status: in_progress
+status_updated_at: 2026-05-20T18:08:33.000Z
+status_evidence: "3 of 4 hook types active in .claude/settings.json (pre-commit pending)"
 priority: high
 tags: [hooks, automation, dx, guardian, sentinel, oracle, designer, architect]
 owner: Ben

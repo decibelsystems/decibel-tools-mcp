@@ -370,28 +370,31 @@ export async function nextActions(
   }
 
   // Registry drift check — cheap: scans parent dirs of registered projects for .decibel/ dirs not in the registry.
-  try {
-    const drift = scanForProjects();
-    if (drift.unregistered.length > 0 || drift.orphans.length > 0) {
-      const parts: string[] = [];
-      if (drift.unregistered.length > 0) {
-        const sample = drift.unregistered.slice(0, 5).map((f) => f.id).join(', ');
-        const more = drift.unregistered.length > 5 ? ` (+${drift.unregistered.length - 5} more)` : '';
-        parts.push(`${drift.unregistered.length} unregistered: ${sample}${more}`);
+  // Skip when a domain focus is set: drift is a global hint, not a per-domain action.
+  if (!input.focus) {
+    try {
+      const drift = scanForProjects();
+      if (drift.unregistered.length > 0 || drift.orphans.length > 0) {
+        const parts: string[] = [];
+        if (drift.unregistered.length > 0) {
+          const sample = drift.unregistered.slice(0, 5).map((f) => f.id).join(', ');
+          const more = drift.unregistered.length > 5 ? ` (+${drift.unregistered.length - 5} more)` : '';
+          parts.push(`${drift.unregistered.length} unregistered: ${sample}${more}`);
+        }
+        if (drift.orphans.length > 0) {
+          const sample = drift.orphans.slice(0, 3).map((o) => o.id).join(', ');
+          const more = drift.orphans.length > 3 ? ` (+${drift.orphans.length - 3} more)` : '';
+          parts.push(`${drift.orphans.length} orphaned: ${sample}${more}`);
+        }
+        actions.unshift({
+          description: `Registry drift detected (${parts.join('; ')}). Run registry.scan with apply=true to reconcile.`,
+          source: 'registry',
+          priority: 'med',
+        });
       }
-      if (drift.orphans.length > 0) {
-        const sample = drift.orphans.slice(0, 3).map((o) => o.id).join(', ');
-        const more = drift.orphans.length > 3 ? ` (+${drift.orphans.length - 3} more)` : '';
-        parts.push(`${drift.orphans.length} orphaned: ${sample}${more}`);
-      }
-      actions.unshift({
-        description: `Registry drift detected (${parts.join('; ')}). Run registry.scan with apply=true to reconcile.`,
-        source: 'registry',
-        priority: 'med',
-      });
+    } catch {
+      // Drift check is best-effort; never fail the whole next_actions call.
     }
-  } catch {
-    // Drift check is best-effort; never fail the whole next_actions call.
   }
 
   // Prioritize sentinel issues first
@@ -523,6 +526,8 @@ export interface RoadmapOutput {
     completed: number;
   };
   progress_file?: string;
+  /** Non-fatal warnings (e.g. shadow roadmap files detected). */
+  warnings?: string[];
 }
 
 // ============================================================================
@@ -549,6 +554,7 @@ interface Roadmap {
     label: string;
     target_date: string;
     epics?: string[];
+    status?: string;
   }>;
   epic_context: Record<string, {
     epic_id: string;
@@ -575,6 +581,33 @@ async function loadRoadmap(resolved: ResolvedProjectPaths): Promise<Roadmap | nu
   } catch {
     return null;
   }
+}
+
+/**
+ * Detect shadow roadmap files at non-canonical locations. Returns warning
+ * messages that should be surfaced in the response. The canonical location is
+ * `.decibel/architect/roadmap/roadmap.yaml`; operators sometimes accidentally
+ * create `.decibel/roadmap.yml` or `.decibel/roadmap.yaml` at the project root.
+ */
+async function detectShadowRoadmaps(resolved: ResolvedProjectPaths): Promise<string[]> {
+  const warnings: string[] = [];
+  const shadowCandidates = [
+    resolved.subPath('roadmap.yml'),
+    resolved.subPath('roadmap.yaml'),
+  ];
+  for (const shadowPath of shadowCandidates) {
+    try {
+      await fs.access(shadowPath);
+      warnings.push(
+        `Shadow roadmap detected at ${shadowPath}. Oracle reads only the canonical ` +
+        `architect/roadmap/roadmap.yaml; edits to the shadow file are ignored. ` +
+        `Migrate content or delete the shadow file.`
+      );
+    } catch {
+      // No shadow at this path — good.
+    }
+  }
+  return warnings;
 }
 
 async function loadSentinelIssues(resolved: ResolvedProjectPaths): Promise<SentinelIssue[]> {
@@ -641,11 +674,18 @@ async function loadEpicStatuses(resolved: ResolvedProjectPaths): Promise<Map<str
 }
 
 function calculateMilestoneStatus(
-  milestone: { target_date: string },
+  milestone: { target_date: string; status?: string },
   epicsCompleted: number,
   epicsTotal: number,
   epicsBlocked: number
 ): 'on_track' | 'at_risk' | 'behind' | 'completed' {
+  // Declared milestone status wins over date-based classification — if the
+  // operator marks a milestone shipped/completed, trust it even if epic-level
+  // status hasn't been updated yet.
+  if (milestone.status === 'shipped' || milestone.status === 'completed') {
+    return 'completed';
+  }
+
   if (epicsTotal > 0 && epicsCompleted === epicsTotal) {
     return 'completed';
   }
@@ -713,14 +753,17 @@ export async function roadmapProgress(
     const epicIssues = issues.filter(i => i.epic_id === epicId);
     const openIssues = epicIssues.filter(i => i.status === 'open' || i.status === 'in_progress');
 
+    // Sentinel's EpicStatus vocabulary is planned|in_progress|shipped|on_hold|cancelled.
+    // Earlier versions used completed|done|active — keep those as aliases for back-compat.
     let status: EpicStatus['status'] = 'not_started';
-    if (statusStr === 'completed' || statusStr === 'done') {
+    if (statusStr === 'shipped' || statusStr === 'completed' || statusStr === 'done') {
       status = 'completed';
-    } else if (statusStr === 'blocked') {
+    } else if (statusStr === 'blocked' || statusStr === 'on_hold') {
       status = 'blocked';
     } else if (statusStr === 'in_progress' || statusStr === 'active') {
       status = 'in_progress';
     }
+    // 'planned' and 'cancelled' fall through to 'not_started'.
 
     epics.push({
       epic_id: epicId,
@@ -793,6 +836,8 @@ export async function roadmapProgress(
     completed: milestones.filter(m => m.status === 'completed').length,
   };
 
+  const warnings = await detectShadowRoadmaps(resolved);
+
   const output: RoadmapOutput = {
     project_id: resolved.id,
     evaluated_at: new Date().toISOString(),
@@ -801,6 +846,7 @@ export async function roadmapProgress(
     epics,
     signals,
     summary,
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
 
   // Save progress file unless dry run

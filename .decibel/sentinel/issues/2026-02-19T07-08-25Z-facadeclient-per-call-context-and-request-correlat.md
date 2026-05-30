@@ -1,7 +1,10 @@
 ---
+id: ISS-0096
 projectId: decibel-tools-mcp
 severity: low
-status: open
+status: closed
+closed_at: 2026-05-20T00:57:44.000Z
+closed_reason: "verified done — commit 1398b12 + requestId threading present in kernel.ts and transports/mcp.ts"
 created_at: 2026-02-19T07:08:25.017Z
 ---
 
