@@ -2,7 +2,7 @@
 # ============================================================================
 # Decibel Claude Code hooks installer
 # ============================================================================
-# Symlinks the vendored hooks into ~/.decibel/hooks/ and registers them in
+# Copies the vendored hooks into ~/.decibel/hooks/ and registers them in
 # ~/.claude/settings.json (idempotent, backed up). Re-runnable. Requires jq.
 #
 #   SessionStart        -> session-init.sh          (daemon.meta port discovery
@@ -24,11 +24,16 @@ HOOKS=(session-init.sh issue-close-reminder.sh)
 command -v jq >/dev/null 2>&1 || { echo "error: jq is required to register hooks in $SETTINGS" >&2; exit 1; }
 
 # 1) Symlink the vendored hooks into ~/.decibel/hooks/ (repo = source of truth)
+# COPY, not symlink: these hooks are registered GLOBALLY in ~/.claude/settings.json
+# and fire for every Claude instance on the machine. A symlink into this repo's
+# working tree dangles the moment the checkout switches to a branch without hooks/
+# -> "No such file or directory" on every Bash/SessionStart call, machine-wide.
+# Copying decouples the installed hooks from branch state; re-run install.sh to update.
 mkdir -p "$DEST"
 for h in "${HOOKS[@]}"; do
-  chmod +x "$REPO_HOOKS/$h"
-  ln -sf "$REPO_HOOKS/$h" "$DEST/$h"
-  echo "linked  $DEST/$h -> $REPO_HOOKS/$h"
+  cp "$REPO_HOOKS/$h" "$DEST/$h"
+  chmod +x "$DEST/$h"
+  echo "installed  $DEST/$h  (copied from $REPO_HOOKS/$h)"
 done
 
 SI="$DEST/session-init.sh"

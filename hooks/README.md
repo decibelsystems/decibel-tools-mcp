@@ -19,9 +19,12 @@ history, review, and a one-command install. Tracks sentinel issue
 ./hooks/install.sh
 ```
 
-Symlinks both hooks into `~/.decibel/hooks/` (so this repo stays the single
-source of truth — `git pull` updates the live hooks) and registers them in
+Copies both hooks into `~/.decibel/hooks/` and registers them in
 `~/.claude/settings.json` (idempotent, backed up). Requires `jq`.
+
+> Copies, not symlinks: the hooks are registered globally and fire for every
+> Claude instance on the machine, so they must not depend on this repo's current
+> checkout/branch. Re-run `./hooks/install.sh` (e.g. after `git pull`) to update.
 
 ## Commit convention
 
