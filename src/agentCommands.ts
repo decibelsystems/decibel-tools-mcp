@@ -104,7 +104,13 @@ async function brokerSend(to: string, message: string): Promise<{ ok: boolean; e
   }
 }
 
+const TERMINAL = new Set(['done', 'failed', 'cancelled', 'expired']);
+
 async function settle(client: DbClient, id: string, patch: Record<string, unknown>): Promise<void> {
+  // Stamp completed_at on terminal transitions so HQ can show completion timing.
+  if (typeof patch.status === 'string' && TERMINAL.has(patch.status) && !('completed_at' in patch)) {
+    patch = { ...patch, completed_at: new Date().toISOString() };
+  }
   // org_id-scoped settle too — never update a row outside our authorized org.
   const { error } = await client.from('agent_commands').update(patch).eq('id', id).eq('org_id', ORG_ID);
   if (error) log(`Commands: settle ${id} failed: ${error.message}`);
