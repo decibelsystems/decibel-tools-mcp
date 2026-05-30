@@ -41,6 +41,7 @@ import { getLicenseValidator } from './license.js';
 import { coordGarbageCollect } from './tools/coordinator/index.js';
 import { listProjects } from './projectRegistry.js';
 import { startPresenceWriter } from './agentPresence.js';
+import { startCommandDispatcher } from './agentCommands.js';
 
 const config = getConfig();
 
@@ -211,8 +212,10 @@ async function main() {
   // Agent-presence writer: heartbeats live claude-peers sessions to hq.agent_sessions
   // (Plan D agent-presence domain). No-ops if SUPABASE_URL/SERVICE_KEY unset.
   let stopPresence: () => void = () => {};
+  let stopCommands: () => void = () => {};
   if (daemonMode) {
     stopPresence = startPresenceWriter();
+    stopCommands = startCommandDispatcher();
   }
 
   // Start transport(s)
@@ -234,6 +237,7 @@ async function main() {
       log('Daemon: stopping all transports...');
       if (gcInterval) clearInterval(gcInterval);
       stopPresence();
+      stopCommands();
       await Promise.all(adapters.map(a => a.stop()));
     });
   } else if (httpMode) {
