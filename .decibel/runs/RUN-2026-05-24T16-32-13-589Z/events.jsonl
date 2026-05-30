@@ -1,0 +1,2 @@
+{"ts":"2026-05-24T16:32:13.590Z","run_id":"RUN-2026-05-24T16-32-13-589Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-05-24T16:32:13.895Z","run_id":"RUN-2026-05-24T16-32-13-589Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"sentinel_close_issue","result":"success","summary":"Closed issue 2026-05-24T16-30-56Z-hook-test-auto-close-probe.md: closed"}}
