@@ -94,7 +94,10 @@ async function brokerSend(to: string, message: string): Promise<{ ok: boolean; e
     const res = await fetch(`${BROKER_URL}/send-message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from_id: 'decibel-daemon', to, message }),
+      // Broker contract: {from_id, to_id, text} — NOT {to, message}. Confirmed by
+      // probe: to_id echoes the target ("Peer <x> not found") and text is the body
+      // column (NOT NULL messages.text). A raw system HTTP caller is supported.
+      body: JSON.stringify({ from_id: 'decibel-daemon', to_id: to, text: message }),
       signal: AbortSignal.timeout(3000),
     });
     const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
