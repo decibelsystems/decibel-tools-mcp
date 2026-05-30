@@ -3,6 +3,12 @@ import path from 'path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { log } from '../config.js';
 import { resolveProjectPaths, ResolvedProjectPaths, scanForProjects } from '../projectRegistry.js';
+// Reuse sentinel's OWN canonical readers (the exact functions backing the
+// list_issues / list_epics MCP tools) so oracle reads issues + epics IDENTICALLY
+// to what sentinel reports — fixes the oracle/sentinel store-split (#4) and the
+// blank/epic-less next_actions (#20). parseIssueFile/parseEpicFile handle both
+// on-disk formats (.md frontmatter + YAML-only) and apply status filtering.
+import { listRepoIssues, listEpics } from './sentinel.js';
 
 // ============================================================================
 // Project Resolution Error
@@ -204,10 +210,9 @@ async function collectRecentFiles(
 ): Promise<FileInfo[]> {
   const allFiles: FileInfo[] = [];
 
-  // Sentinel issues from project .decibel/sentinel/issues/
-  const projectIssuesDir = resolved.subPath('sentinel', 'issues');
-  const projectIssues = await getFilesFromDir(projectIssuesDir, 'sentinel', 'project');
-  allFiles.push(...projectIssues);
+  // NOTE: sentinel issues are intentionally NOT read here anymore — next_actions
+  // now sources them via sentinel.listRepoIssues (open-only, dual-format) so it
+  // matches list_issues exactly. This collector only handles architect + designer.
 
   // Architect ADRs from project .decibel/architect/adrs/
   const projectArchitectDir = resolved.subPath('architect', 'adrs');
@@ -275,6 +280,47 @@ function generateActionDescription(file: FileInfo): string {
   return `${prefix[file.type]}: ${summary}`;
 }
 
+// Severity → action priority for sentinel issues (mirrors inferPriority).
+function issuePriority(severity?: string): Priority {
+  if (severity === 'critical' || severity === 'high') return 'high';
+  if (severity === 'med' || severity === 'medium') return 'med';
+  return 'low';
+}
+
+/**
+ * Open sentinel issues via sentinel's OWN reader (the list_issues backing fn).
+ * Returns [] on any project/read error — next_actions must never hard-fail here.
+ */
+async function fetchOpenIssues(projectId: string): Promise<Array<{ id: string; title: string; severity?: string; epic_id?: string }>> {
+  try {
+    const res = await listRepoIssues({ projectId, status: 'open' });
+    if ('issues' in res) {
+      return res.issues.map((i) => ({ id: i.id, title: i.title, severity: i.severity, epic_id: i.epic_id }));
+    }
+  } catch (err) {
+    log(`Oracle: fetchOpenIssues failed:`, err);
+  }
+  return [];
+}
+
+/**
+ * Active (non-terminal) epics via sentinel's list_epics backing fn — planned or
+ * in_progress only (shipped/cancelled/on_hold are not "next actions").
+ */
+async function fetchActiveEpics(projectId: string): Promise<Array<{ id: string; title: string; status: string; priority?: string }>> {
+  try {
+    const res = await listEpics({ projectId });
+    if ('epics' in res) {
+      return res.epics
+        .filter((e) => e.status === 'planned' || e.status === 'in_progress')
+        .map((e) => ({ id: e.id, title: e.title, status: e.status, priority: e.priority }));
+    }
+  } catch (err) {
+    log(`Oracle: fetchActiveEpics failed:`, err);
+  }
+  return [];
+}
+
 export async function nextActions(
   input: NextActionsInput
 ): Promise<NextActionsOutput | OracleError> {
@@ -289,6 +335,9 @@ export async function nextActions(
 
   const recentFiles = await collectRecentFiles(resolved);
   const allFriction = await getFrictionFiles(resolved);
+  // Issues + epics via sentinel's own readers (identical to list_issues/list_epics).
+  const openIssues = await fetchOpenIssues(resolved.id);
+  const activeEpics = await fetchActiveEpics(resolved.id);
 
   // Filter friction by project context (or include all if no specific match)
   const projectFriction = allFriction.filter(
@@ -318,10 +367,15 @@ export async function nextActions(
     global: false,
   };
 
-  if (recentFiles.length === 0 && relevantFriction.length === 0) {
+  if (
+    recentFiles.length === 0 &&
+    relevantFriction.length === 0 &&
+    openIssues.length === 0 &&
+    activeEpics.length === 0
+  ) {
     return {
       actions: [{
-        description: `No recent activity found for project ${resolved.id}. Start by recording design decisions or architecture changes.`,
+        description: `No open issues, epics, friction, or recent decisions for project ${resolved.id}. Start by creating an issue (sentinel create_issue) or logging an epic (sentinel log_epic).`,
         source: 'oracle',
         priority: 'low',
       }],
@@ -397,19 +451,34 @@ export async function nextActions(
     }
   }
 
-  // Prioritize sentinel issues first
-  const sentinelFiles = filesToProcess.filter(f => f.type === 'sentinel');
   const architectFiles = filesToProcess.filter(f => f.type === 'architect');
   const designerFiles = filesToProcess.filter(f => f.type === 'designer');
 
-  // Add sentinel issues (high priority items first)
-  for (const file of sentinelFiles.slice(0, 3)) {
+  // Add OPEN sentinel issues (high severity first) — sourced from sentinel's own
+  // list_issues reader, so this matches sentinel exactly and excludes closed work.
+  const rank: Record<Priority, number> = { high: 0, med: 1, low: 2 };
+  const sortedIssues = [...openIssues].sort(
+    (a, b) => rank[issuePriority(a.severity)] - rank[issuePriority(b.severity)]
+  );
+  for (const issue of sortedIssues.slice(0, 3)) {
     actions.push({
-      description: generateActionDescription(file),
-      source: file.path,
-      priority: inferPriority(file),
+      description: `Address issue ${issue.id}: ${issue.title}`,
+      source: issue.id,
+      priority: issuePriority(issue.severity),
       domain: 'sentinel',
-      location: file.location,
+      location: 'project',
+    });
+  }
+
+  // Add ACTIVE epics (planned / in_progress) — sourced from list_epics, so oracle
+  // and sentinel report the same epics (fixes the oracle/sentinel epic split).
+  for (const epic of activeEpics.slice(0, 2)) {
+    actions.push({
+      description: `Advance epic ${epic.id}: ${epic.title}`,
+      source: epic.id,
+      priority: epic.priority === 'high' || epic.priority === 'critical' ? 'high' : 'med',
+      domain: 'sentinel',
+      location: 'project',
     });
   }
 
