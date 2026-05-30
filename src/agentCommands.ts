@@ -94,10 +94,13 @@ async function brokerSend(to: string, message: string): Promise<{ ok: boolean; e
     const res = await fetch(`${BROKER_URL}/send-message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // Broker contract: {from_id, to_id, text} — NOT {to, message}. Confirmed by
-      // probe: to_id echoes the target ("Peer <x> not found") and text is the body
-      // column (NOT NULL messages.text). A raw system HTTP caller is supported.
-      body: JSON.stringify({ from_id: 'decibel-daemon', to_id: to, text: message }),
+      // Broker contract: {from_id, to_id, text} (claude-peers broker.ts:280,
+      // shared/types.ts:59 — confirmed line-by-line by the claude-peers owner).
+      // from_id="system": the broker pre-inserts a synthetic "system" peer for
+      // FK safety (broker.ts:74-78, SYSTEM_PEER_ID), so this is FK-proof even if
+      // foreign_keys is ever enabled, and matches how disconnect notices are sent.
+      // The human identity rides in `text` ("HQ · ben: ..."), not from_id.
+      body: JSON.stringify({ from_id: 'system', to_id: to, text: message }),
       signal: AbortSignal.timeout(3000),
     });
     const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
