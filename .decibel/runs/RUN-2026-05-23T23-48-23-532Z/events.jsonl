@@ -1,0 +1,19 @@
+{"ts":"2026-05-23T23:48:23.534Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-05-23T23:43:54Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Read","source":"hook_import"}}
+{"ts":"2026-05-23T23:43:56Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-05-23T23:44:22Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-05-23T23:44:24Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-05-23T23:44:27Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-05-23T23:44:31Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-05-23T23:44:33Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-05-23T23:44:37Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-05-23T23:44:39Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Read","source":"hook_import"}}
+{"ts":"2026-05-23T23:44:39Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-05-23T23:45:01Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-05-23T23:45:09Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-05-23T23:45:16Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-05-23T23:45:31Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-05-23T23:46:31Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-05-23T23:47:03Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-05-23T23:47:10Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-05-23T23:48:23.859Z","run_id":"RUN-2026-05-23T23-48-23-532Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"architect_createAdr","result":"success","summary":"Created ADR : Daemon binds canonical 127.0.0.1:4888; CLI arg parsing must not bake defaults that short-circuit daemonConfig"}}

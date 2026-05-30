@@ -96,3 +96,93 @@ export function serializeIssueMarkdown(projectKey: string, issue: IssueRecord): 
 
   return `${fm.join('\n')}\n\n${body}\n`;
 }
+
+// ============================================================================
+// ADR .md <-> fields (frontmatter + ## Context/## Decision/## Consequences),
+// with legacy .yml tolerance. Used by the architect importer + ArchitectStore.
+// ============================================================================
+
+export interface AdrFields {
+  source_key: string;
+  title: string;
+  status?: string;
+  context?: string;
+  decision?: string;
+  consequences?: string;
+  related_issues: string[];
+  related_epics: string[];
+  tags?: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** Normalize a related_* value: native array, JSON-encoded string, or single string → string[]. */
+function toStringArray(v: unknown): string[] {
+  if (Array.isArray(v)) return v.filter((x) => typeof x === 'string') as string[];
+  if (typeof v === 'string' && v.trim()) {
+    try {
+      const p = JSON.parse(v);
+      if (Array.isArray(p)) return p.filter((x) => typeof x === 'string') as string[];
+    } catch {
+      /* not JSON */
+    }
+    return [v];
+  }
+  return [];
+}
+
+/** Split a markdown body into its `## Section` → text map (lowercased keys). */
+function sectionMap(body: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const parts = body.split(/^##\s+/m);
+  for (let i = 1; i < parts.length; i++) {
+    const seg = parts[i];
+    const nl = seg.indexOf('\n');
+    const name = (nl === -1 ? seg : seg.slice(0, nl)).trim().toLowerCase();
+    out[name] = (nl === -1 ? '' : seg.slice(nl + 1)).trim();
+  }
+  return out;
+}
+
+/** Parse an ADR file → fields, handling new .md (frontmatter + ## sections) AND legacy .yml. */
+export function parseAdrMarkdown(filename: string, content: string): AdrFields {
+  const source_key = filename.replace(/\.(md|ya?ml)$/i, '');
+  if (/\.ya?ml$/i.test(filename)) {
+    const y = (parseYaml(content) as Record<string, unknown>) ?? {};
+    return {
+      source_key,
+      title: asString(y.title) ?? source_key,
+      status: asString(y.status),
+      context: asString(y.context),
+      decision: asString(y.decision),
+      consequences: asString(y.consequences),
+      related_issues: toStringArray(y.related_issues),
+      related_epics: toStringArray(y.related_epics),
+      tags: Array.isArray(y.tags) ? (y.tags.filter((t) => typeof t === 'string') as string[]) : undefined,
+      created_at: asString(y.created_at),
+      updated_at: asString(y.updated_at),
+    };
+  }
+  let fm: Record<string, unknown> = {};
+  let body = content;
+  const m = content.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (m) {
+    try { fm = (parseYaml(m[1]) as Record<string, unknown>) ?? {}; } catch { fm = {}; }
+    body = content.slice(m[0].length);
+  }
+  const heading = body.match(/^#\s+(.+)$/m);
+  const sections = sectionMap(body);
+  return {
+    source_key,
+    title: asString(fm.title) ?? (heading ? heading[1].trim() : source_key),
+    status: asString(fm.status),
+    context: sections['context'] || undefined,
+    decision: sections['decision'] || undefined,
+    consequences: sections['consequences'] || undefined,
+    related_issues: toStringArray(fm.related_issues),
+    related_epics: toStringArray(fm.related_epics),
+    tags: Array.isArray(fm.tags) ? (fm.tags.filter((t) => typeof t === 'string') as string[]) : undefined,
+    created_at: asString(fm.created_at),
+    updated_at: asString(fm.updated_at),
+  };
+}
