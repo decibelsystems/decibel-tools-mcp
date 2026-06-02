@@ -1,8 +1,17 @@
 {
-    "mcpServers": {
-      "decibel-tools": {
-        "command": "node",
-        "args": ["--env-file=.env", "dist/server.js"]
+  "mcpServers": {
+    "decibel-tools": {
+      "command": "node",
+      "args": ["--env-file=.env", "dist/server.js"],
+      "env": {
+        "SUPABASE_URL": "${SUPABASE_URL:-}",
+        "SUPABASE_ANON_KEY": "${SUPABASE_ANON_KEY:-}",
+        "SUPABASE_SERVICE_KEY": "${SUPABASE_SERVICE_KEY:-}",
+        "MOTHER_DATABASE_URL": "${MOTHER_DATABASE_URL:-}",
+        "SENKEN_DATABASE_URL": "${SENKEN_DATABASE_URL:-}",
+        "DECIBEL_ENV": "${DECIBEL_ENV:-dev}",
+        "DECIBEL_ORG": "${DECIBEL_ORG:-default}"
       }
     }
   }
+}
