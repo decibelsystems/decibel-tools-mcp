@@ -2,7 +2,9 @@
 id: ISS-0102
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: closed
+closed_at: 2026-06-02T19:33:21.000Z
+closed_reason: "fixed: .mcp.json env block with ${VAR:-} substitution + .env.example documents all backend env vars"
 created_at: 2026-04-10T06:36:11.312Z
 ---
 

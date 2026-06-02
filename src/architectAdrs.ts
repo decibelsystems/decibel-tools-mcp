@@ -118,8 +118,10 @@ function parseSections(body: string): Record<string, string> {
 /**
  * Parse an ADR file into a uniform record, handling BOTH the new markdown shape
  * (frontmatter + ## Context/## Decision/## Consequences) AND legacy .yml ADRs.
+ * Exported so tests and external readers can assert against the canonical
+ * uniform shape rather than having to know which on-disk format produced the file.
  */
-function parseAdrContent(filename: string, content: string): Record<string, unknown> {
+export function parseAdrContent(filename: string, content: string): Record<string, unknown> {
   if (/\.ya?ml$/i.test(filename)) {
     return (parseYaml(content) as Record<string, unknown>) ?? {};
   }
