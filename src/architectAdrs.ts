@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { parse as parseYaml } from 'yaml';
 import { log } from './config.js';
 import { getWritePath, getAllReadPaths, readFilesFromBothPaths } from './decibelPaths.js';
 
@@ -85,7 +85,7 @@ async function getNextAdrNumber(projectId: string): Promise<number> {
     try {
       const files = await fs.readdir(adrsDir);
       for (const file of files) {
-        if (!file.endsWith('.yml') && !file.endsWith('.yaml')) continue;
+        if (!/\.(ya?ml|md)$/i.test(file)) continue;
         const match = file.match(/^ADR-(\d+)/i);
         if (match) {
           const num = parseInt(match[1], 10);
@@ -98,6 +98,55 @@ async function getNextAdrNumber(projectId: string): Promise<number> {
   }
 
   return maxNum + 1;
+}
+
+/**
+ * Split a markdown body into its `## Section` → text map (lowercased keys).
+ */
+function parseSections(body: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const parts = body.split(/^##\s+/m);
+  for (let i = 1; i < parts.length; i++) {
+    const seg = parts[i];
+    const nl = seg.indexOf('\n');
+    const name = (nl === -1 ? seg : seg.slice(0, nl)).trim().toLowerCase();
+    out[name] = (nl === -1 ? '' : seg.slice(nl + 1)).trim();
+  }
+  return out;
+}
+
+/**
+ * Parse an ADR file into a uniform record, handling BOTH the new markdown shape
+ * (frontmatter + ## Context/## Decision/## Consequences) AND legacy .yml ADRs.
+ */
+function parseAdrContent(filename: string, content: string): Record<string, unknown> {
+  if (/\.ya?ml$/i.test(filename)) {
+    return (parseYaml(content) as Record<string, unknown>) ?? {};
+  }
+  let fm: Record<string, unknown> = {};
+  let body = content;
+  const m = content.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (m) {
+    try { fm = (parseYaml(m[1]) as Record<string, unknown>) ?? {}; } catch { fm = {}; }
+    body = content.slice(m[0].length);
+  }
+  const heading = body.match(/^#\s+(.+)$/m);
+  const sections = parseSections(body);
+  const idFromName = path.basename(filename).match(/^ADR-\d+/i)?.[0];
+  return {
+    id: fm.id ?? idFromName ?? path.basename(filename, path.extname(filename)),
+    scope: fm.scope ?? 'project',
+    project: fm.project ?? fm.projectId,
+    title: fm.title ?? (heading ? heading[1].trim() : '(untitled)'),
+    status: fm.status ?? 'accepted',
+    created_at: fm.created_at,
+    updated_at: fm.updated_at,
+    context: sections['context'] ?? '',
+    decision: sections['decision'] ?? '',
+    consequences: sections['consequences'] ?? '',
+    related_issues: fm.related_issues,
+    related_epics: fm.related_epics,
+  };
 }
 
 // ============================================================================
@@ -126,40 +175,48 @@ export async function createProjectAdr(input: AdrInput): Promise<AdrOutput> {
   const nextNum = await getNextAdrNumber(projectId);
   const id = formatAdrId(nextNum);
 
-  // Build filename
+  // Build filename — unified .md (frontmatter metadata + ## prose sections).
+  // Legacy ADR-*.yml stays readable (see parseAdrContent); new ADRs are markdown.
   const slug = slugify(title);
-  const filename = `${id}-${slug}.yml`;
+  const filename = `${id}-${slug}.md`;
   const filePath = path.join(adrsDir, filename);
 
-  // Build YAML content
   const now = new Date().toISOString();
-  const yamlObj: Record<string, unknown> = {
-    id,
-    scope: 'project',
-    project: projectId,
-    title,
-    status: 'accepted',
-    created_at: now,
-    updated_at: now,
-    context,
-    decision,
-    consequences,
-  };
-
+  const fmLines = [
+    '---',
+    `id: ${id}`,
+    `projectId: ${projectId}`,
+    `status: accepted`,
+    `created_at: ${now}`,
+    `updated_at: ${now}`,
+  ];
   if (relatedIssues && relatedIssues.length > 0) {
-    yamlObj.related_issues = relatedIssues;
+    fmLines.push(`related_issues: [${relatedIssues.join(', ')}]`);
   }
-
   if (relatedEpics && relatedEpics.length > 0) {
-    yamlObj.related_epics = relatedEpics;
+    fmLines.push(`related_epics: [${relatedEpics.join(', ')}]`);
   }
+  fmLines.push('---');
 
-  const yamlContent = stringifyYaml(yamlObj, {
-    lineWidth: 0, // Don't wrap lines
-  });
+  const body = [
+    `# ${title}`,
+    '',
+    '## Context',
+    '',
+    context,
+    '',
+    '## Decision',
+    '',
+    decision,
+    '',
+    '## Consequences',
+    '',
+    consequences,
+  ].join('\n');
 
-  // Write file
-  await fs.writeFile(filePath, yamlContent, 'utf-8');
+  const content = `${fmLines.join('\n')}\n\n${body}\n`;
+
+  await fs.writeFile(filePath, content, 'utf-8');
   log(`architectAdrs: Created ADR at ${filePath}`);
 
   return {
@@ -177,13 +234,13 @@ export async function listProjectAdrs(projectId: string): Promise<Array<{
   status: string;
   filename: string;
 }>> {
-  const files = await readFilesFromBothPaths(projectId, ADRS_SUBPATH, ['.yml', '.yaml']);
+  const files = await readFilesFromBothPaths(projectId, ADRS_SUBPATH, ['.yml', '.yaml', '.md']);
   const adrs: Array<{ id: string; title: string; status: string; filename: string }> = [];
 
   for (const { filePath } of files) {
     try {
       const content = await fs.readFile(filePath, 'utf-8');
-      const parsed = parseYaml(content) as Record<string, unknown>;
+      const parsed = parseAdrContent(path.basename(filePath), content);
       adrs.push({
         id: (parsed.id as string) ?? path.basename(filePath, path.extname(filePath)),
         title: (parsed.title as string) ?? '(untitled)',
@@ -206,14 +263,14 @@ export async function readProjectAdr(
   projectId: string,
   adrId: string,
 ): Promise<Record<string, unknown> | null> {
-  const files = await readFilesFromBothPaths(projectId, ADRS_SUBPATH, ['.yml', '.yaml']);
+  const files = await readFilesFromBothPaths(projectId, ADRS_SUBPATH, ['.yml', '.yaml', '.md']);
   const normalizedId = adrId.toUpperCase();
 
   for (const { filePath } of files) {
     const basename = path.basename(filePath).toUpperCase();
     if (basename.startsWith(normalizedId)) {
       const content = await fs.readFile(filePath, 'utf-8');
-      return parseYaml(content) as Record<string, unknown>;
+      return parseAdrContent(path.basename(filePath), content);
     }
   }
 

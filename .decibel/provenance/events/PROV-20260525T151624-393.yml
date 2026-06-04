@@ -1,0 +1,11 @@
+event_id: PROV-20260525T151624-393
+timestamp: 2026-05-25T15:16:24.393Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-05-25T15-16-24Z-sentinel-log-epic-renders-array-fields-char-per-li.md
+reason_code: initial_creation
+summary: "Created issue: sentinel log_epic renders array fields char-per-line (corrupts epic .md; can hard-stop the calling agent)"
+fingerprint_before: null
+fingerprint_after: sha256:da93e0f98792460b
