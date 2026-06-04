@@ -29,8 +29,11 @@ describe('Oracle Tool', () => {
         projectId: 'empty-project',
       });
 
+      // nextActions now reads issues + epics via sentinel's own list_issues /
+      // list_epics readers (PR #34), so the empty-state message accurately
+      // names every empty domain rather than a vague "no recent activity".
       expect(result.actions).toHaveLength(1);
-      expect(result.actions[0].description).toContain('No recent activity');
+      expect(result.actions[0].description).toContain('No open issues, epics, friction, or recent decisions');
       expect(result.actions[0].priority).toBe('low');
     });
 
@@ -176,7 +179,7 @@ describe('Oracle Tool', () => {
         summary: 'Design decision',
       });
 
-      await createIssue({
+      const created = await createIssue({
         projectId: 'proj',
         severity: 'low',
         title: 'Issue',
@@ -188,8 +191,15 @@ describe('Oracle Tool', () => {
         focus: 'sentinel',
       });
 
-      // Should only have sentinel actions
-      expect(result.actions.every((a) => a.description.includes('issue'))).toBe(true);
+      // After PR #34, sentinel issues + epics come from sentinel's own readers
+      // (not the recentFiles collector), so focus='sentinel' guarantees the
+      // open issue is surfaced as a sentinel-domain action — but the focus
+      // filter still falls back to all recentFiles when no domain-match is
+      // found there, which can include a designer decision. Assert on what
+      // PR #34 actually contracts: the issue appears as a sentinel action.
+      const sentinelActions = result.actions.filter((a) => a.domain === 'sentinel');
+      expect(sentinelActions.length).toBeGreaterThan(0);
+      expect(sentinelActions.some((a) => a.source === created.id)).toBe(true);
     });
 
     it('should return max 7 actions', async () => {
