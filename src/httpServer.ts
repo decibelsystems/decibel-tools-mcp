@@ -78,6 +78,12 @@ let startedAt: number = 0;
 let sseConnectionCount = 0;
 let agentRegistry: AgentRegistry | undefined;
 let daemonConfig: DaemonConfig | undefined;
+// Mirrored from startHttpServer options so module-scoped executeTool can reason
+// about the connection's trust boundary (the 127.0.0.1 daemon bind vs a
+// network-exposed --http server) and whether auth is enforced. Used by the
+// queue-write authorization decoupling (principal, not label).
+let serverIsDaemon = false;
+let serverAuthToken: string | undefined;
 
 // ============================================================================
 // Security: Body Size Limit
@@ -340,18 +346,32 @@ async function executeTool(
     const headerAgentId = req?.headers['x-agent-id'] as string | undefined;
 
     // Queue detection: if this is a write call from a remote agent, queue instead of execute.
+    //
+    // AUTHORIZATION DECOUPLING (sec review 2026-06-07, issue B / confused-deputy):
     // queueForAgent writes to agent_queue via SERVICE_ROLE (bypassing RLS) with
-    // project_id + created_by taken from the request. So we ONLY queue for an agent
-    // this daemon actually KNOWS — one currently registered in the agent registry,
-    // or pre-declared in daemon config. A caller-invented X-Agent-Id (e.g. another
-    // org's agent id) does NOT match → it falls through to normal dispatch (tier +
-    // facade checks apply) instead of getting a free cross-tenant service-role write.
-    // (Sec review 2026-06-04.)
+    // created_by = agentId. That is a PRIVILEGED side effect, so the agent identity
+    // MUST come from an authenticated PRINCIPAL of the connection — never a
+    // caller-supplied X-Agent-Id label (which anyone can set, and — via the
+    // unauthenticated /connect — even pre-register, so registry membership is NOT
+    // an authenticated identity). The trust boundary differs by mode:
+    //   - localhost daemon (serverIsDaemon): the 127.0.0.1 bind IS the principal
+    //     boundary — only local processes reach it. A local process naming an
+    //     agent_id is acceptable for a local-sync write. Keep the known-agent check
+    //     as defense-in-depth.
+    //   - hosted/--http (network-exposed): the principal is the bound auth token.
+    //     A queue write is allowed ONLY if the request authenticated (serverAuthToken
+    //     set AND this request passed it — it reached here past the auth gate). With
+    //     no auth token configured, there is NO authenticated principal, so refuse to
+    //     do a service-role write on a spoofable label; fall through to normal
+    //     dispatch (tier/facade checks) instead.
     const agentIsKnown =
       !!headerAgentId &&
       ((agentRegistry?.get(headerAgentId) !== undefined) ||
         daemonConfig?.agents?.[headerAgentId] !== undefined);
-    if (headerAgentId && agentIsKnown && shouldQueueForAgent(tool, args, headerAgentId)) {
+    const principalAuthorizesQueueWrite = serverIsDaemon
+      ? agentIsKnown                       // local bind = principal; known-agent is DiD
+      : !!serverAuthToken && agentIsKnown; // hosted: require an authenticated request
+    if (headerAgentId && principalAuthorizesQueueWrite && shouldQueueForAgent(tool, args, headerAgentId)) {
       const parsed = parseToolCall(tool, args)!;
       const { action: _action, ...queueArgs } = args;
       return await queueForAgent(parsed.facade, parsed.action, queueArgs, headerAgentId, (args.projectId as string) || 'default');
@@ -600,6 +620,8 @@ export async function startHttpServer(
   startedAt = Date.now();
   agentRegistry = optAgentRegistry;
   daemonConfig = optDaemonConfig;
+  serverIsDaemon = isDaemon;
+  serverAuthToken = authToken;
   log(`HTTP: Using kernel with ${kernel.toolCount} tools`);
 
   // Rate limiter (clean up stale entries every 60s)
@@ -774,8 +796,16 @@ export async function startHttpServer(
     if (path === '/events' && req.method === 'GET') {
       // AUTH BEFORE DATA: /events returns operational telemetry (agent ids, tool
       // names, run/request ids, timestamps, error strings). It sits above the main
-      // auth gate, so when an auth token is configured this route must enforce it
-      // itself — otherwise the log leaks unauthenticated (sec review 2026-06-04).
+      // auth gate, so it must enforce auth itself (sec review 2026-06-04/06-07):
+      //   - hosted (--http) with no token → fail closed (no authenticated principal);
+      //   - any mode with a token → require it.
+      if (!isDaemon && !authToken) {
+        sendJson(res, 401, wrapError(
+          'This endpoint requires authentication. Hosted (--http) mode must be started with DECIBEL_AUTH_TOKEN set.',
+          'AUTH_NOT_CONFIGURED',
+        ));
+        return;
+      }
       if (authToken) {
         const authHeader = req.headers.authorization;
         if (!authHeader || !timingSafeTokenCompare(authHeader, `Bearer ${authToken}`)) {
@@ -876,6 +906,22 @@ export async function startHttpServer(
         path === '/oauth/register') {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
+      return;
+    }
+
+    // HOSTED FAIL-CLOSED (sec review 2026-06-07, issue A): in --http (non-daemon)
+    // mode the server is network-exposed. If no auth token is configured there is
+    // NO authenticated principal, so every route that reaches this gate (the
+    // sensitive surface — /call, /connect, /batch, /mcp, /events, etc.; the public
+    // infra routes /, /health, /docs, /tools-html, /openapi, OAuth already returned
+    // above) MUST be refused rather than served open. In localhost daemon mode the
+    // 127.0.0.1 bind is the boundary, so an unset token stays allowed there.
+    if (!isDaemon && !authToken) {
+      log('HTTP: refusing request — hosted mode requires DECIBEL_AUTH_TOKEN');
+      sendJson(res, 401, wrapError(
+        'This endpoint requires authentication. Hosted (--http) mode must be started with DECIBEL_AUTH_TOKEN set.',
+        'AUTH_NOT_CONFIGURED',
+      ));
       return;
     }
 
