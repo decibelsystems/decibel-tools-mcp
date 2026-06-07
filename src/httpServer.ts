@@ -717,6 +717,25 @@ export async function startHttpServer(
       return;
     }
 
+    // HOSTED FAIL-CLOSED, checked EARLY (before the rate limiter) so an
+    // unauthenticated hosted caller can't consume/poison the rate-limit map or any
+    // downstream state before being refused. Public infra routes stay open so
+    // health/landing/discovery keep working; everything else needs auth in hosted
+    // (--http) mode. (Sec review 2026-06-07; the main gate below still enforces the
+    // token when one IS configured.)
+    const PUBLIC_HOSTED_ROUTES = new Set([
+      '/', '/health', '/ready', '/docs', '/tools', '/openapi.yaml', '/openapi.json',
+      '/.well-known/oauth-authorization-server', '/.well-known/openid-configuration',
+      '/oauth/authorize', '/oauth/token', '/oauth/register',
+    ]);
+    if (!isDaemon && !authToken && !PUBLIC_HOSTED_ROUTES.has(path)) {
+      sendJson(res, 401, wrapError(
+        'This endpoint requires authentication. Hosted (--http) mode must be started with DECIBEL_AUTH_TOKEN set.',
+        'AUTH_NOT_CONFIGURED',
+      ));
+      return;
+    }
+
     // Rate limiting (check before auth to prevent brute force)
     const clientIp = (req.socket.remoteAddress || '127.0.0.1').replace('::ffff:', '');
     const reqAgentId = req.headers['x-agent-id'] as string | undefined;
