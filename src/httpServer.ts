@@ -150,6 +150,20 @@ function timingSafeTokenCompare(provided: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
+/**
+ * True only for genuine localhost origins. Parses the Origin URL and compares the
+ * HOST exactly (localhost / 127.0.0.1 / [::1]) — NOT a startsWith prefix, which
+ * `https://localhost.evil.com` and `http://127.0.0.1.evil.com` both defeat.
+ */
+function isLocalhostOrigin(origin: string): boolean {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
 // ============================================================================
 // Version Info
 // ============================================================================
@@ -325,8 +339,19 @@ async function executeTool(
     // Extract agent context from HTTP headers
     const headerAgentId = req?.headers['x-agent-id'] as string | undefined;
 
-    // Queue detection: if this is a write call from a remote agent, queue instead of execute
-    if (headerAgentId && shouldQueueForAgent(tool, args, headerAgentId)) {
+    // Queue detection: if this is a write call from a remote agent, queue instead of execute.
+    // queueForAgent writes to agent_queue via SERVICE_ROLE (bypassing RLS) with
+    // project_id + created_by taken from the request. So we ONLY queue for an agent
+    // this daemon actually KNOWS — one currently registered in the agent registry,
+    // or pre-declared in daemon config. A caller-invented X-Agent-Id (e.g. another
+    // org's agent id) does NOT match → it falls through to normal dispatch (tier +
+    // facade checks apply) instead of getting a free cross-tenant service-role write.
+    // (Sec review 2026-06-04.)
+    const agentIsKnown =
+      !!headerAgentId &&
+      ((agentRegistry?.get(headerAgentId) !== undefined) ||
+        daemonConfig?.agents?.[headerAgentId] !== undefined);
+    if (headerAgentId && agentIsKnown && shouldQueueForAgent(tool, args, headerAgentId)) {
       const parsed = parseToolCall(tool, args)!;
       const { action: _action, ...queueArgs } = args;
       return await queueForAgent(parsed.facade, parsed.action, queueArgs, headerAgentId, (args.projectId as string) || 'default');
@@ -497,8 +522,13 @@ async function resolveTier(
   req: IncomingMessage,
   configLicenseKey?: string,
 ): Promise<'core' | 'pro' | 'apps'> {
-  // Dev mode bypass
-  if (process.env.DECIBEL_PRO === '1' || process.env.NODE_ENV !== 'production') {
+  // Dev mode bypass — EXPLICIT opt-in only. Previously this also fired on
+  // `NODE_ENV !== 'production'`, which fails OPEN: the default for
+  // `node dist/server.js --http`, most containers, and Render/Heroku is an unset
+  // NODE_ENV, so every unauthenticated hosted caller silently got 'pro'/'apps'.
+  // The request-time tier boundary must fail CLOSED to 'core' unless an operator
+  // explicitly opts in via DECIBEL_PRO=1. (Sec review 2026-06-04, ISS tier-gating.)
+  if (process.env.DECIBEL_PRO === '1') {
     return 'pro';
   }
 
@@ -641,12 +671,18 @@ export async function startHttpServer(
     if (isMcpRoute || !isDaemon) {
       res.setHeader('Access-Control-Allow-Origin', '*');
     } else {
-      // Daemon mode: restrict REST endpoints to localhost origins
+      // Daemon mode: restrict REST endpoints to localhost origins.
+      // EXACT host match — a prefix/startsWith check is bypassable by an attacker
+      // origin like `https://localhost.evil.com` or `http://127.0.0.1.evil.com`
+      // (both startWith an allowed value), which would let a malicious page read
+      // localhost daemon data cross-origin. Parse the origin and compare host.
       const origin = req.headers.origin || '';
-      const localhostOrigins = ['http://localhost', 'http://127.0.0.1', 'https://localhost', 'https://127.0.0.1'];
-      if (localhostOrigins.some(lo => origin.startsWith(lo)) || !origin) {
-        res.setHeader('Access-Control-Allow-Origin', origin || 'http://localhost');
+      if (!origin) {
+        // Non-CORS (curl, same-origin) — no ACAO needed.
+      } else if (isLocalhostOrigin(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
       }
+      // else: untrusted origin → no ACAO header (browser blocks the read).
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, Accept, X-Agent-Id, X-Run-Id, X-License-Key, X-Allowed-Facades, X-Scope, X-Request-Id, X-Parent-Call-Id, X-Engagement-Mode, X-User-Key, X-Org-Key');
@@ -693,8 +729,9 @@ export async function startHttpServer(
     // Health check at /health too
     if (path === '/health') {
       const uptimeMs = Date.now() - startedAt;
-      // Determine pro status from config license key
-      const proEnabled = process.env.DECIBEL_PRO === '1' || process.env.NODE_ENV !== 'production';
+      // Determine pro status from config license key. Explicit opt-in only —
+      // do NOT infer from NODE_ENV (fails open on hosted; see resolveTier).
+      const proEnabled = process.env.DECIBEL_PRO === '1';
       let licenseTier: string = proEnabled ? 'pro' : 'core';
       if (configLicenseKey && !proEnabled) {
         const cached = getLicenseValidator().getCachedResult(configLicenseKey);
@@ -735,6 +772,17 @@ export async function startHttpServer(
 
     // GET /events — query dispatch event log (dispatch.jsonl)
     if (path === '/events' && req.method === 'GET') {
+      // AUTH BEFORE DATA: /events returns operational telemetry (agent ids, tool
+      // names, run/request ids, timestamps, error strings). It sits above the main
+      // auth gate, so when an auth token is configured this route must enforce it
+      // itself — otherwise the log leaks unauthenticated (sec review 2026-06-04).
+      if (authToken) {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !timingSafeTokenCompare(authHeader, `Bearer ${authToken}`)) {
+          sendJson(res, 401, wrapError('Unauthorized', 'UNAUTHORIZED'));
+          return;
+        }
+      }
       const dispatchLogPath = join(
         process.env.HOME || '~', '.decibel', 'logs', 'dispatch.jsonl'
       );
