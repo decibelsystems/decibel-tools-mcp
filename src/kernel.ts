@@ -165,6 +165,20 @@ export async function createKernel(): Promise<ToolKernel> {
 
   const facadeMap = new Map(facades.map(f => [f.name, f]));
 
+  // Reverse map: internal tool name → owning facade (name + tier). Built from each
+  // facade's declared `actions` (action → internal tool), so tier enforcement on a
+  // DIRECT tool call is exact. The previous guard inferred the facade from
+  // `toolName.split('_')[0]`, which silently failed for pro tools whose names don't
+  // start with their facade name (e.g. `kling_generate_video` under the `studio`
+  // facade → prefix `kling` ≠ any facade → guard skipped → pro tool ran for a
+  // core-tier caller). (Sec review 2026-06-04.)
+  const toolToFacade = new Map<string, { name: string; tier: FacadeSpec['tier'] }>();
+  for (const f of facades) {
+    for (const toolName of Object.values(f.actions)) {
+      toolToFacade.set(toolName, { name: f.name, tier: f.tier });
+    }
+  }
+
   // Validate all facade actions point to real tools
   const missing = validateFacades(facades, toolMap);
   if (missing.length > 0) {
@@ -234,15 +248,16 @@ export async function createKernel(): Promise<ToolKernel> {
           isError: true,
         };
       }
-      // Also check direct tool calls that map to pro facades
+      // Also check direct INTERNAL tool calls that belong to pro/apps facades.
+      // Exact reverse-map lookup (NOT a name-prefix guess) so pro tools whose names
+      // don't start with their facade name can't slip the guard.
       if (!targetFacade) {
-        const facadePrefix = name.split('_')[0];
-        const parentFacade = facadeMap.get(facadePrefix);
-        if (parentFacade && (parentFacade.tier === 'pro' || parentFacade.tier === 'apps')) {
+        const owner = toolToFacade.get(name);
+        if (owner && (owner.tier === 'pro' || owner.tier === 'apps')) {
           return {
             content: [{ type: 'text', text: JSON.stringify({
-              error: `Tool "${name}" belongs to pro facade "${facadePrefix}"`,
-              facade_tier: parentFacade.tier,
+              error: `Tool "${name}" belongs to ${owner.tier} facade "${owner.name}"`,
+              facade_tier: owner.tier,
               caller_tier: 'core',
               hint: 'Provide a valid DCBL license key to access pro features',
             }) }],
