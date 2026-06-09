@@ -1,0 +1,2 @@
+{"ts":"2026-06-05T21:17:04.927Z","run_id":"RUN-2026-06-05T21-17-04-862Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-06-05T21:17:19.010Z","run_id":"RUN-2026-06-05T21-17-04-862Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"coord_status","result":"success","summary":"coord_status completed"}}

@@ -1,0 +1,86 @@
+# Crucible — adversarial testing harness configuration
+
+[crucible]
+model = "claude-opus-4-7"
+fast_model = "claude-sonnet-4-6"
+max_tokens = 8192
+
+# Code under test (relative to repo root)
+# Scoped to the SECURITY-SENSITIVE surface for this review (Ben, 2026-06-04):
+# the HQ->agent control plane, the multi-tenant store write-identity, the daemon
+# HTTP kernel/transport (auth, CORS, tier gating), project resolution, licensing.
+target_paths = [
+    "src/agentCommands.ts",
+    "src/agentPresence.ts",
+    "src/store/supabaseStore.ts",
+    "src/store/fsStore.ts",
+    "src/store/index.ts",
+    "src/kernel.ts",
+    "src/httpServer.ts",
+    "src/projectRegistry.ts",
+    "src/license.ts",
+    "src/daemonConfig.ts",
+]
+exclude_patterns = [
+    "**/.venv/**",
+    "**/node_modules/**",
+    "**/__pycache__/**",
+    "**/.next/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/tests/**",
+    "**/__tests__/**",
+    "**/test_*.py",
+    "**/*_test.py",
+    "**/*.test.{js,jsx,ts,tsx}",
+    "**/*.spec.{js,jsx,ts,tsx}",
+    "**/migrations/**",
+    "**/*.d.ts",
+]
+
+invariants_file = ".crucible/invariants.md"
+output_dir = ".crucible/runs"
+
+# Adversary framings (parallel by default)
+framings = ["bug_hunter", "postmortem", "threat_modeler"]
+parallel_framings = true
+
+# Layer toggles for `crucible run`
+enable_static_adversary = true
+enable_property_gen = true
+enable_mutation = false        # opt-in: requires `pip install crucible[mutation]`
+enable_fuzzing_scaffold = false  # opt-in
+enable_stateful_gen = false      # opt-in
+
+# ---------------------------------------------------------------------------
+# Multi-provider configuration (optional)
+#
+# Uncomment to run the adversary across multiple LLM backends. Each provider
+# runs the full framing matrix; findings are merged with cross-provider
+# confirmation tracked. Use --providers on the command line to pick a subset.
+# ---------------------------------------------------------------------------
+
+# default_providers = ["anthropic", "local"]   # used if --providers not given
+
+# [crucible.providers.anthropic]
+# type = "anthropic"
+# model = "claude-opus-4-7"
+# api_key_env = "ANTHROPIC_API_KEY"
+
+# [crucible.providers.openai]
+# type = "openai"
+# model = "gpt-4o"
+# api_key_env = "OPENAI_API_KEY"
+
+# [crucible.providers.local]
+# # Works with llama.cpp, vLLM, LM Studio, Ollama, anything OpenAI-compatible
+# type = "openai_compatible"
+# model = "qwen3-30b-a3b"
+# base_url = "http://localhost:8080/v1"
+# api_key_env = "LOCAL_API_KEY"   # optional
+
+# [crucible.providers.openrouter]
+# type = "openai_compatible"
+# model = "anthropic/claude-opus-4-7"
+# base_url = "https://openrouter.ai/api/v1"
+# api_key_env = "OPENROUTER_API_KEY"

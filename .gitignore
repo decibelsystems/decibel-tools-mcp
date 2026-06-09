@@ -41,3 +41,6 @@ extension/*.vsix
 # Project registry (user-specific, each dev has their own)
 projects.json
 projects.json
+
+# Crucible adversarial-review run outputs (local artifacts)
+.crucible/runs/
