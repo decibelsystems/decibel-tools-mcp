@@ -1,0 +1,11 @@
+event_id: PROV-20260607T185318-391
+timestamp: 2026-06-07T18:53:18.391Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-06-07T18-53-18Z-authorization-decoupling-agent-queue-service-role-.md
+reason_code: initial_creation
+summary: "Created issue: Authorization decoupling: agent_queue service-role write must not trust registry membership as identity (both modes)"
+fingerprint_before: null
+fingerprint_after: sha256:c55c0db9c1c62aaa
