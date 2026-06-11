@@ -13,6 +13,12 @@ import {
   CorpusContentType,
   getCorpusPath,
   corpusExists,
+  addPattern,
+  AddPatternInput,
+  addFieldNote,
+  AddFieldNoteInput,
+  addPlaybook,
+  AddPlaybookInput,
 } from '../corpus.js';
 
 // ============================================================================
@@ -116,10 +122,195 @@ export const corpusStatusTool: ToolSpec = {
 };
 
 // ============================================================================
+// Corpus Add Pattern Tool
+// ============================================================================
+
+export const corpusAddPatternTool: ToolSpec = {
+  definition: {
+    name: 'corpus_add_pattern',
+    description: `Add a reusable pattern to decibel-corpus. Patterns are named solutions to recurring problems (e.g., "advisory lock for idempotency", "exponential backoff with jitter"). The id must match PREFIX-NNNN format (e.g., DBS-0004). Will not overwrite existing files.`,
+    annotations: {
+      title: 'Add Corpus Pattern',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'Pattern identifier in PREFIX-NNNN format (e.g., DBS-0004, A11Y-0001)',
+        },
+        title: {
+          type: 'string',
+          description: 'Human-readable title (e.g., "Advisory Lock for Idempotent Mutations")',
+        },
+        content: {
+          type: 'string',
+          description: 'Markdown body — problem statement, solution, code examples, trade-offs',
+        },
+        category: {
+          type: 'string',
+          description: 'Optional subdirectory within primitives/patterns/ (e.g., "concurrency", "auth")',
+        },
+        status: {
+          type: 'string',
+          description: 'Pattern maturity: draft, reviewed, canonical (default: draft)',
+        },
+        severity: {
+          type: 'string',
+          description: 'Impact level if the pattern is not followed (e.g., "high", "critical")',
+        },
+        source: {
+          type: 'string',
+          description: 'Where this pattern was discovered (e.g., "EPIC-0032", "incident-2026-03")',
+        },
+        owner: {
+          type: 'string',
+          description: 'Who authored or is responsible for this pattern',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Searchable tags (e.g., ["postgres", "concurrency", "idempotency"])',
+        },
+      },
+      required: ['id', 'title', 'content'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as AddPatternInput;
+      requireFields(input, 'id', 'title', 'content');
+      const result = await addPattern(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// Corpus Add Field Note Tool
+// ============================================================================
+
+export const corpusAddFieldNoteTool: ToolSpec = {
+  definition: {
+    name: 'corpus_add_field_note',
+    description: `Add a field note to decibel-corpus. Field notes capture lessons learned, gotchas, and observations from real work — things that aren't patterns yet but are worth remembering. Filename is auto-generated as YYYY-MM-DD-{slug}.md. Will not overwrite existing files.`,
+    annotations: {
+      title: 'Add Corpus Field Note',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Descriptive title (e.g., "Supabase RLS gotcha with service role key")',
+        },
+        content: {
+          type: 'string',
+          description: 'Markdown body — what happened, what was learned, any code examples',
+        },
+        source: {
+          type: 'string',
+          description: 'Context where this was observed (e.g., "EPIC-0032", "senken deploy 2026-03")',
+        },
+        owner: {
+          type: 'string',
+          description: 'Who captured this note',
+        },
+        status: {
+          type: 'string',
+          description: 'Note maturity: draft, reviewed, promoted (default: draft)',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Searchable tags (e.g., ["supabase", "rls", "auth"])',
+        },
+      },
+      required: ['title', 'content'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as AddFieldNoteInput;
+      requireFields(input, 'title', 'content');
+      const result = await addFieldNote(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
+// Corpus Add Playbook Tool
+// ============================================================================
+
+export const corpusAddPlaybookTool: ToolSpec = {
+  definition: {
+    name: 'corpus_add_playbook',
+    description: `Add a playbook to decibel-corpus. Playbooks are step-by-step guides for specific operations (e.g., "deploy senken to production", "rotate Supabase keys", "onboard new MCP module"). Filename is auto-generated as {slug}.md. Will not overwrite existing files.`,
+    annotations: {
+      title: 'Add Corpus Playbook',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Playbook title (e.g., "Deploy Senken to Production")',
+        },
+        content: {
+          type: 'string',
+          description: 'Markdown body — numbered steps, prerequisites, rollback procedures',
+        },
+        owner: {
+          type: 'string',
+          description: 'Who authored this playbook',
+        },
+        status: {
+          type: 'string',
+          description: 'Playbook maturity: draft, reviewed, canonical (default: draft)',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Searchable tags (e.g., ["deployment", "senken", "production"])',
+        },
+      },
+      required: ['title', 'content'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      const input = args as AddPlaybookInput;
+      requireFields(input, 'title', 'content');
+      const result = await addPlaybook(input);
+      return toolSuccess(result);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+// ============================================================================
 // Export All Tools
 // ============================================================================
 
 export const corpusTools: ToolSpec[] = [
   corpusSearchTool,
   corpusStatusTool,
+  corpusAddPatternTool,
+  corpusAddFieldNoteTool,
+  corpusAddPlaybookTool,
 ];
