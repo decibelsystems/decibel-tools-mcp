@@ -15,6 +15,19 @@ history, review, and a one-command install. Tracks sentinel issue
 
 ## Install
 
+### Plugin install (recommended — automatic)
+
+If you installed decibel-tools as a **Claude Code plugin** (`/plugin install
+decibel-tools@decibel-marketplace`), the hooks are **already active** — no setup.
+`hooks/hooks.json` declares them, Claude Code auto-discovers it, and the scripts
+resolve via `${CLAUDE_PLUGIN_ROOT}` from the plugin cache. Plugin hooks **merge**
+with your existing `~/.claude/settings.json` hooks (they don't replace them).
+
+### Manual install (npm / non-plugin)
+
+If you're running the MCP from npm or a raw checkout (not the plugin), register
+the hooks into your global settings:
+
 ```sh
 ./hooks/install.sh
 ```
@@ -25,6 +38,11 @@ Copies both hooks into `~/.decibel/hooks/` and registers them in
 > Copies, not symlinks: the hooks are registered globally and fire for every
 > Claude instance on the machine, so they must not depend on this repo's current
 > checkout/branch. Re-run `./hooks/install.sh` (e.g. after `git pull`) to update.
+
+> The hooks only depend on `~/.decibel/` for **runtime data** (`daemon.meta`,
+> `runs/`) which is the same on every machine; they discover the daemon port
+> dynamically. So the same script works identically whether run from the plugin
+> cache (`${CLAUDE_PLUGIN_ROOT}`) or `~/.decibel/hooks/`.
 
 ## Commit convention
 

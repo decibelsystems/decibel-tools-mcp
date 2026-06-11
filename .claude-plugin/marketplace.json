@@ -9,7 +9,7 @@
       "name": "decibel-tools",
       "source": "..",
       "description": "Project intelligence system with Sentinel, Architect, Dojo, Oracle, and Designer",
-      "version": "1.0.7",
+      "version": "1.1.0",
       "author": {
         "name": "Decibel Systems"
       }
