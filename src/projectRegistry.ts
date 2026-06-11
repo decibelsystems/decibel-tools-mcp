@@ -10,6 +10,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { log } from './config.js';
@@ -46,17 +47,25 @@ export interface ProjectRegistry {
 
 /**
  * Get the path to the registry file.
- * Default: projects.json in the same directory as this MCP tool.
+ *
+ * Default: ~/.decibel/projects.json — a stable, USER-LEVEL location that survives
+ * MCP reinstalls / fresh checkouts and is shared by the daemon, the CLI, HQ, and
+ * other tools. The legacy default was repo-root `<mcp>/projects.json`, which (a)
+ * started empty on every reinstall/clone and (b) diverged from the ~/.decibel copy
+ * other tools wrote — causing the registry to silently empty (HQ-reported 2026-06-11).
+ * `DECIBEL_REGISTRY_PATH` still overrides.
  */
 function getRegistryPath(): string {
   if (process.env.DECIBEL_REGISTRY_PATH) {
     return process.env.DECIBEL_REGISTRY_PATH;
   }
-  
-  // Default: projects.json in the MCP repo root (sibling to src/)
-  // __dirname at runtime is dist/, so go up one level
-  const mcpRoot = path.resolve(__dirname, '..');
-  return path.join(mcpRoot, 'projects.json');
+  return path.join(os.homedir(), '.decibel', 'projects.json');
+}
+
+/** The legacy repo-root location, for one-time migration. */
+function getLegacyRegistryPath(): string {
+  // __dirname at runtime is dist/, so go up one level to the MCP repo root.
+  return path.join(path.resolve(__dirname, '..'), 'projects.json');
 }
 
 /**
@@ -64,6 +73,27 @@ function getRegistryPath(): string {
  */
 function loadRegistry(): ProjectRegistry {
   const registryPath = getRegistryPath();
+
+  // One-time migration: if the user-level registry doesn't exist yet but the
+  // legacy repo-root file does (and has projects), copy it forward so upgrading
+  // doesn't appear to "lose" the registry. Only runs when not overridden by
+  // DECIBEL_REGISTRY_PATH, and never deletes the legacy file. (HQ 2026-06-11.)
+  if (!process.env.DECIBEL_REGISTRY_PATH && !fs.existsSync(registryPath)) {
+    const legacyPath = getLegacyRegistryPath();
+    if (legacyPath !== registryPath && fs.existsSync(legacyPath)) {
+      try {
+        const legacy = JSON.parse(fs.readFileSync(legacyPath, 'utf-8')) as ProjectRegistry;
+        if (Array.isArray(legacy.projects) && legacy.projects.length > 0) {
+          fs.mkdirSync(path.dirname(registryPath), { recursive: true });
+          fs.writeFileSync(registryPath, JSON.stringify(legacy, null, 2));
+          log(`ProjectRegistry: Migrated ${legacy.projects.length} projects from legacy ${legacyPath} → ${registryPath}`);
+          return legacy;
+        }
+      } catch (err) {
+        log(`ProjectRegistry: Legacy migration skipped (${err})`);
+      }
+    }
+  }
 
   if (!fs.existsSync(registryPath)) {
     log(`ProjectRegistry: No registry file at ${registryPath}`);
@@ -87,6 +117,25 @@ function loadRegistry(): ProjectRegistry {
 function saveRegistry(registry: ProjectRegistry): void {
   const registryPath = getRegistryPath();
   const dir = path.dirname(registryPath);
+
+  // Safety net against silent data loss: never overwrite a MULTI-project on-disk
+  // registry with an empty one. unregisterProject removes entries one at a time
+  // (it loads the registry, drops one, saves), so a legitimate emptying is always
+  // 1→0 — the on-disk file has exactly one project at that point. A save of [] over
+  // a file with >1 project therefore means something loaded an empty/stale registry
+  // (wrong path, parse failure) and is about to clobber many real entries — the
+  // 32→0 wipe HQ hit. Refuse that, log loudly, but still allow the deliberate 1→0.
+  if (registry.projects.length === 0 && fs.existsSync(registryPath)) {
+    try {
+      const existing = JSON.parse(fs.readFileSync(registryPath, 'utf-8')) as ProjectRegistry;
+      if (Array.isArray(existing.projects) && existing.projects.length > 1) {
+        log(`ProjectRegistry: REFUSED to overwrite ${existing.projects.length} registered projects with an empty registry at ${registryPath} (likely a stale/empty load — investigate)`);
+        return;
+      }
+    } catch {
+      // Unparseable existing file — fall through and let the write replace it.
+    }
+  }
 
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -336,9 +385,32 @@ export interface ScanResult {
  *   2. DECIBEL_SCAN_ROOTS env var (colon-separated)
  *   3. Unique parent dirs of currently-registered projects
  */
-export function getScanRoots(explicit?: string[]): string[] {
-  if (explicit && explicit.length > 0) {
-    return Array.from(new Set(explicit.map((r) => path.resolve(r))));
+/**
+ * Coerce a `roots` param to string[]. Over MCP/HTTP an array argument can arrive
+ * as a real array, a JSON-stringified array ('["/a","/b"]'), or a single string
+ * ("/a"). Previously getScanRoots did `explicit.map(...)` directly, which threw
+ * "explicit.map is not a function" for the string forms. (HQ-reported, 2026-06-11.)
+ */
+function normalizeRoots(explicit?: string[] | string): string[] {
+  if (Array.isArray(explicit)) return explicit.filter((r) => typeof r === 'string' && r.length > 0);
+  if (typeof explicit === 'string') {
+    const s = explicit.trim();
+    if (!s) return [];
+    if (s.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) return parsed.filter((r) => typeof r === 'string' && r.length > 0);
+      } catch { /* fall through — treat as a single path */ }
+    }
+    return [s];
+  }
+  return [];
+}
+
+export function getScanRoots(explicit?: string[] | string): string[] {
+  const roots = normalizeRoots(explicit);
+  if (roots.length > 0) {
+    return Array.from(new Set(roots.map((r) => path.resolve(r))));
   }
   const envRoots = process.env.DECIBEL_SCAN_ROOTS;
   if (envRoots) {
@@ -366,7 +438,7 @@ export function getScanRoots(explicit?: string[]): string[] {
  *
  * Does not mutate the registry. Callers use `registerProject` to apply.
  */
-export function scanForProjects(explicitRoots?: string[]): ScanResult {
+export function scanForProjects(explicitRoots?: string[] | string): ScanResult {
   const roots = getScanRoots(explicitRoots);
   const registry = loadRegistry();
   const registeredByPath = new Map(
