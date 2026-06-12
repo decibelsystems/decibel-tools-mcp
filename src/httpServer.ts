@@ -33,6 +33,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { log } from './config.js';
+import { writeLocalAgentSession } from './agentPresence.js';
 import { isSupabaseConfigured, getSupabaseServiceClient } from './lib/supabase.js';
 import { shouldQueueForAgent, parseToolCall } from './httpQueueDetection.js';
 import type { ToolKernel, DispatchContext, DispatchEvent } from './kernel.js';
@@ -1039,6 +1040,58 @@ export async function startHttpServer(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'DISCONNECT_ERROR'));
+      }
+      return;
+    }
+
+    // POST /agents/register and /agents/heartbeat — generic local-runtime presence
+    // (swarm P2). The @decibel/hq SDK calls these so ANY local runtime (hermes,
+    // openclaw, codex, cursor, custom) appears on HQ's /agents board tagged with its
+    // runtime — generalizing the claude-peers presence path beyond Claude Code.
+    //
+    // IDENTITY = the localhost-bind connection principal (confused-deputy rule): only
+    // a LOCAL process may register a local runtime. We check the actual socket peer
+    // address (not a spoofable header). The runtime/session_key are untrusted LABELS
+    // from a trusted-LOCATION caller — fine for a local presence write. The hosted/BYO
+    // path uses an agent-token instead (P4), which is not this endpoint.
+    if ((path === '/agents/register' || path === '/agents/heartbeat') && req.method === 'POST') {
+      const peer = (req.socket.remoteAddress || '').replace('::ffff:', '');
+      const isLocal = peer === '127.0.0.1' || peer === '::1' || peer === '';
+      if (!isLocal) {
+        sendJson(res, 403, wrapError(
+          'agents.register is local-only (the 127.0.0.1 bind is the principal). Hosted/BYO agents use the agent-token ingest path.',
+          'LOCAL_ONLY',
+        ));
+        return;
+      }
+      try {
+        const body = await parseBody(req);
+        const session_key = body.session_key as string;
+        const runtime = body.runtime as string;
+        if (!session_key || !runtime) {
+          sendJson(res, 400, wrapError('Missing "session_key" and/or "runtime"', 'MISSING_FIELDS'));
+          return;
+        }
+        const ok = await writeLocalAgentSession({
+          session_key,
+          runtime,
+          agent: (body.agent as string) ?? null,
+          cwd: (body.cwd as string) ?? null,
+          summary: (body.summary as string) ?? null,
+          meta: (body.meta as Record<string, unknown>) ?? undefined,
+        });
+        if (!ok) {
+          sendJson(res, 503, wrapError(
+            'Presence store unavailable (SUPABASE_URL/SERVICE_KEY not configured, or write failed).',
+            'PRESENCE_UNAVAILABLE',
+          ));
+          return;
+        }
+        log(`HTTP: /agents/${path.endsWith('register') ? 'register' : 'heartbeat'} runtime=${runtime} session=${session_key}`);
+        sendJson(res, 200, wrapSuccess({ session_key, runtime, ok: true }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'REGISTER_ERROR'));
       }
       return;
     }
