@@ -89,6 +89,9 @@ async function tick(client: DbClient): Promise<void> {
       host,
       session_key: p.id,
       agent: null as string | null,
+      // These are Claude Code sessions read from the claude-peers broker; tag the
+      // runtime so HQ's /agents board renders the runtime badge + filter (P1/P5).
+      runtime: 'claude-code',
       summary: p.summary || null,
       cwd: p.cwd || null,
       project_id,
@@ -96,7 +99,10 @@ async function tick(client: DbClient): Promise<void> {
       started_at: p.registered_at || nowIso,
       last_seen_at: nowIso,
       ended_at: null as string | null,
-      meta: {},
+      // last_action_at = the broker's per-peer last_seen → HQ's ActivityLine renders
+      // a tool-call pulse from it. Richer self-report fields (tokens, current_file)
+      // are a follow-on (agent-side self-report; not daemon-observable).
+      meta: { last_action_at: p.last_seen || nowIso },
     };
     const { error } = await client.from('agent_sessions').upsert(row, { onConflict: 'org_id,host,session_key' });
     if (error) log(`Presence: upsert ${p.id} failed: ${error.message}`);
@@ -111,6 +117,70 @@ async function tick(client: DbClient): Promise<void> {
     .eq('org_id', ORG_ID).eq('status', 'active').lt('last_seen_at', idleCut);
   await client.from('agent_sessions').update({ status: 'ended', ended_at: nowIso })
     .eq('org_id', ORG_ID).neq('status', 'ended').lt('last_seen_at', endedCut);
+}
+
+// ============================================================================
+// Generic local-runtime registration (P2 — swarm multi-runtime)
+// ============================================================================
+// Any local runtime (Hermes, OpenClaw, Codex, Cursor, custom) registers/heartbeats
+// via the daemon's POST /agents/register + /agents/heartbeat endpoints (the SDK
+// calls these). This writes the SAME hq.agent_sessions row the claude-peers
+// presence writer does, just tagged with the SDK-DECLARED runtime so HQ renders
+// the runtime badge + filter.
+//
+// IDENTITY (confused-deputy rule): the HTTP endpoint MUST restrict these calls to
+// the localhost-bind connection principal — that bind IS the auth boundary for the
+// local self-host path. The runtime/session_key here is an untrusted LABEL from a
+// trusted-LOCATION caller (a local process), acceptable for a local presence write.
+// The hosted/BYO path (P4) uses an agent-token instead; that's NOT this code.
+
+export interface LocalAgentRegistration {
+  session_key: string;          // the runtime's stable session id
+  runtime: string;              // SDK-declared: hermes|openclaw|codex|cursor|mcp|custom
+  agent?: string | null;        // human label
+  cwd?: string | null;
+  summary?: string | null;
+  meta?: Record<string, unknown>;
+}
+
+/**
+ * Upsert a local-runtime session into hq.agent_sessions (register or heartbeat).
+ * Returns true on success, false if Supabase is unconfigured or the write failed.
+ * Reuses the presence writer's org config + cwd→project resolution.
+ */
+export async function writeLocalAgentSession(reg: LocalAgentRegistration): Promise<boolean> {
+  const client = serviceClient();
+  if (!client) return false;
+  if (!reg.session_key || !reg.runtime) return false;
+
+  const host = os.hostname();
+  const nowIso = new Date().toISOString();
+  const project_id = await resolveProjectId(client, reg.cwd || '');
+  const row = {
+    org_id: ORG_ID,
+    host,
+    session_key: reg.session_key,
+    runtime: reg.runtime,
+    agent: reg.agent ?? null,
+    summary: reg.summary ?? null,
+    cwd: reg.cwd ?? null,
+    project_id,
+    status: 'active',
+    started_at: nowIso,
+    last_seen_at: nowIso,
+    ended_at: null as string | null,
+    meta: { last_action_at: nowIso, ...(reg.meta ?? {}) },
+  };
+  // started_at only matters on first insert; onConflict updates the rest. We let it
+  // re-send started_at — harmless on heartbeat since HQ reads last_seen_at for liveness.
+  const { error } = await client
+    .from('agent_sessions')
+    .upsert(row, { onConflict: 'org_id,host,session_key' });
+  if (error) {
+    log(`Presence: local register ${reg.session_key} (${reg.runtime}) failed: ${error.message}`);
+    return false;
+  }
+  return true;
 }
 
 /** Start the presence writer loop. Returns a stop function. No-ops if Supabase unconfigured. */
