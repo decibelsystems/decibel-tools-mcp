@@ -15,9 +15,22 @@ import os from 'os';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { log } from './config.js';
+import { withRetryResult } from './supabaseRetry.js';
 
 const BROKER_URL = `http://127.0.0.1:${process.env.CLAUDE_PEERS_PORT ?? '7899'}`;
 const ORG_ID = process.env.DECIBEL_ORG_ID || '1cb79e24-e06f-46c9-8a22-5ee025ffb0f4';
+
+/**
+ * The daemon's host identity for presence + command targeting. Defaults to
+ * os.hostname() but is overridable via DECIBEL_PRESENCE_HOST — needed where the
+ * OS hostname isn't a stable/unique daemon identity (containers with shared
+ * hostnames, or two daemons on one machine, e.g. a rolling restart or a test
+ * harness). target_host on hq.agent_commands matches this, so it must be the same
+ * value the presence writer stamps. Shared by the dispatcher (agentCommands.ts).
+ */
+export function resolveHost(): string {
+  return process.env.DECIBEL_PRESENCE_HOST || os.hostname();
+}
 const HEARTBEAT_MS = 30_000;
 const IDLE_AFTER_MS = 90_000;
 const ENDED_AFTER_MS = 5 * 60_000;
@@ -76,7 +89,7 @@ async function resolveProjectId(client: DbClient, cwd: string): Promise<string |
 }
 
 async function tick(client: DbClient): Promise<void> {
-  const host = os.hostname();
+  const host = resolveHost();
   const nowMs = Date.now();
   const nowIso = new Date(nowMs).toISOString();
 
@@ -104,7 +117,10 @@ async function tick(client: DbClient): Promise<void> {
       // are a follow-on (agent-side self-report; not daemon-observable).
       meta: { last_action_at: p.last_seen || nowIso },
     };
-    const { error } = await client.from('agent_sessions').upsert(row, { onConflict: 'org_id,host,session_key' });
+    const { error } = await withRetryResult(
+      () => client.from('agent_sessions').upsert(row, { onConflict: 'org_id,host,session_key' }),
+      `presence.upsert ${p.id}`,
+    );
     if (error) log(`Presence: upsert ${p.id} failed: ${error.message}`);
   }
 
@@ -141,6 +157,9 @@ export interface LocalAgentRegistration {
   cwd?: string | null;
   summary?: string | null;
   meta?: Record<string, unknown>;
+  // Lifecycle: SDK heartbeat keeps a session 'active'; stop() sends 'ended'.
+  // Only 'active' | 'ended' accepted (idle is the daemon stale-sweep's job).
+  status?: 'active' | 'ended';
 }
 
 /**
@@ -153,9 +172,10 @@ export async function writeLocalAgentSession(reg: LocalAgentRegistration): Promi
   if (!client) return false;
   if (!reg.session_key || !reg.runtime) return false;
 
-  const host = os.hostname();
+  const host = resolveHost();
   const nowIso = new Date().toISOString();
   const project_id = await resolveProjectId(client, reg.cwd || '');
+  const ended = reg.status === 'ended';
   const row = {
     org_id: ORG_ID,
     host,
@@ -165,17 +185,18 @@ export async function writeLocalAgentSession(reg: LocalAgentRegistration): Promi
     summary: reg.summary ?? null,
     cwd: reg.cwd ?? null,
     project_id,
-    status: 'active',
+    status: ended ? 'ended' : 'active',
     started_at: nowIso,
     last_seen_at: nowIso,
-    ended_at: null as string | null,
+    ended_at: ended ? nowIso : null,
     meta: { last_action_at: nowIso, ...(reg.meta ?? {}) },
   };
   // started_at only matters on first insert; onConflict updates the rest. We let it
   // re-send started_at — harmless on heartbeat since HQ reads last_seen_at for liveness.
-  const { error } = await client
-    .from('agent_sessions')
-    .upsert(row, { onConflict: 'org_id,host,session_key' });
+  const { error } = await withRetryResult(
+    () => client.from('agent_sessions').upsert(row, { onConflict: 'org_id,host,session_key' }),
+    `presence.local-register ${reg.session_key}`,
+  );
   if (error) {
     log(`Presence: local register ${reg.session_key} (${reg.runtime}) failed: ${error.message}`);
     return false;

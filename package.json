@@ -9,7 +9,8 @@
   "type": "module",
   "exports": {
     ".": "./dist/server.js",
-    "./client": "./dist/client/index.js"
+    "./client": "./dist/client/index.js",
+    "./hq": "./dist/hq/index.js"
   },
   "files": [
     "dist",

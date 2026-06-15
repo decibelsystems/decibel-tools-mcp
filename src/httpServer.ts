@@ -26,7 +26,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { timingSafeEqual } from 'crypto';
+import { timingSafeEqual, randomBytes } from 'crypto';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { readFileSync } from 'fs';
@@ -34,6 +34,15 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { log } from './config.js';
 import { writeLocalAgentSession } from './agentPresence.js';
+import {
+  drainCommands,
+  setSessionToken,
+  getSessionToken,
+  dropSessionToken,
+  ackOwnerOf,
+  clearAckOwner,
+} from './agentInbox.js';
+import { settleCommandFromAck, ORG_ID } from './agentCommands.js';
 import { isSupabaseConfigured, getSupabaseServiceClient } from './lib/supabase.js';
 import { shouldQueueForAgent, parseToolCall } from './httpQueueDetection.js';
 import type { ToolKernel, DispatchContext, DispatchEvent } from './kernel.js';
@@ -155,6 +164,34 @@ function timingSafeTokenCompare(provided: string, expected: string): boolean {
     return false;
   }
   return timingSafeEqual(a, b);
+}
+
+/**
+ * The connection's trust boundary for the /agents/* endpoints: ONLY a process on
+ * this machine may register/poll/ack a local runtime (the 127.0.0.1 bind is the
+ * principal — confused-deputy rule). We check the real socket peer address (not a
+ * spoofable header). An EMPTY remoteAddress is rejected (was previously allowed) —
+ * a genuine TCP loopback connection always presents 127.0.0.1/::1, so empty only
+ * arises from a destroyed/odd socket and must not be treated as local.
+ */
+function isLocalAgentPeer(req: IncomingMessage): boolean {
+  const peer = (req.socket.remoteAddress || '').replace('::ffff:', '');
+  return peer === '127.0.0.1' || peer === '::1';
+}
+
+/**
+ * Mint-or-return the per-session capability token (proof-of-possession the SDK must
+ * present on poll/ack). Idempotent per session_key so a heartbeat keeps the token
+ * stable; after a daemon restart the in-memory store is empty, so the next
+ * register/heartbeat mints a fresh one and the SDK adopts it from the response.
+ */
+function ensureSessionToken(sessionKey: string): string {
+  let token = getSessionToken(sessionKey);
+  if (!token) {
+    token = randomBytes(32).toString('hex');
+    setSessionToken(sessionKey, token);
+  }
+  return token;
 }
 
 /**
@@ -1055,9 +1092,7 @@ export async function startHttpServer(
     // from a trusted-LOCATION caller — fine for a local presence write. The hosted/BYO
     // path uses an agent-token instead (P4), which is not this endpoint.
     if ((path === '/agents/register' || path === '/agents/heartbeat') && req.method === 'POST') {
-      const peer = (req.socket.remoteAddress || '').replace('::ffff:', '');
-      const isLocal = peer === '127.0.0.1' || peer === '::1' || peer === '';
-      if (!isLocal) {
+      if (!isLocalAgentPeer(req)) {
         sendJson(res, 403, wrapError(
           'agents.register is local-only (the 127.0.0.1 bind is the principal). Hosted/BYO agents use the agent-token ingest path.',
           'LOCAL_ONLY',
@@ -1072,6 +1107,7 @@ export async function startHttpServer(
           sendJson(res, 400, wrapError('Missing "session_key" and/or "runtime"', 'MISSING_FIELDS'));
           return;
         }
+        const reqStatus = body.status === 'ended' ? 'ended' : 'active';
         const ok = await writeLocalAgentSession({
           session_key,
           runtime,
@@ -1079,6 +1115,7 @@ export async function startHttpServer(
           cwd: (body.cwd as string) ?? null,
           summary: (body.summary as string) ?? null,
           meta: (body.meta as Record<string, unknown>) ?? undefined,
+          status: reqStatus,
         });
         if (!ok) {
           sendJson(res, 503, wrapError(
@@ -1087,11 +1124,97 @@ export async function startHttpServer(
           ));
           return;
         }
+        // Capability token: on 'ended' forget it; otherwise mint-or-return the
+        // session's token and hand it back so the SDK can authorize poll/ack. The
+        // token is the secret that distinguishes THIS registrant from any other
+        // co-resident local process guessing the (public) session_key.
+        let token: string | undefined;
+        if (reqStatus === 'ended') {
+          dropSessionToken(session_key);
+        } else {
+          token = ensureSessionToken(session_key);
+        }
         log(`HTTP: /agents/${path.endsWith('register') ? 'register' : 'heartbeat'} runtime=${runtime} session=${session_key}`);
-        sendJson(res, 200, wrapSuccess({ session_key, runtime, ok: true }));
+        sendJson(res, 200, wrapSuccess({ session_key, runtime, ok: true, ...(token && { token }) }));
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'REGISTER_ERROR'));
+      }
+      return;
+    }
+
+    // GET /agents/commands?session_key=... — SDK command inbox poll (swarm onCommand).
+    // A local SDK runtime polls for HQ commands the dispatcher enqueued for it, runs
+    // onCommand, then acks via POST /agents/commands/ack. LOCALHOST-ONLY (same
+    // principal as register): the daemon holds the service_role; the SDK never does.
+    if (path === '/agents/commands' && req.method === 'GET') {
+      if (!isLocalAgentPeer(req)) {
+        sendJson(res, 403, wrapError('agent command inbox is local-only', 'LOCAL_ONLY'));
+        return;
+      }
+      const sessionKey = url.searchParams.get('session_key');
+      if (!sessionKey) {
+        sendJson(res, 400, wrapError('Missing "session_key" query param', 'MISSING_SESSION_KEY'));
+        return;
+      }
+      // Capability check: session_key is a guessable label, so a co-resident local
+      // process could otherwise drain another runtime's inbox. The token proves the
+      // caller is the registrant. Timing-safe compare; unknown session → no token →
+      // reject. (drainCommands also org-scopes — defense-in-depth on cross-org.)
+      const token = url.searchParams.get('token') || '';
+      const expected = getSessionToken(sessionKey);
+      if (!expected || !timingSafeTokenCompare(token, expected)) {
+        sendJson(res, 403, wrapError('Invalid or missing session token', 'BAD_SESSION_TOKEN'));
+        return;
+      }
+      const commands = drainCommands(sessionKey, ORG_ID);
+      sendJson(res, 200, wrapSuccess({ session_key: sessionKey, commands, count: commands.length }));
+      return;
+    }
+
+    // POST /agents/commands/ack — SDK reports a command's outcome; daemon settles the
+    // hq.agent_commands row in Core (service_role). LOCALHOST-ONLY. Only done|failed.
+    if (path === '/agents/commands/ack' && req.method === 'POST') {
+      if (!isLocalAgentPeer(req)) {
+        sendJson(res, 403, wrapError('agent command ack is local-only', 'LOCAL_ONLY'));
+        return;
+      }
+      try {
+        const body = await parseBody(req);
+        const id = body.id as string;
+        const status = body.status as string;
+        if (!id || (status !== 'done' && status !== 'failed')) {
+          sendJson(res, 400, wrapError('Require "id" and "status" in {done|failed}', 'INVALID_ACK'));
+          return;
+        }
+        // Capability check: only the session this command was enqueued for may ack
+        // it (else any local process could forge a 'done' + arbitrary result for
+        // another runtime's command). Map id→owning session, verify its token.
+        const owner = ackOwnerOf(id);
+        const expected = owner ? getSessionToken(owner) : undefined;
+        const token = typeof body.token === 'string' ? body.token : '';
+        if (!owner || !expected || !timingSafeTokenCompare(token, expected)) {
+          sendJson(res, 403, wrapError('Ack not authorized for this command', 'BAD_SESSION_TOKEN'));
+          return;
+        }
+        // Defense-in-depth: cap the forged-able result blob (1MB body limit already
+        // applies; this bounds a single field written to Core under service_role).
+        const result = (body.result as Record<string, unknown>) ?? null;
+        if (result && Buffer.byteLength(JSON.stringify(result)) > 64 * 1024) {
+          sendJson(res, 400, wrapError('Ack "result" too large (max 64KB)', 'RESULT_TOO_LARGE'));
+          return;
+        }
+        const errStr = typeof body.error === 'string' ? body.error : null;
+        const ok = await settleCommandFromAck(id, status, result, errStr);
+        if (!ok) {
+          sendJson(res, 503, wrapError('Command store unavailable (Supabase not configured)', 'STORE_UNAVAILABLE'));
+          return;
+        }
+        clearAckOwner(id);
+        sendJson(res, 200, wrapSuccess({ id, status, ok: true }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'ACK_ERROR'));
       }
       return;
     }
