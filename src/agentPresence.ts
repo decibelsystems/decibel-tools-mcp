@@ -15,9 +15,22 @@ import os from 'os';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { log } from './config.js';
+import { withRetryResult } from './supabaseRetry.js';
 
 const BROKER_URL = `http://127.0.0.1:${process.env.CLAUDE_PEERS_PORT ?? '7899'}`;
 const ORG_ID = process.env.DECIBEL_ORG_ID || '1cb79e24-e06f-46c9-8a22-5ee025ffb0f4';
+
+/**
+ * The daemon's host identity for presence + command targeting. Defaults to
+ * os.hostname() but is overridable via DECIBEL_PRESENCE_HOST — needed where the
+ * OS hostname isn't a stable/unique daemon identity (containers with shared
+ * hostnames, or two daemons on one machine, e.g. a rolling restart or a test
+ * harness). target_host on hq.agent_commands matches this, so it must be the same
+ * value the presence writer stamps. Shared by the dispatcher (agentCommands.ts).
+ */
+export function resolveHost(): string {
+  return process.env.DECIBEL_PRESENCE_HOST || os.hostname();
+}
 const HEARTBEAT_MS = 30_000;
 const IDLE_AFTER_MS = 90_000;
 const ENDED_AFTER_MS = 5 * 60_000;
@@ -76,7 +89,7 @@ async function resolveProjectId(client: DbClient, cwd: string): Promise<string |
 }
 
 async function tick(client: DbClient): Promise<void> {
-  const host = os.hostname();
+  const host = resolveHost();
   const nowMs = Date.now();
   const nowIso = new Date(nowMs).toISOString();
 
@@ -104,7 +117,10 @@ async function tick(client: DbClient): Promise<void> {
       // are a follow-on (agent-side self-report; not daemon-observable).
       meta: { last_action_at: p.last_seen || nowIso },
     };
-    const { error } = await client.from('agent_sessions').upsert(row, { onConflict: 'org_id,host,session_key' });
+    const { error } = await withRetryResult(
+      () => client.from('agent_sessions').upsert(row, { onConflict: 'org_id,host,session_key' }),
+      `presence.upsert ${p.id}`,
+    );
     if (error) log(`Presence: upsert ${p.id} failed: ${error.message}`);
   }
 
@@ -141,6 +157,51 @@ export interface LocalAgentRegistration {
   cwd?: string | null;
   summary?: string | null;
   meta?: Record<string, unknown>;
+  // Lifecycle: SDK heartbeat keeps a session 'active'; stop() sends 'ended'.
+  // Only 'active' | 'ended' accepted (idle is the daemon stale-sweep's job).
+  status?: 'active' | 'ended';
+}
+
+// ---------------------------------------------------------------------------
+// Write-time presence-field belt (NON-encoding) — co-designed with decibel-hq.
+// ---------------------------------------------------------------------------
+// HQ's /agents board already escapes these at render (React JSX text children),
+// so the daemon MUST NOT HTML-encode here — that would double-escape and corrupt
+// legitimate data (a real summary like "fix <Button> when a < b"). The correct
+// write-time defense-in-depth is non-encoding: cap length + strip control chars /
+// null bytes (preserving \t\n\r) so the stored value stays faithful but bounded.
+// Also closes the review's "no validation on meta/result blobs" finding.
+
+const FIELD_CAPS = { agent: 200, summary: 500, cwd: 1024 } as const;
+const META_VALUE_CAP = 1000;
+const META_MAX_BYTES = 4096;
+// C0 controls (U+0000..U+001F) + DEL (U+007F), EXCEPT tab/newline/carriage-return.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
+/** Strip control chars/null bytes and cap length. Empty-after-clean → null. */
+export function sanitizeText(s: string | null | undefined, maxLen: number): string | null {
+  if (s == null) return null;
+  const cleaned = String(s).replace(CONTROL_CHARS, '').slice(0, maxLen);
+  return cleaned.length ? cleaned : null;
+}
+
+/**
+ * Flatten meta to display-safe primitives: strings cleaned + capped, numbers/
+ * booleans/null kept, nested objects/arrays dropped (HQ typeof-guards numeric
+ * meta and renders strings as text). If the result still exceeds META_MAX_BYTES,
+ * drop it entirely — the caller re-adds the trusted last_action_at.
+ */
+export function sanitizeMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!meta || typeof meta !== 'object') return {};
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(meta)) {
+    if (typeof v === 'string') out[k] = v.replace(CONTROL_CHARS, '').slice(0, META_VALUE_CAP);
+    else if (typeof v === 'number' || typeof v === 'boolean' || v === null) out[k] = v;
+    // nested objects/arrays intentionally dropped
+  }
+  if (Buffer.byteLength(JSON.stringify(out)) > META_MAX_BYTES) return {};
+  return out;
 }
 
 /**
@@ -153,29 +214,35 @@ export async function writeLocalAgentSession(reg: LocalAgentRegistration): Promi
   if (!client) return false;
   if (!reg.session_key || !reg.runtime) return false;
 
-  const host = os.hostname();
+  const host = resolveHost();
   const nowIso = new Date().toISOString();
   const project_id = await resolveProjectId(client, reg.cwd || '');
+  const ended = reg.status === 'ended';
   const row = {
     org_id: ORG_ID,
     host,
     session_key: reg.session_key,
     runtime: reg.runtime,
-    agent: reg.agent ?? null,
-    summary: reg.summary ?? null,
-    cwd: reg.cwd ?? null,
+    // Non-encoding belt on caller-supplied display fields (store-raw / escape-at-
+    // render is HQ's job; we only cap length + strip control chars/null bytes).
+    agent: sanitizeText(reg.agent, FIELD_CAPS.agent),
+    summary: sanitizeText(reg.summary, FIELD_CAPS.summary),
+    cwd: sanitizeText(reg.cwd, FIELD_CAPS.cwd),
     project_id,
-    status: 'active',
+    status: ended ? 'ended' : 'active',
     started_at: nowIso,
     last_seen_at: nowIso,
-    ended_at: null as string | null,
-    meta: { last_action_at: nowIso, ...(reg.meta ?? {}) },
+    ended_at: ended ? nowIso : null,
+    // Default last_action_at to now; a self-reporting SDK may override it via meta
+    // (intended richer signal — HQ reads last_seen_at, not this, for liveness).
+    meta: { last_action_at: nowIso, ...sanitizeMeta(reg.meta) },
   };
   // started_at only matters on first insert; onConflict updates the rest. We let it
   // re-send started_at — harmless on heartbeat since HQ reads last_seen_at for liveness.
-  const { error } = await client
-    .from('agent_sessions')
-    .upsert(row, { onConflict: 'org_id,host,session_key' });
+  const { error } = await withRetryResult(
+    () => client.from('agent_sessions').upsert(row, { onConflict: 'org_id,host,session_key' }),
+    `presence.local-register ${reg.session_key}`,
+  );
   if (error) {
     log(`Presence: local register ${reg.session_key} (${reg.runtime}) failed: ${error.message}`);
     return false;
