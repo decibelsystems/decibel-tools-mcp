@@ -162,6 +162,48 @@ export interface LocalAgentRegistration {
   status?: 'active' | 'ended';
 }
 
+// ---------------------------------------------------------------------------
+// Write-time presence-field belt (NON-encoding) — co-designed with decibel-hq.
+// ---------------------------------------------------------------------------
+// HQ's /agents board already escapes these at render (React JSX text children),
+// so the daemon MUST NOT HTML-encode here — that would double-escape and corrupt
+// legitimate data (a real summary like "fix <Button> when a < b"). The correct
+// write-time defense-in-depth is non-encoding: cap length + strip control chars /
+// null bytes (preserving \t\n\r) so the stored value stays faithful but bounded.
+// Also closes the review's "no validation on meta/result blobs" finding.
+
+const FIELD_CAPS = { agent: 200, summary: 500, cwd: 1024 } as const;
+const META_VALUE_CAP = 1000;
+const META_MAX_BYTES = 4096;
+// C0 controls (U+0000..U+001F) + DEL (U+007F), EXCEPT tab/newline/carriage-return.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
+/** Strip control chars/null bytes and cap length. Empty-after-clean → null. */
+export function sanitizeText(s: string | null | undefined, maxLen: number): string | null {
+  if (s == null) return null;
+  const cleaned = String(s).replace(CONTROL_CHARS, '').slice(0, maxLen);
+  return cleaned.length ? cleaned : null;
+}
+
+/**
+ * Flatten meta to display-safe primitives: strings cleaned + capped, numbers/
+ * booleans/null kept, nested objects/arrays dropped (HQ typeof-guards numeric
+ * meta and renders strings as text). If the result still exceeds META_MAX_BYTES,
+ * drop it entirely — the caller re-adds the trusted last_action_at.
+ */
+export function sanitizeMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!meta || typeof meta !== 'object') return {};
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(meta)) {
+    if (typeof v === 'string') out[k] = v.replace(CONTROL_CHARS, '').slice(0, META_VALUE_CAP);
+    else if (typeof v === 'number' || typeof v === 'boolean' || v === null) out[k] = v;
+    // nested objects/arrays intentionally dropped
+  }
+  if (Buffer.byteLength(JSON.stringify(out)) > META_MAX_BYTES) return {};
+  return out;
+}
+
 /**
  * Upsert a local-runtime session into hq.agent_sessions (register or heartbeat).
  * Returns true on success, false if Supabase is unconfigured or the write failed.
@@ -181,15 +223,19 @@ export async function writeLocalAgentSession(reg: LocalAgentRegistration): Promi
     host,
     session_key: reg.session_key,
     runtime: reg.runtime,
-    agent: reg.agent ?? null,
-    summary: reg.summary ?? null,
-    cwd: reg.cwd ?? null,
+    // Non-encoding belt on caller-supplied display fields (store-raw / escape-at-
+    // render is HQ's job; we only cap length + strip control chars/null bytes).
+    agent: sanitizeText(reg.agent, FIELD_CAPS.agent),
+    summary: sanitizeText(reg.summary, FIELD_CAPS.summary),
+    cwd: sanitizeText(reg.cwd, FIELD_CAPS.cwd),
     project_id,
     status: ended ? 'ended' : 'active',
     started_at: nowIso,
     last_seen_at: nowIso,
     ended_at: ended ? nowIso : null,
-    meta: { last_action_at: nowIso, ...(reg.meta ?? {}) },
+    // Default last_action_at to now; a self-reporting SDK may override it via meta
+    // (intended richer signal — HQ reads last_seen_at, not this, for liveness).
+    meta: { last_action_at: nowIso, ...sanitizeMeta(reg.meta) },
   };
   // started_at only matters on first insert; onConflict updates the rest. We let it
   // re-send started_at — harmless on heartbeat since HQ reads last_seen_at for liveness.
