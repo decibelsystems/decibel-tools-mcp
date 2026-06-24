@@ -7,7 +7,7 @@
           {
             "type": "agent",
             "if": "Bash(git push:*)",
-            "prompt": "Code is about to be pushed. Run mcp__decibel-tools__guardian with action report (project_id: decibel-tools-mcp) to scan for security issues. If ANY findings are grade D or F, output JSON: {\"continue\": false, \"stopReason\": \"Guardian found critical issues (grade D/F). Fix these before pushing: [list findings]\"}. If all findings are grade C or better, output {}.",
+            "prompt": "A Bash command is about to run; inspect the command in $ARGUMENTS. If it is NOT a `git push`, output exactly {} and do nothing else (do NOT call any tools). If it IS a `git push`: run mcp__decibel-tools__guardian with action report (project_id: decibel-tools-mcp) to scan for security issues. If ANY findings are grade D or F, output JSON: {\"continue\": false, \"stopReason\": \"Guardian found critical issues (grade D/F). Fix these before pushing: [list findings]\"}. If all findings are grade C or better, output {}.",
             "model": "claude-sonnet-4-6",
             "timeout": 30,
             "statusMessage": "Guardian: scanning before push..."
