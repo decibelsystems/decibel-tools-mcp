@@ -618,6 +618,21 @@ export const appFacades: FacadeSpec[] = [
       start_sprint: 'decibel_start_sprint',
     },
   },
+  {
+    name: 'conductor',
+    description: 'Sovereign, observable orchestrator. run a request end-to-end (classify → egress gate → route → verify) returning an answer + auditable trace_id; dryrun previews routing and what would egress WITHOUT executing; trace shows the full routing ledger for a request; cost summarises steps/egress/cost over a window; egress and routing view the deterministic policies (view-only). Proprietary/personal tasks never leave local hardware. Actions: run, dryrun, trace, cost, egress, routing',
+    compactDescription: 'Orchestrate requests with egress-gated, audited routing',
+    microEligible: false,
+    tier: 'core',
+    actions: {
+      run: 'conductor_run',
+      dryrun: 'conductor_dryrun',
+      trace: 'conductor_trace',
+      cost: 'conductor_cost',
+      egress: 'conductor_egress',
+      routing: 'conductor_routing',
+    },
+  },
 ];
 
 // ============================================================================
