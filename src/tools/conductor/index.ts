@@ -68,6 +68,7 @@ export const conductorRunTool: ToolSpec = {
         task: { type: 'string', description: 'The request to orchestrate.' },
         sensitivity: { type: 'string', enum: ['public', 'proprietary', 'personal'], description: 'Egress class. proprietary/personal stay on local hardware. Default public.' },
         difficulty: { type: 'number', description: 'Optional 0..1 override of the difficulty heuristic.' },
+        project_id: { type: 'string', description: 'Project this run belongs to. Stamped on every trace row so HQ can join the session to project data.' },
       },
       required: ['task'],
     },
@@ -76,6 +77,7 @@ export const conductorRunTool: ToolSpec = {
     try {
       const a: string[] = ['--sensitivity', args.sensitivity || 'public', '--ledger', ledgerPath()];
       if (typeof args.difficulty === 'number') a.push('--difficulty', String(args.difficulty));
+      if (args.project_id) a.push('--project', String(args.project_id));
       a.push('--', args.task); // `--` stops option parsing so a task starting with "--" isn't a flag
       return toolSuccess(await cli(a));
     } catch (err) {
@@ -97,6 +99,7 @@ export const conductorDryrunTool: ToolSpec = {
         task: { type: 'string', description: 'The request to plan.' },
         sensitivity: { type: 'string', enum: ['public', 'proprietary', 'personal'] },
         difficulty: { type: 'number' },
+        project_id: { type: 'string', description: 'Project this run belongs to (echoed in the plan).' },
       },
       required: ['task'],
     },
@@ -105,6 +108,7 @@ export const conductorDryrunTool: ToolSpec = {
     try {
       const a: string[] = ['--dryrun', '--sensitivity', args.sensitivity || 'public'];
       if (typeof args.difficulty === 'number') a.push('--difficulty', String(args.difficulty));
+      if (args.project_id) a.push('--project', String(args.project_id));
       a.push('--', args.task); // `--` stops option parsing so a task starting with "--" isn't a flag
       return toolSuccess(await cli(a));
     } catch (err) {
@@ -146,7 +150,10 @@ export const conductorCostTool: ToolSpec = {
     annotations: { title: 'Conductor Cost', readOnlyHint: true },
     inputSchema: {
       type: 'object',
-      properties: { hours: { type: 'number', description: 'Window in hours. Omit for all-time.' } },
+      properties: {
+        hours: { type: 'number', description: 'Window in hours. Omit for all-time.' },
+        project_id: { type: 'string', description: 'Scope the summary to one project (the HQ join key). Omit for all projects.' },
+      },
     },
   },
   handler: async (args) => {
@@ -156,8 +163,9 @@ export const conductorCostTool: ToolSpec = {
         const cutoff = Date.now() - args.hours * 3600_000;
         rows = rows.filter((r) => typeof r.ts === 'string' && Date.parse(r.ts as string) >= cutoff);
       }
+      if (args.project_id) rows = rows.filter((r) => r.project_id === args.project_id);
       const byTarget: Record<string, number> = {};
-      const byRequest = new Map<string, { request_id: string; ts: string; steps: number; egressed: boolean; targets: Set<string> }>();
+      const byRequest = new Map<string, { request_id: string; project_id: unknown; ts: string; steps: number; egressed: boolean; targets: Set<string> }>();
       let egressed = 0;
       let cost = 0;
       for (const r of rows) {
@@ -165,7 +173,7 @@ export const conductorCostTool: ToolSpec = {
         if (r.egress === true) egressed += 1;
         if (typeof r.cost_usd === 'number') cost += r.cost_usd as number;
         const id = r.request_id as string;
-        const g = byRequest.get(id) || { request_id: id, ts: r.ts as string, steps: 0, egressed: false, targets: new Set<string>() };
+        const g = byRequest.get(id) || { request_id: id, project_id: r.project_id ?? null, ts: r.ts as string, steps: 0, egressed: false, targets: new Set<string>() };
         g.steps += 1;
         g.ts = r.ts as string; // last step's ts
         if (r.egress === true) g.egressed = true;
@@ -175,8 +183,8 @@ export const conductorCostTool: ToolSpec = {
       const recent_requests = [...byRequest.values()]
         .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))
         .slice(0, 50)
-        .map((g) => ({ request_id: g.request_id, ts: g.ts, steps: g.steps, egressed: g.egressed, targets: [...g.targets] }));
-      return toolSuccess({ window_hours: args.hours ?? null, requests: byRequest.size, steps: rows.length, egressed_steps: egressed, cost_usd: cost, by_target: byTarget, recent_requests });
+        .map((g) => ({ request_id: g.request_id, project_id: g.project_id, ts: g.ts, steps: g.steps, egressed: g.egressed, targets: [...g.targets] }));
+      return toolSuccess({ window_hours: args.hours ?? null, project_id: args.project_id ?? null, requests: byRequest.size, steps: rows.length, egressed_steps: egressed, cost_usd: cost, by_target: byTarget, recent_requests });
     } catch (err) {
       return toolError(err instanceof Error ? err.message : String(err));
     }
