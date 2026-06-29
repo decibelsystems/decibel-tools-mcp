@@ -77,7 +77,8 @@ export const conductorRunTool: ToolSpec = {
     try {
       const a: string[] = ['--sensitivity', args.sensitivity || 'public', '--ledger', ledgerPath()];
       if (typeof args.difficulty === 'number') a.push('--difficulty', String(args.difficulty));
-      if (args.project_id) a.push('--project', String(args.project_id));
+      const pid = args.projectId ?? args.project_id;   // kernel normalizes project_id -> projectId
+      if (pid) a.push('--project', String(pid));
       a.push('--', args.task); // `--` stops option parsing so a task starting with "--" isn't a flag
       return toolSuccess(await cli(a));
     } catch (err) {
@@ -108,7 +109,8 @@ export const conductorDryrunTool: ToolSpec = {
     try {
       const a: string[] = ['--dryrun', '--sensitivity', args.sensitivity || 'public'];
       if (typeof args.difficulty === 'number') a.push('--difficulty', String(args.difficulty));
-      if (args.project_id) a.push('--project', String(args.project_id));
+      const pid = args.projectId ?? args.project_id;   // kernel normalizes project_id -> projectId
+      if (pid) a.push('--project', String(pid));
       a.push('--', args.task); // `--` stops option parsing so a task starting with "--" isn't a flag
       return toolSuccess(await cli(a));
     } catch (err) {
@@ -163,7 +165,8 @@ export const conductorCostTool: ToolSpec = {
         const cutoff = Date.now() - args.hours * 3600_000;
         rows = rows.filter((r) => typeof r.ts === 'string' && Date.parse(r.ts as string) >= cutoff);
       }
-      if (args.project_id) rows = rows.filter((r) => r.project_id === args.project_id);
+      const pid = args.projectId ?? args.project_id;   // kernel normalizes project_id -> projectId
+      if (pid) rows = rows.filter((r) => r.project_id === pid);
       const byTarget: Record<string, number> = {};
       const byRequest = new Map<string, { request_id: string; project_id: unknown; ts: string; steps: number; egressed: boolean; targets: Set<string> }>();
       let egressed = 0;
@@ -184,7 +187,7 @@ export const conductorCostTool: ToolSpec = {
         .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))
         .slice(0, 50)
         .map((g) => ({ request_id: g.request_id, project_id: g.project_id, ts: g.ts, steps: g.steps, egressed: g.egressed, targets: [...g.targets] }));
-      return toolSuccess({ window_hours: args.hours ?? null, project_id: args.project_id ?? null, requests: byRequest.size, steps: rows.length, egressed_steps: egressed, cost_usd: cost, by_target: byTarget, recent_requests });
+      return toolSuccess({ window_hours: args.hours ?? null, project_id: pid ?? null, requests: byRequest.size, steps: rows.length, egressed_steps: egressed, cost_usd: cost, by_target: byTarget, recent_requests });
     } catch (err) {
       return toolError(err instanceof Error ? err.message : String(err));
     }
