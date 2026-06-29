@@ -29,9 +29,9 @@ import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { timingSafeEqual } from 'crypto';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { log } from './config.js';
 import { writeLocalAgentSession } from './agentPresence.js';
 import { isSupabaseConfigured, getSupabaseServiceClient } from './lib/supabase.js';
@@ -1146,6 +1146,60 @@ export async function startHttpServer(
         kernel.off('error', listener);
         activeSseConnections.delete(res);
         log(`HTTP: /events/stream closed (${activeSseConnections.size} SSE connections)`);
+      };
+      res.on('close', cleanup);
+      res.on('error', cleanup);
+      return;
+    }
+
+    // GET /conductor/stream — SSE live-tail of the conductor trace ledger (C3).
+    // Pure live-from-now: history is conductor.trace's job. Optional ?session_id / ?project_id filter.
+    if (path === '/conductor/stream' && req.method === 'GET') {
+      const filterSession = url.searchParams.get('session_id');
+      const filterProject = url.searchParams.get('project_id');
+      // mirrors conductor/index.ts ledgerPath() — same file the runs append to
+      const lp = process.env.CONDUCTOR_LEDGER
+        || join(process.env.CONDUCTOR_DIR || resolve(process.cwd(), '../decibel-orchestrator'),
+                '.decibel/conductor/trace.jsonl');
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+      res.write(': connected\n\n');
+
+      let offset = 0;
+      try { offset = existsSync(lp) ? readFileSync(lp, 'utf8').length : 0; } catch { offset = 0; }
+      let buf = '';
+      // ponytail: re-reads the whole JSONL per poll — fine at trace sizes; switch to
+      // fd offset reads if the ledger grows large.
+      const poll = setInterval(() => {
+        if (res.writableEnded) return;
+        let content = '';
+        try { content = existsSync(lp) ? readFileSync(lp, 'utf8') : ''; } catch { return; }
+        if (content.length < offset) { offset = 0; buf = ''; }   // rotated/truncated
+        if (content.length <= offset) return;
+        buf += content.slice(offset);
+        offset = content.length;
+        let nl: number;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+          if (!line.trim()) continue;
+          let evt: Record<string, unknown>;
+          try { evt = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
+          if (filterSession && evt.request_id !== filterSession) continue;
+          if (filterProject && evt.project_id !== filterProject) continue;
+          if (!res.writableEnded) res.write(`data: ${JSON.stringify(evt)}\n\n`);
+        }
+      }, 300);
+
+      activeSseConnections.add(res);
+      log(`HTTP: /conductor/stream opened (${activeSseConnections.size} SSE connections)`);
+      const cleanup = () => {
+        clearInterval(poll);
+        activeSseConnections.delete(res);
+        log(`HTTP: /conductor/stream closed (${activeSseConnections.size} SSE connections)`);
       };
       res.on('close', cleanup);
       res.on('error', cleanup);
