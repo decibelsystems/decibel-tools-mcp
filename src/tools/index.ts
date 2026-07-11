@@ -39,6 +39,7 @@ import { decibelTools } from './decibel/index.js';
 import { codeReviewTools } from './codereview/index.js';
 import { peersTools } from './peers.js';
 import { conceptsTools } from './concepts.js';
+import { conductorTools } from './conductor/index.js';
 import {
   loadGraduatedTools,
   executeGraduatedTool,
@@ -85,6 +86,7 @@ const coreTools: ToolSpec[] = [
   ...codeReviewTools,
   ...peersTools,
   ...conceptsTools,
+  ...conductorTools,
 ];
 
 // App tools — Decibel internal (only when DECIBEL_APPS=1)
