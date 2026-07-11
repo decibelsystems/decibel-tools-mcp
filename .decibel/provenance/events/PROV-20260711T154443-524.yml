@@ -1,0 +1,11 @@
+event_id: PROV-20260711T154443-524
+timestamp: 2026-07-11T15:44:43.524Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0112-array-parameters-serialized-as-strings-in-mcp-faca.md
+reason_code: initial_creation
+summary: "Created issue: Array parameters serialized as strings in MCP facade tools (friction tags, roadmap objectives)"
+fingerprint_before: null
+fingerprint_after: sha256:9c2b0a4b42e5a54b

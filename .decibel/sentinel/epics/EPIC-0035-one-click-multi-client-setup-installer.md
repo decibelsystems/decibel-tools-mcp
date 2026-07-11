@@ -1,0 +1,1014 @@
+---
+id: EPIC-0035
+projectId: decibel-tools-mcp
+title: One-click multi-client setup installer
+summary: "Ship a one-click / single-command setup that gets a new user running with Decibel Tools across Cursor, Claude Code, and Claude Desktop without hand-editing config. The installer detects installed AI clients and writes the correct MCP server entry to each client's config location (Cursor ~/.cursor/mcp.json or per-project .cursor/mcp.json, Claude Code .mcp.json / ~/.claude/settings.json, Claude Desktop claude_desktop_config.json), and optionally provisions/writes the license key to ~/.decibel/config.yaml for the HTTP/production path. Removes the current manual, per-client, know-which-file-and-paste-JSON onboarding."
+status: planned
+priority: high
+tags: []
+owner: core
+squad: ""
+created_at: 2026-07-11T15:36:28.022Z
+---
+
+# One-click multi-client setup installer
+
+## Summary
+
+Ship a one-click / single-command setup that gets a new user running with Decibel Tools across Cursor, Claude Code, and Claude Desktop without hand-editing config. The installer detects installed AI clients and writes the correct MCP server entry to each client's config location (Cursor ~/.cursor/mcp.json or per-project .cursor/mcp.json, Claude Code .mcp.json / ~/.claude/settings.json, Claude Desktop claude_desktop_config.json), and optionally provisions/writes the license key to ~/.decibel/config.yaml for the HTTP/production path. Removes the current manual, per-client, know-which-file-and-paste-JSON onboarding.
+
+## Motivation
+
+- [
+- "
+- O
+- n
+- b
+- o
+- a
+- r
+- d
+- i
+- n
+- g
+-  
+- a
+-  
+- n
+- e
+- w
+-  
+- t
+- e
+- a
+- m
+- m
+- a
+- t
+- e
+-  
+- t
+- o
+- d
+- a
+- y
+-  
+- r
+- e
+- q
+- u
+- i
+- r
+- e
+- s
+-  
+- k
+- n
+- o
+- w
+- i
+- n
+- g
+-  
+- a
+-  
+- d
+- i
+- f
+- f
+- e
+- r
+- e
+- n
+- t
+-  
+- c
+- o
+- n
+- f
+- i
+- g
+-  
+- f
+- i
+- l
+- e
+-  
+- p
+- e
+- r
+-  
+- c
+- l
+- i
+- e
+- n
+- t
+-  
+- a
+- n
+- d
+-  
+- p
+- a
+- s
+- t
+- i
+- n
+- g
+-  
+- J
+- S
+- O
+- N
+-  
+- b
+- y
+-  
+- h
+- a
+- n
+- d
+- "
+- ,
+- "
+- I
+- n
+- s
+- t
+- a
+- l
+- l
+- i
+- n
+- g
+-  
+- t
+- h
+- e
+-  
+- n
+- p
+- m
+-  
+- p
+- a
+- c
+- k
+- a
+- g
+- e
+-  
+- c
+- r
+- e
+- a
+- t
+- e
+- s
+-  
+- n
+- o
+-  
+- c
+- o
+- n
+- f
+- i
+- g
+- ;
+-  
+- f
+- i
+- r
+- s
+- t
+- -
+- r
+- u
+- n
+-  
+- n
+- e
+- v
+- e
+- r
+-  
+- w
+- r
+- i
+- t
+- e
+- s
+-  
+- o
+- n
+- e
+- ,
+-  
+- s
+- o
+-  
+- u
+- s
+- e
+- r
+- s
+-  
+- h
+- i
+- t
+-  
+- a
+-  
+- w
+- a
+- l
+- l
+- "
+- ,
+- "
+- P
+- r
+- o
+- v
+- i
+- s
+- i
+- o
+- n
+- i
+- n
+- g
+-  
+- a
+-  
+- p
+- r
+- o
+-  
+- l
+- i
+- c
+- e
+- n
+- s
+- e
+-  
+- k
+- e
+- y
+-  
+- i
+- s
+-  
+- a
+-  
+- m
+- a
+- n
+- u
+- a
+- l
+-  
+- S
+- Q
+- L
+-  
+- i
+- n
+- s
+- e
+- r
+- t
+-  
+- p
+- l
+- u
+- s
+-  
+- h
+- a
+- n
+- d
+- -
+- c
+- r
+- e
+- a
+- t
+- e
+- d
+-  
+- ~
+- /
+- .
+- d
+- e
+- c
+- i
+- b
+- e
+- l
+- /
+- c
+- o
+- n
+- f
+- i
+- g
+- .
+- y
+- a
+- m
+- l
+- "
+- ,
+- "
+- D
+- i
+- r
+- e
+- c
+- t
+- l
+- y
+-  
+- a
+- d
+- v
+- a
+- n
+- c
+- e
+- s
+-  
+- O
+- B
+- J
+- -
+- 0
+- 0
+- 0
+- 2
+-  
+- U
+- n
+- i
+- v
+- e
+- r
+- s
+- a
+- l
+-  
+- C
+- l
+- i
+- e
+- n
+- t
+-  
+- R
+- e
+- a
+- c
+- h
+-  
+- b
+- y
+-  
+- l
+- o
+- w
+- e
+- r
+- i
+- n
+- g
+-  
+- t
+- h
+- e
+-  
+- b
+- a
+- r
+- r
+- i
+- e
+- r
+-  
+- t
+- o
+-  
+- e
+- v
+- e
+- r
+- y
+-  
+- s
+- u
+- p
+- p
+- o
+- r
+- t
+- e
+- d
+-  
+- c
+- l
+- i
+- e
+- n
+- t
+- "
+- ]
+
+## Outcomes
+
+- [
+- "
+- A
+-  
+- s
+- i
+- n
+- g
+- l
+- e
+-  
+- c
+- o
+- m
+- m
+- a
+- n
+- d
+-  
+- o
+- r
+-  
+- a
+- p
+- p
+-  
+- i
+- n
+- s
+- t
+- a
+- l
+- l
+- s
+-  
+- D
+- e
+- c
+- i
+- b
+- e
+- l
+-  
+- i
+- n
+- t
+- o
+-  
+- a
+- l
+- l
+-  
+- d
+- e
+- t
+- e
+- c
+- t
+- e
+- d
+-  
+- c
+- l
+- i
+- e
+- n
+- t
+- s
+-  
+- i
+- n
+-  
+- o
+- n
+- e
+-  
+- s
+- t
+- e
+- p
+- "
+- ,
+- "
+- N
+- o
+-  
+- m
+- a
+- n
+- u
+- a
+- l
+-  
+- J
+- S
+- O
+- N
+-  
+- e
+- d
+- i
+- t
+- i
+- n
+- g
+-  
+- r
+- e
+- q
+- u
+- i
+- r
+- e
+- d
+-  
+- f
+- o
+- r
+-  
+- t
+- h
+- e
+-  
+- c
+- o
+- m
+- m
+- o
+- n
+-  
+- c
+- a
+- s
+- e
+- "
+- ,
+- "
+- O
+- p
+- t
+- i
+- o
+- n
+- a
+- l
+-  
+- l
+- i
+- c
+- e
+- n
+- s
+- e
+- /
+- c
+- o
+- n
+- f
+- i
+- g
+-  
+- p
+- r
+- o
+- v
+- i
+- s
+- i
+- o
+- n
+- i
+- n
+- g
+-  
+- h
+- a
+- n
+- d
+- l
+- e
+- d
+-  
+- b
+- y
+-  
+- t
+- h
+- e
+-  
+- s
+- a
+- m
+- e
+-  
+- f
+- l
+- o
+- w
+- "
+- ]
+
+## Acceptance Criteria
+
+- [ ] [
+- [ ] "
+- [ ] D
+- [ ] e
+- [ ] t
+- [ ] e
+- [ ] c
+- [ ] t
+- [ ] s
+- [ ]  
+- [ ] w
+- [ ] h
+- [ ] i
+- [ ] c
+- [ ] h
+- [ ]  
+- [ ] o
+- [ ] f
+- [ ]  
+- [ ] C
+- [ ] u
+- [ ] r
+- [ ] s
+- [ ] o
+- [ ] r
+- [ ]  
+- [ ] /
+- [ ]  
+- [ ] C
+- [ ] l
+- [ ] a
+- [ ] u
+- [ ] d
+- [ ] e
+- [ ]  
+- [ ] C
+- [ ] o
+- [ ] d
+- [ ] e
+- [ ]  
+- [ ] /
+- [ ]  
+- [ ] C
+- [ ] l
+- [ ] a
+- [ ] u
+- [ ] d
+- [ ] e
+- [ ]  
+- [ ] D
+- [ ] e
+- [ ] s
+- [ ] k
+- [ ] t
+- [ ] o
+- [ ] p
+- [ ]  
+- [ ] a
+- [ ] r
+- [ ] e
+- [ ]  
+- [ ] i
+- [ ] n
+- [ ] s
+- [ ] t
+- [ ] a
+- [ ] l
+- [ ] l
+- [ ] e
+- [ ] d
+- [ ] "
+- [ ] ,
+- [ ] "
+- [ ] W
+- [ ] r
+- [ ] i
+- [ ] t
+- [ ] e
+- [ ] s
+- [ ]  
+- [ ] t
+- [ ] h
+- [ ] e
+- [ ]  
+- [ ] c
+- [ ] o
+- [ ] r
+- [ ] r
+- [ ] e
+- [ ] c
+- [ ] t
+- [ ]  
+- [ ] M
+- [ ] C
+- [ ] P
+- [ ]  
+- [ ] s
+- [ ] e
+- [ ] r
+- [ ] v
+- [ ] e
+- [ ] r
+- [ ]  
+- [ ] b
+- [ ] l
+- [ ] o
+- [ ] c
+- [ ] k
+- [ ]  
+- [ ] t
+- [ ] o
+- [ ]  
+- [ ] e
+- [ ] a
+- [ ] c
+- [ ] h
+- [ ]  
+- [ ] c
+- [ ] l
+- [ ] i
+- [ ] e
+- [ ] n
+- [ ] t
+- [ ] '
+- [ ] s
+- [ ]  
+- [ ] c
+- [ ] o
+- [ ] n
+- [ ] f
+- [ ] i
+- [ ] g
+- [ ]  
+- [ ] p
+- [ ] a
+- [ ] t
+- [ ] h
+- [ ]  
+- [ ] i
+- [ ] d
+- [ ] e
+- [ ] m
+- [ ] p
+- [ ] o
+- [ ] t
+- [ ] e
+- [ ] n
+- [ ] t
+- [ ] l
+- [ ] y
+- [ ]  
+- [ ] (
+- [ ] n
+- [ ] o
+- [ ]  
+- [ ] c
+- [ ] l
+- [ ] o
+- [ ] b
+- [ ] b
+- [ ] e
+- [ ] r
+- [ ] i
+- [ ] n
+- [ ] g
+- [ ]  
+- [ ] e
+- [ ] x
+- [ ] i
+- [ ] s
+- [ ] t
+- [ ] i
+- [ ] n
+- [ ] g
+- [ ]  
+- [ ] s
+- [ ] e
+- [ ] r
+- [ ] v
+- [ ] e
+- [ ] r
+- [ ] s
+- [ ] )
+- [ ] "
+- [ ] ,
+- [ ] "
+- [ ] O
+- [ ] p
+- [ ] t
+- [ ] i
+- [ ] o
+- [ ] n
+- [ ] a
+- [ ] l
+- [ ] l
+- [ ] y
+- [ ]  
+- [ ] w
+- [ ] r
+- [ ] i
+- [ ] t
+- [ ] e
+- [ ] s
+- [ ]  
+- [ ] ~
+- [ ] /
+- [ ] .
+- [ ] d
+- [ ] e
+- [ ] c
+- [ ] i
+- [ ] b
+- [ ] e
+- [ ] l
+- [ ] /
+- [ ] c
+- [ ] o
+- [ ] n
+- [ ] f
+- [ ] i
+- [ ] g
+- [ ] .
+- [ ] y
+- [ ] a
+- [ ] m
+- [ ] l
+- [ ]  
+- [ ] w
+- [ ] i
+- [ ] t
+- [ ] h
+- [ ]  
+- [ ] a
+- [ ]  
+- [ ] p
+- [ ] r
+- [ ] o
+- [ ] v
+- [ ] i
+- [ ] d
+- [ ] e
+- [ ] d
+- [ ]  
+- [ ] l
+- [ ] i
+- [ ] c
+- [ ] e
+- [ ] n
+- [ ] s
+- [ ] e
+- [ ]  
+- [ ] k
+- [ ] e
+- [ ] y
+- [ ] "
+- [ ] ,
+- [ ] "
+- [ ] V
+- [ ] e
+- [ ] r
+- [ ] i
+- [ ] f
+- [ ] i
+- [ ] e
+- [ ] s
+- [ ]  
+- [ ] t
+- [ ] h
+- [ ] e
+- [ ]  
+- [ ] s
+- [ ] e
+- [ ] r
+- [ ] v
+- [ ] e
+- [ ] r
+- [ ]  
+- [ ] c
+- [ ] o
+- [ ] n
+- [ ] n
+- [ ] e
+- [ ] c
+- [ ] t
+- [ ] s
+- [ ]  
+- [ ] a
+- [ ] f
+- [ ] t
+- [ ] e
+- [ ] r
+- [ ]  
+- [ ] i
+- [ ] n
+- [ ] s
+- [ ] t
+- [ ] a
+- [ ] l
+- [ ] l
+- [ ] "
+- [ ] ,
+- [ ] "
+- [ ] D
+- [ ] o
+- [ ] c
+- [ ] u
+- [ ] m
+- [ ] e
+- [ ] n
+- [ ] t
+- [ ] e
+- [ ] d
+- [ ]  
+- [ ] s
+- [ ] i
+- [ ] n
+- [ ] g
+- [ ] l
+- [ ] e
+- [ ] -
+- [ ] c
+- [ ] o
+- [ ] m
+- [ ] m
+- [ ] a
+- [ ] n
+- [ ] d
+- [ ]  
+- [ ] e
+- [ ] n
+- [ ] t
+- [ ] r
+- [ ] y
+- [ ]  
+- [ ] p
+- [ ] o
+- [ ] i
+- [ ] n
+- [ ] t
+- [ ]  
+- [ ] (
+- [ ] e
+- [ ] .
+- [ ] g
+- [ ] .
+- [ ]  
+- [ ] n
+- [ ] p
+- [ ] x
+- [ ]  
+- [ ] @
+- [ ] d
+- [ ] e
+- [ ] c
+- [ ] i
+- [ ] b
+- [ ] e
+- [ ] l
+- [ ] s
+- [ ] y
+- [ ] s
+- [ ] t
+- [ ] e
+- [ ] m
+- [ ] s
+- [ ] /
+- [ ] t
+- [ ] o
+- [ ] o
+- [ ] l
+- [ ] s
+- [ ]  
+- [ ] s
+- [ ] e
+- [ ] t
+- [ ] u
+- [ ] p
+- [ ] )
+- [ ] "
+- [ ] ]

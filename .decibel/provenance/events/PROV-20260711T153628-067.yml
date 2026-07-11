@@ -1,0 +1,11 @@
+event_id: PROV-20260711T153628-067
+timestamp: 2026-07-11T15:36:28.067Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:epic:EPIC-0035
+reason_code: initial_creation
+summary: "Created epic: One-click multi-client setup installer"
+fingerprint_before: null
+fingerprint_after: sha256:f996a7c4187f7a94
