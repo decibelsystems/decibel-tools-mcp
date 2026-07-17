@@ -138,6 +138,54 @@ export interface ToolKernel {
 }
 
 /**
+ * Coerce params that arrived as JSON strings but whose target tool's schema
+ * declares them as object or array. Facade MCP definitions expose only
+ * `{action}` with additionalProperties, so callers get no type info for
+ * nested params and often serialize them (ISS-0112, ISS-0116). A parse
+ * failure or type mismatch leaves the value untouched — the tool's own
+ * validation stays the source of truth for errors.
+ */
+export function coerceStringifiedParams(
+  params: Record<string, unknown>,
+  schema: ToolSpec['definition']['inputSchema']
+): Record<string, unknown> {
+  const props = schema?.properties;
+  if (!props) return params;
+
+  let out: Record<string, unknown> | undefined;
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value !== 'string') continue;
+
+    const prop = props[key] as { type?: string | string[] } | undefined;
+    if (!prop) continue;
+    const types = Array.isArray(prop.type) ? prop.type : [prop.type];
+    const wantsObject = types.includes('object');
+    const wantsArray = types.includes('array');
+    if (!wantsObject && !wantsArray) continue;
+    // String is also acceptable per the schema — don't second-guess the caller
+    if (types.includes('string')) continue;
+
+    const trimmed = value.trim();
+    const looksObject = trimmed.startsWith('{') && trimmed.endsWith('}');
+    const looksArray = trimmed.startsWith('[') && trimmed.endsWith(']');
+    if (!(wantsObject && looksObject) && !(wantsArray && looksArray)) continue;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    const isPlainObject = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
+    if ((wantsObject && isPlainObject) || (wantsArray && Array.isArray(parsed))) {
+      out ??= { ...params };
+      out[key] = parsed;
+    }
+  }
+  return out ?? params;
+}
+
+/**
  * Create the tool kernel. Call once at startup — both transports share it.
  */
 export async function createKernel(): Promise<ToolKernel> {
@@ -313,7 +361,7 @@ export async function createKernel(): Promise<ToolKernel> {
       if (project_id !== undefined && merged.projectId === undefined) {
         merged.projectId = project_id;
       }
-      const params = merged;
+      const params = coerceStringifiedParams(merged, tool.definition.inputSchema);
 
       log(`Kernel: facade ${name}.${action} → ${internalName} (agent=${agentId}${runId ? ` run=${runId}` : ''})`);
       trackToolUse(internalName);
@@ -364,6 +412,8 @@ export async function createKernel(): Promise<ToolKernel> {
     log(`Kernel: dispatch ${name} (agent=${agentId}${runId ? ` run=${runId}` : ''})`);
     trackToolUse(name);
 
+    const directParams = coerceStringifiedParams(args, tool.definition.inputSchema);
+
     const startTime = Date.now();
     emitter.emit('dispatch', {
       type: 'dispatch', tool: name,
@@ -371,7 +421,7 @@ export async function createKernel(): Promise<ToolKernel> {
     } satisfies DispatchEvent);
 
     try {
-      const result = await tool.handler(args);
+      const result = await tool.handler(directParams);
       emitter.emit('result', {
         type: 'result', tool: name,
         agentId, runId, requestId, timestamp: new Date().toISOString(),

@@ -1,0 +1,2 @@
+{"ts":"2026-07-17T17:16:24.805Z","run_id":"RUN-2026-07-17T17-16-24-799Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-07-17T17:16:24.807Z","run_id":"RUN-2026-07-17T17-16-24-799Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"sentinel_create_issue","result":"success","summary":"Created issue ISS-0116: designer lateral_apply rejects stringified input object (ISS-0112 family)"}}

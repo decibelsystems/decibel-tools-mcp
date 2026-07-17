@@ -34,11 +34,149 @@ export interface ProjectEntry {
   aliases?: string[];
   /** If true, this is the default project when none specified */
   default?: boolean;
+  /**
+   * Per-device path overrides, keyed by device ID (see getDeviceId).
+   * The same registry file can serve multiple machines: `path` stays the
+   * canonical location (external drives mount at the same /Volumes/... path on
+   * any Mac, so they live here), while machine-local checkouts go in
+   * devicePaths. Resolution prefers this device's override, then the canonical
+   * path, then any other device's copy that happens to exist here.
+   */
+  devicePaths?: Record<string, string>;
+  /** Display-only (set on entries returned by listProjects): the canonical registered path. */
+  canonicalPath?: string;
+  /** Display-only: whether the effective path exists with a .decibel folder on this device. */
+  available?: boolean;
+  /** Display-only: which candidate won — 'device' | 'canonical' | 'other_device'. */
+  pathSource?: EffectivePathSource;
+}
+
+export type EffectivePathSource = 'device' | 'canonical' | 'other_device';
+
+export interface EffectivePath {
+  path: string;
+  source: EffectivePathSource;
+  available: boolean;
 }
 
 export interface ProjectRegistry {
   version: 1;
   projects: ProjectEntry[];
+}
+
+// ============================================================================
+// Device Identity
+// ============================================================================
+// A stable per-machine ID so one registry file can hold paths for several
+// devices (desktop vs laptop) without them clobbering each other.
+// Precedence: DECIBEL_DEVICE_ID env → ~/.decibel/device.json → generated from
+// hostname and persisted. Hostnames drift (.local suffixes, network renames),
+// so the generated ID is written once and read thereafter.
+
+let cachedDeviceId: string | undefined;
+
+function sanitizeDeviceId(raw: string): string {
+  const id = raw
+    .trim()
+    .toLowerCase()
+    .replace(/\.local$/, '')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return id || 'unknown-device';
+}
+
+export function getDeviceId(): string {
+  if (process.env.DECIBEL_DEVICE_ID) {
+    return sanitizeDeviceId(process.env.DECIBEL_DEVICE_ID);
+  }
+  if (cachedDeviceId) return cachedDeviceId;
+
+  const deviceFile = path.join(os.homedir(), '.decibel', 'device.json');
+  try {
+    const data = JSON.parse(fs.readFileSync(deviceFile, 'utf-8')) as { id?: unknown };
+    if (typeof data.id === 'string' && data.id) {
+      cachedDeviceId = sanitizeDeviceId(data.id);
+      return cachedDeviceId;
+    }
+  } catch {
+    // No device file yet — generate one below.
+  }
+
+  const id = sanitizeDeviceId(os.hostname());
+  try {
+    fs.mkdirSync(path.dirname(deviceFile), { recursive: true });
+    fs.writeFileSync(
+      deviceFile,
+      JSON.stringify({ id, hostname: os.hostname(), created_at: new Date().toISOString() }, null, 2),
+    );
+    log(`ProjectRegistry: Generated device ID "${id}" → ${deviceFile}`);
+  } catch (err) {
+    log(`ProjectRegistry: Could not persist device ID (${err}) — using "${id}" for this process`);
+  }
+  cachedDeviceId = id;
+  return id;
+}
+
+// ============================================================================
+// Effective Path Resolution (device-aware)
+// ============================================================================
+
+/**
+ * All paths an entry might live at, most-specific first:
+ * this device's override → canonical path → other devices' copies.
+ */
+export function listCandidatePaths(entry: ProjectEntry): string[] {
+  const deviceId = getDeviceId();
+  const candidates: string[] = [];
+  const devicePath = entry.devicePaths?.[deviceId];
+  if (devicePath) candidates.push(devicePath);
+  candidates.push(entry.path);
+  for (const [device, p] of Object.entries(entry.devicePaths ?? {})) {
+    if (device !== deviceId && !candidates.includes(p)) candidates.push(p);
+  }
+  return candidates;
+}
+
+/**
+ * Pick the path this entry actually lives at ON THIS DEVICE: the first
+ * candidate whose .decibel/ folder exists. External drives resolve via the
+ * canonical path whenever mounted; machine-local checkouts via devicePaths.
+ * If nothing exists (drive unplugged, no local copy), returns the
+ * most-specific candidate with available=false so error messages can point
+ * at the right location.
+ */
+export function getEffectivePath(entry: ProjectEntry): EffectivePath {
+  const deviceId = getDeviceId();
+  const devicePath = entry.devicePaths?.[deviceId];
+
+  const sourceOf = (p: string): EffectivePathSource =>
+    p === devicePath ? 'device' : p === entry.path ? 'canonical' : 'other_device';
+
+  const candidates = listCandidatePaths(entry);
+  for (const candidate of candidates) {
+    if (hasDecibelFolder(candidate)) {
+      return { path: candidate, source: sourceOf(candidate), available: true };
+    }
+  }
+  const preferred = candidates[0];
+  return { path: preferred, source: sourceOf(preferred), available: false };
+}
+
+/** Copy of the entry with `path` replaced by the device-effective path. */
+function withEffectivePath(entry: ProjectEntry): ProjectEntry {
+  const eff = getEffectivePath(entry);
+  return { ...entry, path: eff.path };
+}
+
+/** Error text for a registered-but-absent project, with device context. */
+function unavailableMessage(entry: ProjectEntry, requestedAs: string): string {
+  const candidates = listCandidatePaths(entry);
+  return (
+    `Project "${requestedAs}" is registered but not available on this device (${getDeviceId()}). ` +
+    `Tried: ${candidates.join(', ')}. ` +
+    `If it lives on an external drive, mount it. If this machine has its own copy, ` +
+    `link it with registry_add (same id, this machine's path) or registry_scan with apply=true.`
+  );
 }
 
 // ============================================================================
@@ -198,27 +336,23 @@ export function resolveProject(projectId: string): ProjectEntry {
   // Strategy 1: Exact ID match in registry
   const exactMatch = registry.projects.find((p) => p.id === projectId);
   if (exactMatch) {
-    if (!hasDecibelFolder(exactMatch.path)) {
-      throw new Error(
-        `Project "${projectId}" registered at ${exactMatch.path} but .decibel folder not found. ` +
-        `Update the registry or run 'decibel init' in that directory.`
-      );
+    const eff = getEffectivePath(exactMatch);
+    if (!eff.available) {
+      throw new Error(unavailableMessage(exactMatch, projectId));
     }
-    log(`ProjectRegistry: Resolved "${projectId}" via exact ID match`);
-    return exactMatch;
+    log(`ProjectRegistry: Resolved "${projectId}" via exact ID match (${eff.source} path)`);
+    return { ...exactMatch, path: eff.path };
   }
 
   // Strategy 2: Alias match in registry
   const aliasMatch = registry.projects.find((p) => p.aliases?.includes(projectId));
   if (aliasMatch) {
-    if (!hasDecibelFolder(aliasMatch.path)) {
-      throw new Error(
-        `Project "${projectId}" (alias for "${aliasMatch.id}") registered at ${aliasMatch.path} ` +
-        `but .decibel folder not found.`
-      );
+    const eff = getEffectivePath(aliasMatch);
+    if (!eff.available) {
+      throw new Error(unavailableMessage(aliasMatch, `${projectId}" (alias for "${aliasMatch.id}`));
     }
-    log(`ProjectRegistry: Resolved "${projectId}" via alias -> "${aliasMatch.id}"`);
-    return aliasMatch;
+    log(`ProjectRegistry: Resolved "${projectId}" via alias -> "${aliasMatch.id}" (${eff.source} path)`);
+    return { ...aliasMatch, path: eff.path };
   }
 
   // Strategy 3: DECIBEL_PROJECT_ROOT env var
@@ -273,17 +407,53 @@ export function resolveProject(projectId: string): ProjectEntry {
 }
 
 /**
- * List all registered projects
+ * List all registered projects. Entries carry the device-effective `path`
+ * (so every consumer reads the right location for this machine), plus
+ * display fields: canonicalPath, available, pathSource.
  */
 export function listProjects(): ProjectEntry[] {
   const registry = loadRegistry();
-  return registry.projects;
+  return registry.projects.map((p) => {
+    const eff = getEffectivePath(p);
+    return {
+      ...p,
+      path: eff.path,
+      canonicalPath: p.path,
+      available: eff.available,
+      pathSource: eff.source,
+    };
+  });
+}
+
+export interface RegisterResult {
+  action: 'added' | 'updated_canonical' | 'device_linked' | 'kept_existing_device_link';
+  id: string;
+  /** The path now effective for this device. */
+  path: string;
+  /** For kept_existing_device_link: the path that was NOT recorded. */
+  skippedPath?: string;
 }
 
 /**
- * Register a new project or update an existing one
+ * Register a new project or update an existing one — device-aware.
+ *
+ * New IDs register their path as canonical. For an existing ID with a
+ * DIFFERENT path, the new path is recorded as this device's override
+ * (devicePaths[deviceId]) so machines don't clobber each other's locations —
+ * the scenario that broke the laptop when the registry held desktop-only
+ * /Volumes/Ashitaka paths. Pass opts.canonical=true to deliberately rewrite
+ * the canonical path (e.g. the project genuinely moved).
+ *
+ * If this device is ALREADY linked to a valid copy, a differing path is NOT
+ * recorded unless opts.repoint=true — otherwise a second copy of the same
+ * project (e.g. a backup on an external drive) discovered later in a scan
+ * would silently steal the link from the working copy. registry_add passes
+ * repoint (explicit user intent); registry_scan apply does not.
  */
-export function registerProject(entry: ProjectEntry): void {
+export function registerProject(
+  entry: ProjectEntry,
+  opts?: { canonical?: boolean; repoint?: boolean },
+): RegisterResult {
   const registry = loadRegistry();
 
   // Validate path exists and has .decibel
@@ -297,22 +467,62 @@ export function registerProject(entry: ProjectEntry): void {
     );
   }
 
-  // Normalize path
+  // Normalize path; strip display-only fields so they never persist to disk
+  // (callers sometimes round-trip entries that came from listProjects).
   entry.path = path.resolve(entry.path);
+  delete entry.canonicalPath;
+  delete entry.available;
+  delete entry.pathSource;
 
-  // Check for duplicate ID
+  const deviceId = getDeviceId();
+  let result: RegisterResult;
   const existingIdx = registry.projects.findIndex((p) => p.id === entry.id);
   if (existingIdx >= 0) {
-    // Update existing
-    registry.projects[existingIdx] = entry;
-    log(`ProjectRegistry: Updated project "${entry.id}"`);
+    const existing = registry.projects[existingIdx];
+    if (opts?.canonical || existing.path === entry.path) {
+      // Same path (metadata refresh) or explicit canonical rewrite.
+      const updated: ProjectEntry = {
+        ...existing,
+        ...entry,
+        devicePaths: entry.devicePaths ?? existing.devicePaths,
+      };
+      // A device override equal to the new canonical path is redundant — drop it.
+      if (updated.devicePaths?.[deviceId] === updated.path) {
+        delete updated.devicePaths[deviceId];
+        if (Object.keys(updated.devicePaths).length === 0) delete updated.devicePaths;
+      }
+      registry.projects[existingIdx] = updated;
+      log(`ProjectRegistry: Updated project "${entry.id}" (canonical: ${updated.path})`);
+      result = { action: 'updated_canonical', id: entry.id, path: updated.path };
+    } else {
+      // Different path for a known project: this machine's copy, not a move.
+      const currentLink = existing.devicePaths?.[deviceId];
+      if (currentLink && currentLink !== entry.path && hasDecibelFolder(currentLink) && !opts?.repoint) {
+        // Device already linked to a valid copy — don't let a second copy
+        // (backup drive, stale clone) steal the link.
+        log(
+          `ProjectRegistry: Kept existing device link for "${entry.id}" on ${deviceId} ` +
+          `(${currentLink}); not repointing to ${entry.path}`,
+        );
+        return { action: 'kept_existing_device_link', id: entry.id, path: currentLink, skippedPath: entry.path };
+      }
+      existing.devicePaths = { ...(existing.devicePaths ?? {}), [deviceId]: entry.path };
+      if (entry.name && !existing.name) existing.name = entry.name;
+      if (entry.aliases?.length) {
+        existing.aliases = Array.from(new Set([...(existing.aliases ?? []), ...entry.aliases]));
+      }
+      log(`ProjectRegistry: Linked device path for "${entry.id}" on ${deviceId}: ${entry.path}`);
+      result = { action: 'device_linked', id: entry.id, path: entry.path };
+    }
   } else {
     // Add new
     registry.projects.push(entry);
     log(`ProjectRegistry: Added project "${entry.id}"`);
+    result = { action: 'added', id: entry.id, path: entry.path };
   }
 
   saveRegistry(registry);
+  return result;
 }
 
 /**
@@ -426,7 +636,7 @@ export function getScanRoots(explicit?: string[] | string): string[] {
   }
   const registry = loadRegistry();
   const parents = registry.projects
-    .map((p) => p.path)
+    .flatMap((p) => listCandidatePaths(p))
     .filter((p) => p && fs.existsSync(p))
     .map((p) => path.dirname(path.resolve(p)));
   return Array.from(new Set(parents));
@@ -441,9 +651,15 @@ export function getScanRoots(explicit?: string[] | string): string[] {
 export function scanForProjects(explicitRoots?: string[] | string): ScanResult {
   const roots = getScanRoots(explicitRoots);
   const registry = loadRegistry();
-  const registeredByPath = new Map(
-    registry.projects.map((p) => [path.resolve(p.path), p] as const),
-  );
+  // Match discovered directories against EVERY path an entry is known by
+  // (canonical + all device overrides), so a copy already linked for some
+  // device isn't re-reported as unregistered.
+  const registeredByPath = new Map<string, ProjectEntry>();
+  for (const p of registry.projects) {
+    for (const candidate of listCandidatePaths(p)) {
+      registeredByPath.set(path.resolve(candidate), p);
+    }
+  }
 
   const found: ScanFinding[] = [];
   const seenPaths = new Set<string>();
@@ -473,13 +689,24 @@ export function scanForProjects(explicitRoots?: string[] | string): ScanResult {
 
   const unregistered = found.filter((f) => !f.registered);
 
+  // Orphans = no candidate path (canonical or any device override) is usable
+  // on this device. An unmounted external volume gets its own reason so it
+  // reads as "plug the drive in", not "the project is gone".
   const orphans: Array<{ id: string; path: string; reason: string }> = [];
   for (const project of registry.projects) {
-    if (!fs.existsSync(project.path)) {
-      orphans.push({ id: project.id, path: project.path, reason: 'path_missing' });
-    } else if (!hasDecibelFolder(project.path)) {
-      orphans.push({ id: project.id, path: project.path, reason: 'no_decibel_dir' });
+    const eff = getEffectivePath(project);
+    if (eff.available) continue;
+    const candidates = listCandidatePaths(project);
+    let reason = 'path_missing';
+    if (candidates.some((p) => fs.existsSync(p))) {
+      reason = 'no_decibel_dir';
+    } else {
+      const unmounted = candidates
+        .map((p) => /^\/Volumes\/[^/]+/.exec(p)?.[0])
+        .find((vol) => vol && !fs.existsSync(vol));
+      if (unmounted) reason = `volume_unmounted:${path.basename(unmounted)}`;
     }
+    orphans.push({ id: project.id, path: eff.path, reason });
   }
 
   return { roots, found, unregistered, orphans };
@@ -500,9 +727,9 @@ export function getDefaultProject(): ProjectEntry | undefined {
 
   // Strategy 1: Explicitly marked default
   const explicitDefault = registry.projects.find((p) => p.default === true);
-  if (explicitDefault && hasDecibelFolder(explicitDefault.path)) {
+  if (explicitDefault && getEffectivePath(explicitDefault).available) {
     log(`ProjectRegistry: Using explicit default project "${explicitDefault.id}"`);
-    return explicitDefault;
+    return withEffectivePath(explicitDefault);
   }
 
   // Strategy 2: DECIBEL_DEFAULT_PROJECT env var
@@ -511,28 +738,30 @@ export function getDefaultProject(): ProjectEntry | undefined {
     const envMatch = registry.projects.find(
       (p) => p.id === envDefault || p.aliases?.includes(envDefault)
     );
-    if (envMatch && hasDecibelFolder(envMatch.path)) {
+    if (envMatch && getEffectivePath(envMatch).available) {
       log(`ProjectRegistry: Using DECIBEL_DEFAULT_PROJECT "${envMatch.id}"`);
-      return envMatch;
+      return withEffectivePath(envMatch);
     }
   }
 
   // Strategy 3: If only one project, use it
-  const validProjects = registry.projects.filter((p) => hasDecibelFolder(p.path));
+  const validProjects = registry.projects.filter((p) => getEffectivePath(p).available);
   if (validProjects.length === 1) {
     log(`ProjectRegistry: Using only registered project "${validProjects[0].id}" as default`);
-    return validProjects[0];
+    return withEffectivePath(validProjects[0]);
   }
 
   // Strategy 4: Discover from cwd
   const discoveredRoot = findDecibelDir(process.cwd());
   if (discoveredRoot) {
     const discoveredId = path.basename(discoveredRoot);
-    // Check if it matches a registered project
+    // Check if it matches a registered project. The cwd-discovered root is
+    // certainly valid on this device, so prefer it over a registered path
+    // that may point at another machine's location.
     const registeredMatch = registry.projects.find((p) => p.id === discoveredId);
     if (registeredMatch) {
       log(`ProjectRegistry: Using cwd-discovered project "${registeredMatch.id}" as default`);
-      return registeredMatch;
+      return { ...registeredMatch, path: discoveredRoot };
     }
     // Return an ad-hoc entry for the discovered project
     log(`ProjectRegistry: Using cwd-discovered unregistered project "${discoveredId}" as default`);
