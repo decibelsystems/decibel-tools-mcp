@@ -142,11 +142,18 @@ export async function listIssuesForProject(
   for (const { filePath, source } of files) {
     try {
       const content = await fs.readFile(filePath, 'utf-8');
-      const parsed = safeParseYaml(content);
+      const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+      const parsed = fmMatch ? safeParseYaml(fmMatch[1]) : safeParseYaml(content);
 
-      // Validate required fields
-      const id = parsed.id as string;
-      const title = parsed.title as string;
+      // Required fields, with fallbacks for markdown-frontmatter issues
+      // (tools/sentinel.ts createIssue): id = filename, title = `# heading`.
+      // Without these, read_issue/update_issue can't see .md issues at all.
+      const headingMatch = content.match(/^# (.+)$/m);
+      const id = (parsed.id as string) || path.basename(filePath);
+      const title =
+        (parsed.title as string) ||
+        headingMatch?.[1] ||
+        path.basename(filePath).replace(/\.(md|ya?ml)$/, '');
 
       if (!id || !title) {
         log(`sentinelIssues: Skipping ${filePath} - missing id or title`);
@@ -170,7 +177,9 @@ export async function listIssuesForProject(
         tags: parsed.tags as string[] | undefined,
         created_at: parsed.created_at as string | undefined,
         updated_at: parsed.updated_at as string | undefined,
-        description: parsed.description as string | undefined,
+        description:
+          (parsed.description as string | undefined) ??
+          (fmMatch?.[2]?.trim() ? fmMatch[2].trim() : undefined),
       };
 
       // Copy any extra fields
@@ -179,6 +188,8 @@ export async function listIssuesForProject(
           issue[key] = parsed[key];
         }
       }
+      // Keep the on-disk filename so lookups can accept it as an ID
+      issue.filename = path.basename(filePath);
 
       issues.push(issue);
     } catch (err) {
@@ -283,9 +294,18 @@ export async function getIssueById(
   projectId: string,
   issueId: string,
 ): Promise<SentinelIssue | null> {
+  // Accept every ID form other tools emit: frontmatter id (ISS-NNNN),
+  // filename with or without extension (what list_issues/close_issue use).
+  const norm = (s: string) => s.toUpperCase().replace(/\.(MD|YA?ML)$/, '');
   const issues = await listIssuesForProject(projectId);
-  const normalizedId = issueId.toUpperCase();
-  return issues.find((i) => i.id.toUpperCase() === normalizedId) ?? null;
+  const normalizedId = norm(issueId);
+  return (
+    issues.find(
+      (i) =>
+        norm(i.id) === normalizedId ||
+        (typeof i.filename === 'string' && norm(i.filename) === normalizedId)
+    ) ?? null
+  );
 }
 
 // ============================================================================
@@ -332,9 +352,16 @@ export async function updateIssue(
     throw new Error(`Issue ${issueId} not found in project ${projectId}`);
   }
 
-  // Read and parse
+  // Read and parse. Two on-disk formats exist:
+  //   1. Markdown with `---` frontmatter delimiters + body (tools/sentinel.ts createIssue)
+  //   2. Pure YAML (this module's createIssue)
+  // The writer MUST preserve the source format — flattening a markdown file to
+  // bare YAML drops the delimiters, the `# Title` heading, and the body, which
+  // makes the issue invisible to frontmatter-based readers (silent data loss).
   const content = await fs.readFile(matchedFile.filePath, 'utf-8');
-  const parsed = safeParseYaml(content);
+  const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  const parsed = fmMatch ? safeParseYaml(fmMatch[1]) : safeParseYaml(content);
+  let body = fmMatch ? fmMatch[2] : undefined;
   const changes: string[] = [];
 
   // Apply changes
@@ -358,10 +385,14 @@ export async function updateIssue(
   }
 
   if (note) {
-    const existing = (parsed.description as string) || '';
     const timestamp = new Date().toISOString().slice(0, 10);
-    const appendedNote = `\n\n[${timestamp}] ${note}`;
-    parsed.description = existing + appendedNote;
+    if (body !== undefined) {
+      // Markdown format: append to the body, keeping the heading/prose intact
+      body = `${body.replace(/\s+$/, '')}\n\n[${timestamp}] ${note}\n`;
+    } else {
+      const existing = (parsed.description as string) || '';
+      parsed.description = `${existing}\n\n[${timestamp}] ${note}`;
+    }
     changes.push(`note appended`);
   }
 
@@ -372,8 +403,9 @@ export async function updateIssue(
   // Update timestamp
   parsed.updated_at = new Date().toISOString();
 
-  // Write back
-  const yamlContent = stringifyYaml(parsed, { lineWidth: 0 });
+  // Write back in the same format the file came in
+  const yaml = stringifyYaml(parsed, { lineWidth: 0 });
+  const yamlContent = body !== undefined ? `---\n${yaml}---\n${body}` : yaml;
 
   // Write to the primary (.decibel) path
   const writeDir = await getWritePath(projectId, ISSUES_SUBPATH);
