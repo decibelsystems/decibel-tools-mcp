@@ -2,8 +2,9 @@
 id: ISS-0114
 projectId: decibel-tools-mcp
 severity: med
-status: open
+status: in_progress
 created_at: 2026-07-11T18:12:14.600Z
+updated_at: 2026-08-02T03:20:37.887Z
 ---
 
 # Guardian report() does not apply project secret allowlist (allowlisted stays 0)
@@ -49,3 +50,17 @@ differing data root / HOME in the server environment.
 **Impact confirmed real:** the guardian pre-push hook runs through the server, so it
 grades F on 4 known-safe Supabase *anon* keys (all decode to `"role":"anon"`, all
 already present on `public/main`) and blocks pushes.
+
+[2026-08-02] Root cause found — NOT path resolution and NOT process state (restart did not fix it; the ea93611 dev/prod advisory split was present in the same output, proving fresh code was loaded).
+
+kernel.ts:359 destructured `project_id` OUT of args and re-added it only as `projectId`:
+  const { action, params, project_id, ...flatParams } = args;
+It renamed rather than aliased. Guardian reads `input.project_id` (snake_case), so over MCP dispatch it was undefined -> loadAllowlist(undefined) -> fell back to ~/.decibel/guardian/allowlist.yaml, which does not exist -> [] -> allowlisted: 0.
+
+Direct in-process calls pass project_id intact, which is why a fresh process read allowlisted: 4 / grade B.
+
+Blast radius: 71 reads of input.project_id across 19 files in src/tools/. All silently lost project scope over MCP; most survived because resolveProjectPaths(undefined) falls back to a cwd-walk that happens to find the repo. Guardian's allowlist was one of the few going straight to homedir() with no cwd fallback, so it surfaced first.
+
+Fix: kernel now keeps both keys (alias, not rename). Verified through k.dispatch('guardian', {action:'report', project_id}) -> grade B, allowlisted 4, findings 0. Full suite 366/366.
+
+Follow-up worth considering: loadAllowlist has no cwd fallback unlike its siblings — defense in depth.

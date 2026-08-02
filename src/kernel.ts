@@ -355,11 +355,13 @@ export async function createKernel(): Promise<ToolKernel> {
 
       // Flat params: action-specific fields are at root level.
       // Backward compat: also merge args.params if present (batch API, legacy callers).
-      // Normalize project_id → projectId (snake_case callers like hooks/agents).
-      const { action: _action, params: legacyParams, project_id, ...flatParams } = args;
+      // Alias project_id → projectId (snake_case callers like hooks/agents).
+      // Both keys are kept: many internal tools read input.project_id directly,
+      // and dropping it silently strips project scope over MCP dispatch.
+      const { action: _action, params: legacyParams, ...flatParams } = args;
       const merged = { ...(legacyParams as Record<string, unknown> || {}), ...flatParams };
-      if (project_id !== undefined && merged.projectId === undefined) {
-        merged.projectId = project_id;
+      if (merged.project_id !== undefined && merged.projectId === undefined) {
+        merged.projectId = merged.project_id;
       }
       const params = coerceStringifiedParams(merged, tool.definition.inputSchema);
 
