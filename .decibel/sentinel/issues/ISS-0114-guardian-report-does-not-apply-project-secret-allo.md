@@ -24,3 +24,28 @@ Fix direction: thread project_id from report() through to the secret scan so loa
 Impact: teams can't suppress known false positives (public anon/publishable keys) via the documented project allowlist when using the report() gate — the pre-push hook uses report(), so legitimate false positives can't be cleared, forcing bypasses.
 
 Related: ISS-0112 (array-param serialization bug in facade tools).
+
+## Correction — 2026-08-01
+
+**The root cause above is wrong.** `report()` *does* thread `project_id`
+(`src/tools/guardian.ts:505-506` → `scanSecrets` → `loadAllowlist(input.project_id)`),
+and `loadAllowlist` is byte-identical on `origin/main` and `public/main`.
+
+Verified by running `scanSecrets({project_id:'decibel-tools-mcp'})` directly from
+source via tsx: `total_findings=0, allowlisted=4`. The allowlist mechanism works.
+
+But the long-running MCP server process — same code, same allowlist file, same
+`project_id` — still returns `allowlisted: 0` (reproduced twice). The scanned file
+paths are identical in both outputs (`/…/decibel-tools-mcp/src/…`), so
+`resolved.projectPath` matches. The divergence must therefore be in
+`resolved.subPath()` / `decibelPath` resolving to a **different directory** in the
+server process: `scanSecrets` scans the repo while `loadAllowlist` reads the
+allowlist from somewhere else.
+
+**Next step:** log the resolved `allowlistPath` inside `loadAllowlist` and compare
+server process vs. fresh process. Suspect a registry `decibelPath` override or a
+differing data root / HOME in the server environment.
+
+**Impact confirmed real:** the guardian pre-push hook runs through the server, so it
+grades F on 4 known-safe Supabase *anon* keys (all decode to `"role":"anon"`, all
+already present on `public/main`) and blocks pushes.
