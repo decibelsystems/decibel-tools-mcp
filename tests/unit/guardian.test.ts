@@ -131,6 +131,28 @@ describe('guardian secret allowlist (ISS-0114)', () => {
     expect(result.allowlisted).toBe(1);
   });
 
+  it('applies the project allowlist when project_id is omitted entirely', async () => {
+    // The regression that blocked pushes. Every other test in this block passes
+    // project_id explicitly, so all of them stayed green while loadAllowlist's
+    // `if (projectId)` branch sent the no-arg case straight to ~/.decibel and
+    // skipped the project allowlist. The pre-push hook calls guardian with no
+    // project_id, so this is the path that actually graded D.
+    // createTestContext chdirs into rootDir, so the cwd-walk resolves here.
+    await writeSource('src/license.ts');
+    const guardianDir = path.join(ctx.rootDir, '.decibel', 'guardian');
+    await fs.mkdir(guardianDir, { recursive: true });
+    await fs.writeFile(
+      path.join(guardianDir, 'allowlist.yaml'),
+      'entries:\n  - src/license.ts\n',
+      'utf-8'
+    );
+
+    const result = await scanSecrets({ directories: [path.join(ctx.rootDir, 'src')] });
+
+    expect(result.total_findings).toBe(0);
+    expect(result.allowlisted).toBe(1);
+  });
+
   it('keeps flagging files outside the allowlist', async () => {
     await writeSource('src/license.ts');
     await writeSource('src/leaky.ts');

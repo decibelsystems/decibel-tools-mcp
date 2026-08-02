@@ -2,15 +2,16 @@
 id: ISS-0114
 projectId: decibel-tools-mcp
 severity: med
-status: in_progress
+status: closed
 created_at: 2026-07-11T18:12:14.600Z
 updated_at: 2026-08-02T03:20:37.887Z
+closed_at: 2026-08-02T03:32:23.881Z
 ---
 
 # Guardian report() does not apply project secret allowlist (allowlisted stays 0)
 
 **Severity:** med
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -64,3 +65,17 @@ Blast radius: 71 reads of input.project_id across 19 files in src/tools/. All si
 Fix: kernel now keeps both keys (alias, not rename). Verified through k.dispatch('guardian', {action:'report', project_id}) -> grade B, allowlisted 4, findings 0. Full suite 366/366.
 
 Follow-up worth considering: loadAllowlist has no cwd fallback unlike its siblings — defense in depth.
+
+## Resolution
+
+Fixed in two commits, both pushed to origin/main and public/main at 810430f.
+
+aa473ab fix(kernel): alias project_id instead of renaming it. kernel.ts destructured project_id out of args and re-added it only as projectId, so the 71 reads of input.project_id across 19 files in src/tools/ received undefined over MCP dispatch. Now keeps both keys.
+
+810430f fix(guardian): resolve the project allowlist when project_id is omitted. loadAllowlist branched on `if (projectId)` and otherwise skipped project resolution entirely, reading only the global ~/.decibel allowlist. Its sibling scanSecrets calls resolveProjectPaths(input.project_id) unconditionally and relies on the cwd-walk fallback — which is why the scan found the right directories while the allowlist did not. This second commit was the one that actually unblocked the pre-push hook, since the hook's agent invokes guardian report with no project_id at all.
+
+Verified through the real kernel dispatch path in both call shapes (with and without project_id): grade B, allowlisted 4, findings 0. Suite 366/366. Push to both remotes succeeded with the guardian gate active.
+
+Supersedes the two earlier hypotheses recorded on this issue: report() not threading project_id (it did), and a decibelPath/data-root divergence in the server process (there was none). The 2026-08-01 note's conclusion that the divergence "must therefore be in resolved.subPath()" was wrong — the divergence was that project_id never reached loadAllowlist at all.
+
+Not done, deliberately: no regression test locking in either behaviour. Worth adding — a kernel test asserting project_id survives dispatch, and a guardian test asserting the project allowlist applies when project_id is omitted. That second case is the one that regressed silently and blocked pushes.

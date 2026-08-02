@@ -1,0 +1,6 @@
+{"ts":"2026-08-02T03:32:23.883Z","run_id":"RUN-2026-08-02T03-32-23-883Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-08-02T03:31:48Z","run_id":"RUN-2026-08-02T03-32-23-883Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T03:32:03Z","run_id":"RUN-2026-08-02T03-32-23-883Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T03:32:08Z","run_id":"RUN-2026-08-02T03-32-23-883Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T03:32:24.246Z","run_id":"RUN-2026-08-02T03-32-23-883Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"sentinel_close_issue","result":"success","summary":"Closed issue ISS-0114: closed"}}
+{"ts":"2026-08-02T03:40:20.761Z","run_id":"RUN-2026-08-02T03-32-23-883Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"sentinel_close_issue","result":"success","summary":"Closed issue ISS-0113: closed"}}
