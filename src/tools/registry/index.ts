@@ -16,6 +16,7 @@ import {
   resolveProject,
   getRegistryFilePath,
   scanForProjects,
+  getDeviceId,
 } from '../../projectRegistry.js';
 import {
   getToolConfig,
@@ -317,11 +318,17 @@ export const projectStatusTool: ToolSpec = {
     try {
       const projects = listProjects();
 
-      // If checking a specific path
+      // If checking a specific path — match against every path a project is
+      // known by (effective, canonical, and all device copies).
       if (args.path) {
         const hasDecibel = hasDecibelFolder(args.path);
         const dirName = path.basename(args.path);
-        const isRegistered = projects.some(p => p.path === path.resolve(args.path!));
+        const resolvedPath = path.resolve(args.path);
+        const isRegistered = projects.some(p =>
+          p.path === resolvedPath ||
+          p.canonicalPath === resolvedPath ||
+          Object.values(p.devicePaths ?? {}).includes(resolvedPath)
+        );
 
         return toolSuccess({
           path: args.path,
@@ -358,23 +365,29 @@ export const projectStatusTool: ToolSpec = {
           found: true,
           name: project.name,
           path: project.path,
+          canonicalPath: project.canonicalPath,
+          pathSource: project.pathSource,
+          deviceId: getDeviceId(),
           aliases: project.aliases,
           hasDecibelFolder: hasDecibel,
-          status: hasDecibel ? 'ready' : 'missing_decibel_folder',
+          status: hasDecibel ? 'ready' : 'unavailable_on_this_device',
         });
       }
 
-      // List all projects
+      // List all projects (paths are device-effective)
       const projectStatuses = projects.map(p => ({
         id: p.id,
         name: p.name,
         path: p.path,
+        canonicalPath: p.canonicalPath,
+        pathSource: p.pathSource,
         aliases: p.aliases,
-        hasDecibelFolder: hasDecibelFolder(p.path),
+        hasDecibelFolder: p.available ?? hasDecibelFolder(p.path),
       }));
 
       return toolSuccess({
         totalProjects: projects.length,
+        deviceId: getDeviceId(),
         projects: projectStatuses,
       });
     } catch (err) {
@@ -411,11 +424,16 @@ export const registryListTool: ToolSpec = {
 
     return toolSuccess({
       registryPath,
+      deviceId: getDeviceId(),
       projectCount: projects.length,
       projects: projects.map(p => ({
         id: p.id,
         name: p.name,
         path: p.path,
+        canonicalPath: p.canonicalPath,
+        available: p.available,
+        pathSource: p.pathSource,
+        devicePaths: p.devicePaths,
         aliases: p.aliases || [],
       })),
     });
@@ -425,7 +443,9 @@ export const registryListTool: ToolSpec = {
 export const registryAddTool: ToolSpec = {
   definition: {
     name: 'registry_add',
-    description: 'Register a project in the Decibel registry. The project path must contain a .decibel folder.',
+    description: `Register a project in the Decibel registry. The project path must contain a .decibel folder.
+
+Device-aware: registering an EXISTING id with a different path records that path as this device's copy (devicePaths) instead of overwriting the canonical path — so a laptop and desktop can share one registry. Pass canonical=true to deliberately rewrite the canonical path (project genuinely moved).`,
     annotations: {
       title: 'Register Project',
       readOnlyHint: false,
@@ -452,6 +472,10 @@ export const registryAddTool: ToolSpec = {
           items: { type: 'string' },
           description: 'Alternative names/shortcuts for this project',
         },
+        canonical: {
+          type: 'boolean',
+          description: 'Force-rewrite the canonical path for an existing id (default: a differing path is stored as this device\'s copy)',
+        },
       },
       required: ['id', 'path'],
     },
@@ -459,10 +483,16 @@ export const registryAddTool: ToolSpec = {
   handler: async (args) => {
     try {
       requireFields(args, 'id', 'path');
-      registerProject({ id: args.id, path: args.path, name: args.name, aliases: args.aliases });
+      const result = registerProject(
+        { id: args.id, path: args.path, name: args.name, aliases: args.aliases },
+        // Explicit registry_add may repoint this device's link; scans may not.
+        { canonical: args.canonical === true, repoint: true },
+      );
       return toolSuccess({
         success: true,
-        message: `Project "${args.id}" registered successfully`,
+        message: `Project "${args.id}" registered successfully (${result.action})`,
+        deviceId: getDeviceId(),
+        result,
         project: { id: args.id, path: args.path, name: args.name, aliases: args.aliases },
       });
     } catch (err) {
@@ -559,7 +589,7 @@ Returns a diff:
 
 Roots resolution order: explicit roots arg → DECIBEL_SCAN_ROOTS env var → parent dirs of registered projects.
 
-Pass apply=true to register all unregistered projects (ID = directory basename). Does not touch orphans — use registry_remove to clean those up.`,
+Pass apply=true to register all unregistered projects (ID = directory basename). Device-aware: a found directory whose basename matches an already-registered id is linked as this device's copy (devicePaths) rather than overwriting the canonical path. Orphans with reason "volume_unmounted:<name>" just need their external drive mounted. Does not touch other orphans — use registry_remove to clean those up.`,
     annotations: {
       title: 'Scan Registry',
       readOnlyHint: false,
@@ -585,14 +615,17 @@ Pass apply=true to register all unregistered projects (ID = directory basename).
     try {
       const result = scanForProjects(args.roots as string[] | undefined);
 
-      const applied: Array<{ id: string; path: string }> = [];
+      const applied: Array<{ id: string; path: string; action: string; skippedPath?: string }> = [];
       const applyFailures: Array<{ id: string; path: string; error: string }> = [];
 
       if (args.apply) {
         for (const finding of result.unregistered) {
           try {
-            registerProject({ id: finding.id, path: finding.path, name: finding.id });
-            applied.push({ id: finding.id, path: finding.path });
+            // No repoint: scan-discovered duplicates (backup drives, stale
+            // clones) must not steal an existing valid device link. Root order
+            // in the scan = priority for first link.
+            const reg = registerProject({ id: finding.id, path: finding.path, name: finding.id });
+            applied.push({ id: finding.id, path: reg.path, action: reg.action, skippedPath: reg.skippedPath });
           } catch (err) {
             applyFailures.push({
               id: finding.id,
@@ -605,6 +638,7 @@ Pass apply=true to register all unregistered projects (ID = directory basename).
 
       return toolSuccess({
         roots: result.roots,
+        deviceId: getDeviceId(),
         summary: {
           found: result.found.length,
           registered: result.found.filter((f) => f.registered).length,

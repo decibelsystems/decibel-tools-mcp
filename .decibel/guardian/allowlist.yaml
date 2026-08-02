@@ -1,0 +1,10 @@
+# Guardian secret-scan allowlist.
+# Matched via substring against the finding snippet OR the full file path.
+# Entries below are known-safe Supabase *anon/publishable* keys embedded inline.
+# Anon keys are public by design (shipped in client code) — not secrets.
+# Scoped to specific files so a genuine secret added elsewhere still trips the scan.
+entries:
+  - src/license.ts
+  - src/tools/deck.ts
+  - src/tools/swarm.ts
+  - extension/src/proGate.ts

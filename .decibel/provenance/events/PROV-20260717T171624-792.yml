@@ -1,0 +1,11 @@
+event_id: PROV-20260717T171624-792
+timestamp: 2026-07-17T17:16:24.792Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0116-designer-lateral-apply-rejects-stringified-input-o.md
+reason_code: initial_creation
+summary: "Created issue: designer lateral_apply rejects stringified input object (ISS-0112 family)"
+fingerprint_before: null
+fingerprint_after: sha256:aaba7eb291ca946a

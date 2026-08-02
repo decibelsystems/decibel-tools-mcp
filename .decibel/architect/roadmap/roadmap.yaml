@@ -74,6 +74,7 @@ milestones:
       - EPIC-0020
       - EPIC-0022
       - EPIC-0030
+      - EPIC-0035
   - id: M-0004
     label: Domain Tooling
     target_date: 2026-10-31
@@ -178,4 +179,11 @@ epic_context:
       - OBJ-0004
     milestone: M-0004
     work_type: experiment
+    adrs: []
+  EPIC-0035:
+    epic_id: EPIC-0035
+    theme: distribution
+    objectives: []
+    milestone: M-0003
+    work_type: feature
     adrs: []
