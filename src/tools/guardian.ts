@@ -133,22 +133,28 @@ const SECRET_PATTERNS = [
 // ============================================================================
 
 function loadAllowlist(projectId?: string): string[] {
+  // Resolve unconditionally, mirroring scanSecrets: resolveProjectPaths falls back
+  // to a cwd-walk when projectId is undefined. Branching on `if (projectId)` here
+  // meant callers that omit it (the pre-push hook) skipped the project allowlist
+  // entirely and read only the global one. Project-local wins; global is fallback.
+  const candidates: string[] = [];
   try {
-    let allowlistPath: string;
-    if (projectId) {
-      const resolved = resolveProjectPaths(projectId);
-      allowlistPath = resolved.subPath('guardian/allowlist.yaml');
-    } else {
-      allowlistPath = path.join(homedir(), '.decibel', 'guardian', 'allowlist.yaml');
-    }
-
-    if (!existsSync(allowlistPath)) return [];
-    const content = readFileSync(allowlistPath, 'utf-8');
-    const parsed = YAML.parse(content);
-    return Array.isArray(parsed?.entries) ? parsed.entries : [];
+    candidates.push(resolveProjectPaths(projectId).subPath('guardian/allowlist.yaml'));
   } catch {
-    return [];
+    // Unresolvable project — the global allowlist is still worth trying.
   }
+  candidates.push(path.join(homedir(), '.decibel', 'guardian', 'allowlist.yaml'));
+
+  for (const allowlistPath of candidates) {
+    try {
+      if (!existsSync(allowlistPath)) continue;
+      const parsed = YAML.parse(readFileSync(allowlistPath, 'utf-8'));
+      if (Array.isArray(parsed?.entries)) return parsed.entries;
+    } catch {
+      // Missing or malformed — fall through to the next candidate.
+    }
+  }
+  return [];
 }
 
 function gradeFromScore(score: number, total: number): string {
