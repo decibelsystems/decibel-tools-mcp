@@ -98,14 +98,19 @@ epic_id: EPIC-0001
       expect(issues[0].epicId).toBe('EPIC-0001');
     });
 
-    it('should skip files without id or title', async () => {
+    it('should fall back to filename identity for files without id or title', async () => {
+      // Silently skipping these hid markdown-format issues from read_issue
+      // entirely (see decibel-bug-report.md) — they must surface instead.
       await fs.writeFile(
         path.join(issuesDir, 'invalid.yml'),
         'status: open\npriority: high'
       );
 
       const issues = await listIssuesForProject('test-project');
-      expect(issues).toHaveLength(0);
+      expect(issues).toHaveLength(1);
+      expect(issues[0].id).toBe('invalid.yml');
+      expect(issues[0].title).toBe('invalid');
+      expect(issues[0].status).toBe('open');
     });
 
     it('should sort issues by ID descending (newest first)', async () => {

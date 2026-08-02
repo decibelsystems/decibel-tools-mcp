@@ -115,6 +115,10 @@ export interface ListRepoIssuesInput {
 
 export interface ListRepoIssuesOutput {
   issues: IssueSummary[];
+  /** Files in the issues dir that could not be parsed — surfaced so silent
+   *  skips can't masquerade as a shorter, clean list. */
+  malformed?: number;
+  malformed_files?: string[];
 }
 
 // ============================================================================
@@ -799,6 +803,7 @@ export async function listRepoIssues(
 
   const issuesDir = resolved.subPath('sentinel', 'issues');
   const issues: IssueSummary[] = [];
+  const malformedFiles: string[] = [];
 
   try {
     const files = await fs.readdir(issuesDir);
@@ -810,6 +815,9 @@ export async function listRepoIssues(
         // Apply status filter
         if (input.status && issue.status !== input.status) continue;
         issues.push(issue);
+      } else {
+        // Unparseable file: report it instead of silently shrinking the list
+        malformedFiles.push(file);
       }
     }
   } catch {
@@ -819,6 +827,9 @@ export async function listRepoIssues(
   // Sort by filename (newest first based on timestamp)
   issues.sort((a, b) => b.id.localeCompare(a.id));
 
+  if (malformedFiles.length > 0) {
+    return { issues, malformed: malformedFiles.length, malformed_files: malformedFiles };
+  }
   return { issues };
 }
 
