@@ -1,0 +1,21 @@
+id: WISH-0019
+capability: Research-brief registry — register delivered briefs (path,
+  requester, date, topics) discoverable by other peers
+reason: Findings currently live only in the requesting repo, so other peers
+  cannot discover or reuse delivered research
+inputs:
+  - brief path
+  - requester
+  - date
+  - topics
+  - summary
+outputs: Queryable cross-project registry of delivered research briefs
+created_at: 2026-08-04T01:28:59.240Z
+status: open
+project_id: decibel-tools-mcp
+integration_point: registry or corpus facade, cross-project scope
+context:
+  requested_by: researcher-peer-am86
+  via: claude-peers
+  date: 2026-08-03
+  note: skill-wishlist poll
