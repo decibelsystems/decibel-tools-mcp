@@ -1,0 +1,11 @@
+event_id: PROV-20260804T012902-400
+timestamp: 2026-08-04T01:29:02.400Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:wish:WISH-0020
+reason_code: initial_creation
+summary: "Created wish: Source-tiering helper — resolve an AI-search snippet to its primary source automatically"
+fingerprint_before: null
+fingerprint_after: sha256:7d4e99f963e78b9a

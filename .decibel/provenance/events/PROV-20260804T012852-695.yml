@@ -1,0 +1,11 @@
+event_id: PROV-20260804T012852-695
+timestamp: 2026-08-04T01:28:52.695Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:wish:WISH-0017
+reason_code: initial_creation
+summary: "Created wish: Direct corpus/learnings query tool for peer sessions (search prior research briefs by topic/entity)"
+fingerprint_before: null
+fingerprint_after: sha256:ea14cc27127df6e2

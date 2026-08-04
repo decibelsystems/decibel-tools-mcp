@@ -1,0 +1,11 @@
+event_id: PROV-20260804T012859-291
+timestamp: 2026-08-04T01:28:59.291Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:wish:WISH-0019
+reason_code: initial_creation
+summary: "Created wish: Research-brief registry — register delivered briefs (path, requester, date, topics) discoverable by other peers"
+fingerprint_before: null
+fingerprint_after: sha256:3774518ec1a62a1c
