@@ -106,9 +106,9 @@ Follow the pattern in these files:
 - `src/tools/sentinel.ts` - epics and issues
 - `src/tools/architect.ts` - ADRs
 
-### Known Issue: dojo.ts
+### Note: dojo.ts experiment runner
 
-`src/tools/dojo.ts` incorrectly shells out to a `decibel` CLI that doesn't exist. This needs conversion to native file operations. See `docs/TOOLS_ARCHITECTURE.md` for the conversion checklist.
+`src/tools/dojo.ts` uses native file operations throughout (converted; GitHub issue #3). The one remaining `spawn()` call runs the experiment script itself in `runExperiment` — that is intentional, not a CLI dependency.
 
 ### Key Helpers
 
