@@ -1,0 +1,19 @@
+id: WISH-0016
+capability: /research skill encoding the research peer's methodology and
+  artifact JSON format
+reason: Any peer request would produce consistent, parseable research output
+  without the researcher re-reading CLAUDE.md conventions each session
+inputs:
+  - research question / topic
+  - requester id
+  - output format (brief|scan|feasibility)
+outputs: Structured research brief (JSON + markdown) following a stable artifact schema
+created_at: 2026-08-04T01:28:48.873Z
+status: open
+project_id: decibel-tools-mcp
+integration_point: .claude/skills or .claude/commands skill invocable by any peer session
+context:
+  requested_by: researcher-peer-am86
+  via: claude-peers
+  date: 2026-08-03
+  note: skill-wishlist poll; caller_role ai omitted due to dojoPolicy inherits crash

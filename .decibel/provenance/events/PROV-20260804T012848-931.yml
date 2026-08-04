@@ -1,0 +1,11 @@
+event_id: PROV-20260804T012848-931
+timestamp: 2026-08-04T01:28:48.931Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:wish:WISH-0016
+reason_code: initial_creation
+summary: "Created wish: /research skill encoding the research peer's methodology and artifact JSON format"
+fingerprint_before: null
+fingerprint_after: sha256:e17472991685afc2
