@@ -28,9 +28,14 @@ DECISION SUPPORTED: <what this feeds>
 DOMAIN: market|competitor|feasibility|technical|entity-map|custom
 DONE MEANS: <evidence that closes it>
 DEPTH: quick-scan | standard | deep-dive
+AUDIENCE: internal | client-facing
+FRAMING CONSTRAINTS: <optional: e.g. diplomatic framing, raw data separated from framing>
 VERTICAL CONTEXT: <free-form: platform constraints, communities, monetization, regulatory frame>
 DELIVER AS: research artifact JSON (schema 0.2.0) + short prose summary
+           | markdown brief at <path> (JSON envelope embedded or optional)
 ```
+
+`AUDIENCE: client-facing` raises the rigor bar (see volatile-stat rule in Step 3) and changes how findings are written — keep raw data separable from framing.
 
 3. Continue other work; the reply arrives as a peer message. Do not re-ask while waiting.
 
@@ -52,6 +57,9 @@ Rules:
 - Treat AI-search snippets as **tertiary**; always chase the primary link before citing.
 - A claim's confidence is capped by its best source: `high` needs multiple independent sources or a primary; `medium` = single source / widely reported but unverified; `low` = inferred or anecdotal.
 - Note `paywalled: true` on sources the requester can't independently check.
+- **Verification depth** (orthogonal to source type): mark each source `verification: read-direct` (you loaded and read the page) or `excerpt-only` (search snippet/summary). Excerpt-only caps the claim's confidence at **medium** and the claim goes on a re-pull list before any external use — snippet-sourced numbers are routinely wrong in both directions.
+- **Fetch-blocked escalation**: on a 403/paywall/bot-wall, escalate to the Playwright browser tools before recording a gap. If still blocked, the gap entry must name the block type (`403`, `login-wall`, `paywall`, ...). Browser-only pages regularly hide finding-flipping data.
+- **Volatile-stat decay**: marketplace counts, app ratings, follower counts are point-in-time — they must carry a retrieval date and be re-verified before any client-facing use. Platforms also remove metrics entirely; absence today doesn't mean absence at retrieval time.
 
 ## Step 4 — Emit the Artifact
 
@@ -71,16 +79,18 @@ Output BOTH: a one-paragraph prose summary for the human, and this JSON envelope
     {"source": "entity-a", "target": "entity-b", "type": "acquired|invested-in|licenses|competes-with|built-on|partnered-with|hired-from|influenced|forked", "details": "...", "confidence": "high|medium|low"}
   ],
   "timeline": {"start": "YYYY-MM", "end": "YYYY-MM", "key_moments": ["..."]},
-  "findings": ["material facts the requester needs to act"],
+  "findings": ["material facts the requester needs to act — including NEGATIVE results ('investigated and dropped: evidence contradicts X')"],
   "risks": ["what could invalidate this"],
-  "gaps": ["things that could not be verified or found"],
-  "sources": [{"url": "...", "type": "primary|secondary|tertiary", "paywalled": false, "retrieved": "YYYY-MM-DD"}],
+  "gaps": ["things that could not be verified or found — name the block type if access-blocked"],
+  "sources": [{"url": "...", "type": "primary|secondary|tertiary", "verification": "read-direct|excerpt-only", "paywalled": false, "retrieved": "YYYY-MM-DD"}],
   "confidence": "high|medium|low",
   "summary": "one-paragraph synthesis tied to the original decision"
 }
 ```
 
 `gaps` is mandatory honesty: an empty gaps array on a non-trivial question is a smell.
+
+Dropped candidates belong in `findings` as negative results, not just the transcript — "investigated and dropped" entries prevent the requester from re-pitching dead ends.
 
 ## Step 5 — Land the Findings in Decibel
 
