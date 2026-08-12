@@ -183,7 +183,8 @@ epic_context:
   EPIC-0035:
     epic_id: EPIC-0035
     theme: distribution
-    objectives: []
+    objectives:
+      - OBJ-0002
     milestone: M-0003
     work_type: feature
     adrs: []
