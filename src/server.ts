@@ -13,6 +13,7 @@
 //   node dist/server.js --daemon install  → install macOS launchd plist
 //   node dist/server.js --daemon uninstall
 //   node dist/server.js --daemon status
+//   node dist/server.js setup        → multi-client install wizard
 // ============================================================================
 
 import fs from 'fs';
@@ -54,6 +55,13 @@ if (process.env.DECIBEL_APPS === '1') log('Apps: ENABLED');
 
 async function main() {
   const args = process.argv;
+
+  // Setup wizard — must run before any transport starts (EPIC-0035 Phase 1)
+  if (args[2] === 'setup') {
+    const { runSetup } = await import('./setup.js');
+    process.exit(await runSetup(args.slice(3)));
+  }
+
   const daemonMode = args.includes('--daemon');
 
   // Handle daemon subcommands (install, uninstall, status) — exits process

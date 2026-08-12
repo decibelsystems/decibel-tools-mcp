@@ -67,7 +67,7 @@ The tool set is identical across every client — only the config file location 
 
 ### Claude Code
 
-Add to `.mcp.json` in your project root (or `~/.claude/settings.json` to make it global):
+Add to `.mcp.json` in your project root (or `~/.claude.json` to make it global — *not* `~/.claude/settings.json`, which holds model/hooks/plugins and is ignored for MCP servers):
 
 ```json
 {

@@ -5,8 +5,8 @@
 // config file overrides defaults. SIGHUP reloads hot-reloadable fields.
 // ============================================================================
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
 import { homedir } from 'os';
 import YAML from 'yaml';
 import { log } from './config.js';
@@ -99,6 +99,22 @@ export function loadConfig(): DaemonConfig {
  */
 export function getConfigPath(): string {
   return CONFIG_PATH;
+}
+
+/**
+ * Write a license key into ~/.decibel/config.yaml, creating the file if
+ * needed. Uses parseDocument so existing comments and formatting survive —
+ * this file is hand-edited by users.
+ */
+export function writeLicenseKey(key: string): void {
+  mkdirSync(dirname(CONFIG_PATH), { recursive: true });
+
+  const doc = existsSync(CONFIG_PATH)
+    ? YAML.parseDocument(readFileSync(CONFIG_PATH, 'utf-8'))
+    : new YAML.Document({});
+
+  doc.setIn(['license', 'key'], key);
+  writeFileSync(CONFIG_PATH, doc.toString(), 'utf-8');
 }
 
 /**

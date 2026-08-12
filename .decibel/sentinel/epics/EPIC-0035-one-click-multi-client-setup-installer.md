@@ -62,6 +62,28 @@ For non-technical users with no Node present. This is the Angela case from the 2
 
 - Bundles or bootstraps Node (Homebrew fallback on macOS)
 - Signed `.pkg`/`.dmg`, Developer ID cert + `notarytool` in CI (unsigned trips Gatekeeper for exactly the user this targets)
+
+**Apple signing state (verified 2026-08-12).** Team ID `JT8YMATM8X`, account
+`ben@decibel.systems` — enrollment already exists (found in
+`deck/Deck.xcodeproj`), so there is no D-U-N-S wait and no new purchase.
+However the keychain holds only *Apple Development* certs; **Developer ID
+Application and Developer ID Installer are missing**. Those are a different
+cert type, never needed for deck's iOS App Store path. Generating them is
+self-serve (minutes), plus an App Store Connect API key for `notarytool`.
+Caveat: if the team is an *organization*, only the Account Holder can create
+Developer ID certs. Nothing in deck is reusable as a pipeline — no Fastfile,
+no `notarytool`, plain Xcode automatic signing.
+
+**Open question before committing to `.pkg`:** a `.dxt` Claude Desktop
+extension sidesteps signing and notarization entirely. It is Desktop-only,
+but Phase 1 already covers every other client and Phase 2's target user is
+almost certainly Desktop-only. Spike this first.
+
+**Remaining technical risk:** `.pkg` postinstall runs as root while the client
+configs live in the user's `~/Library`. Resolve the console user
+(`stat -f %Su /dev/console`) and write as them, or ship a user-domain package.
+Getting this wrong writes root-owned files into the user's Library and breaks
+Claude Desktop's ability to save its own config.
 - Windows track: `.msi` / winget, no launchd, no zsh wrapper
 - Candidate alternative form factor: `.dxt` Claude Desktop extension (true one-click, Desktop-only)
 
