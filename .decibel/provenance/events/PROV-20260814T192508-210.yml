@@ -1,0 +1,11 @@
+event_id: PROV-20260814T192508-210
+timestamp: 2026-08-14T19:25:08.210Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0124-verify-attendee-email-domain-as-a-second-routing-s.md
+reason_code: initial_creation
+summary: "Created issue: Verify attendee-email-domain as a second routing signal against the Zoom API"
+fingerprint_before: null
+fingerprint_after: sha256:8221ead784687083

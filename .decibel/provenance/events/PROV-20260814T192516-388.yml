@@ -1,0 +1,11 @@
+event_id: PROV-20260814T192516-388
+timestamp: 2026-08-14T19:25:16.388Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0125-decide-the-zoom-auth-model-before-selling-meeting-.md
+reason_code: initial_creation
+summary: "Created issue: Decide the Zoom auth model before selling meeting ingestion as a pro feature"
+fingerprint_before: null
+fingerprint_after: sha256:a9ee57fd60cc8bf7

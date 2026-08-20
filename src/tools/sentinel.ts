@@ -7,6 +7,35 @@ import { emitCreateProvenance } from './provenance.js';
 import { safeParseYaml } from '../sentinelIssues.js';
 
 /**
+ * Sentinel record files exist in two on-disk formats: markdown-with-frontmatter
+ * (`.md`) and bare YAML (`.yml`/`.yaml`). Historically every directory scan
+ * filtered on `.md` only, so ~530 `.yml` issues across 15 projects were
+ * silently omitted from list_issues while read_issue/update_issue resolved
+ * them fine. Treat both as first-class.
+ */
+const RECORD_EXT_RE = /\.(md|ya?ml)$/i;
+
+function isRecordFile(filename: string): boolean {
+  return RECORD_EXT_RE.test(filename);
+}
+
+function stripRecordExt(filename: string): string {
+  return filename.replace(RECORD_EXT_RE, '');
+}
+
+/**
+ * Extract the frontmatter region from a record file. `.md` records delimit it
+ * with `---`; bare `.yml` records are frontmatter all the way down, so the
+ * whole file is the region.
+ */
+function frontmatterRegion(content: string): string | null {
+  const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (fmMatch) return fmMatch[1];
+  if (/^---/.test(content.trimStart())) return null; // malformed delimiter block
+  return content;
+}
+
+/**
  * Quote a scalar for use as a YAML frontmatter value when the string contains
  * characters that would otherwise change parser behaviour. Plain titles like
  * "Fix the auth bug" pass through unchanged; values containing `#`, leading
@@ -119,6 +148,10 @@ export interface ListRepoIssuesOutput {
    *  skips can't masquerade as a shorter, clean list. */
   malformed?: number;
   malformed_files?: string[];
+  /** Records that only parsed after salvaging corrupted YAML — readable, but
+   *  the underlying files need repair. */
+  degraded?: number;
+  degraded_files?: string[];
 }
 
 // ============================================================================
@@ -212,6 +245,13 @@ export interface IssueSummary {
   created_at?: string;
   /** ISO timestamp of last modification. */
   updated_at?: string;
+  /**
+   * True when the record only parsed after salvaging — its YAML was corrupted
+   * by a markdown section appended to a bare-YAML file (see `close_issue`
+   * writing `## Resolution` into `.yml` records). The issue is readable, but
+   * the file needs repair.
+   */
+  degraded?: boolean;
 }
 
 export interface GetEpicIssuesOutput {
@@ -272,7 +312,7 @@ async function getNextEpicNumber(epicsDir: string): Promise<number> {
   try {
     const files = await fs.readdir(epicsDir);
     const epicNumbers = files
-      .filter((f) => f.startsWith('EPIC-') && f.endsWith('.md'))
+      .filter((f) => f.startsWith('EPIC-') && isRecordFile(f))
       .map((f) => {
         const match = f.match(/^EPIC-(\d+)/);
         return match ? parseInt(match[1], 10) : 0;
@@ -301,12 +341,12 @@ async function getNextIssueNumber(issuesDir: string): Promise<number> {
         max = Math.max(max, parseInt(prefixMatch[1], 10));
         continue;
       }
-      if (!file.endsWith('.md')) continue;
+      if (!isRecordFile(file)) continue;
       try {
         const content = await fs.readFile(path.join(issuesDir, file), 'utf-8');
-        const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-        if (!fmMatch) continue;
-        const idLine = fmMatch[1].split('\n').find((l) => l.trim().toLowerCase().startsWith('id:'));
+        const region = frontmatterRegion(content);
+        if (!region) continue;
+        const idLine = region.split('\n').find((l) => l.trim().toLowerCase().startsWith('id:'));
         if (!idLine) continue;
         const idVal = idLine.slice(idLine.indexOf(':') + 1).trim();
         const idMatch = idVal.match(/^ISS-(\d+)$/i);
@@ -324,6 +364,38 @@ async function getNextIssueNumber(issuesDir: string): Promise<number> {
 async function parseEpicFile(filePath: string): Promise<Epic | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
+    const hasDelimiters = /^---\r?\n/.test(content);
+
+    // Bare-YAML epics (`.yml`/`.yaml`) have no `---` fence and no markdown
+    // body — parse them as YAML outright rather than failing the fence check.
+    if (!hasDelimiters) {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = safeParseYaml(content);
+      } catch {
+        return null;
+      }
+      if (typeof parsed !== 'object' || parsed === null) return null;
+      const str = (k: string): string =>
+        typeof parsed[k] === 'string' ? (parsed[k] as string) : '';
+      const list = (k: string): string[] =>
+        Array.isArray(parsed[k]) ? (parsed[k] as string[]) : [];
+      return {
+        id: str('id'),
+        title: str('title'),
+        summary: str('summary'),
+        status: (str('status') as EpicStatus) || 'planned',
+        priority: (str('priority') as Priority) || 'medium',
+        motivation: list('motivation'),
+        outcomes: list('outcomes'),
+        acceptance_criteria: list('acceptance_criteria'),
+        tags: list('tags'),
+        owner: str('owner'),
+        squad: str('squad'),
+        created_at: str('created_at'),
+      };
+    }
+
     const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
     if (!frontmatterMatch) return null;
 
@@ -398,7 +470,7 @@ async function getAllEpics(projectId?: string): Promise<Array<{ id: string; titl
   try {
     const files = await fs.readdir(epicsDir);
     for (const file of files) {
-      if (!file.endsWith('.md')) continue;
+      if (!isRecordFile(file)) continue;
       const filePath = path.join(epicsDir, file);
       const epic = await parseEpicFile(filePath);
       if (epic) {
@@ -469,53 +541,97 @@ function calculateFuzzyScore(query: string, text: string): number {
  * `epic_id` injection via crafted column-0 lines. The real parser closes both.
  */
 async function parseIssueFile(filePath: string): Promise<IssueSummary | null> {
+  let content: string;
   try {
-    const content = await fs.readFile(filePath, 'utf-8');
-
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = safeParseYaml(content);
-    } catch {
-      // safeParseYaml threw — likely the markdown body after `---` confused
-      // the multi-doc parser. Last-resort: extract just the frontmatter region
-      // manually and parse that.
-      const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-      if (!fmMatch) return null;
-      try {
-        parsed = safeParseYaml(fmMatch[1]);
-      } catch {
-        return null;
-      }
-    }
-
-    // Title: first markdown heading wins (legacy markdown-frontmatter format),
-    // else explicit `title:` key in YAML, else filename as last-resort.
-    const titleMatch = content.match(/^# (.+)$/m);
-    const title =
-      titleMatch?.[1] ??
-      (typeof parsed.title === 'string' ? parsed.title : undefined) ??
-      path.basename(filePath, '.md');
-
-    // ID: prefer canonical ISS-NNNN form from frontmatter, else filename.
-    const fmId = typeof parsed.id === 'string' ? parsed.id.match(/^ISS-\d+$/i)?.[0] : undefined;
-    const id = fmId ?? path.basename(filePath);
-
-    return {
-      id,
-      title,
-      severity: (parsed.severity as Severity) || 'low',
-      status: (typeof parsed.status === 'string' ? parsed.status : undefined) || 'open',
-      epic_id:
-        (typeof parsed.epic_id === 'string' ? parsed.epic_id : undefined) ??
-        (typeof parsed.epicId === 'string' ? parsed.epicId : undefined),
-      priority: typeof parsed.priority === 'string' ? parsed.priority : undefined,
-      tags: Array.isArray(parsed.tags) ? (parsed.tags as string[]) : undefined,
-      created_at: typeof parsed.created_at === 'string' ? parsed.created_at : undefined,
-      updated_at: typeof parsed.updated_at === 'string' ? parsed.updated_at : undefined,
-    };
+    content = await fs.readFile(filePath, 'utf-8');
   } catch {
     return null;
   }
+
+  // 1. Whole-file parse. Covers well-formed bare YAML and, via safeParseYaml's
+  //    multi-doc handling, most markdown-with-frontmatter records.
+  try {
+    const parsed = safeParseYaml(content);
+    if (typeof parsed === 'object' && parsed !== null) {
+      return buildIssueSummary(filePath, content, parsed, false);
+    }
+  } catch {
+    // fall through
+  }
+
+  // 2. Delimited frontmatter only — the markdown body confused the parser.
+  const region = frontmatterRegion(content);
+  if (region && region !== content) {
+    try {
+      const parsed = safeParseYaml(region);
+      if (typeof parsed === 'object' && parsed !== null) {
+        return buildIssueSummary(filePath, content, parsed, false);
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  // 3. Salvage. close_issue appends a markdown `## Resolution` section to
+  //    bare-YAML records; the prose beneath it is not valid YAML, so the whole
+  //    record used to vanish. Parse only the region above the first heading.
+  const salvaged = salvageBareYaml(content);
+  if (salvaged) return buildIssueSummary(filePath, content, salvaged, true);
+
+  return null;
+}
+
+/**
+ * Parse only the YAML region above the first markdown heading. Returns null if
+ * the record is delimited, has no heading, or the region is still unparseable.
+ */
+function salvageBareYaml(content: string): Record<string, unknown> | null {
+  if (/^---/.test(content.trimStart())) return null;
+  const lines = content.split('\n');
+  const headingIdx = lines.findIndex((l) => /^#{1,6}\s/.test(l));
+  if (headingIdx <= 0) return null;
+  try {
+    const parsed = safeParseYaml(lines.slice(0, headingIdx).join('\n'));
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function buildIssueSummary(
+  filePath: string,
+  content: string,
+  parsed: Record<string, unknown>,
+  degraded: boolean
+): IssueSummary {
+  // Title: first markdown heading wins (legacy markdown-frontmatter format),
+  // else explicit `title:` key in YAML, else filename as last-resort.
+  const titleMatch = content.match(/^# (.+)$/m);
+  const title =
+    titleMatch?.[1] ??
+    (typeof parsed.title === 'string' ? parsed.title : undefined) ??
+    stripRecordExt(path.basename(filePath));
+
+  // ID: prefer canonical ISS-NNNN form from frontmatter, else filename.
+  const fmId = typeof parsed.id === 'string' ? parsed.id.match(/^ISS-\d+$/i)?.[0] : undefined;
+  const id = fmId ?? path.basename(filePath);
+
+  const summary: IssueSummary = {
+    id,
+    title,
+    severity: (parsed.severity as Severity) || 'low',
+    status: (typeof parsed.status === 'string' ? parsed.status : undefined) || 'open',
+    epic_id:
+      (typeof parsed.epic_id === 'string' ? parsed.epic_id : undefined) ??
+      (typeof parsed.epicId === 'string' ? parsed.epicId : undefined),
+    priority: typeof parsed.priority === 'string' ? parsed.priority : undefined,
+    tags: Array.isArray(parsed.tags) ? (parsed.tags as string[]) : undefined,
+    created_at: typeof parsed.created_at === 'string' ? parsed.created_at : undefined,
+    updated_at: typeof parsed.updated_at === 'string' ? parsed.updated_at : undefined,
+  };
+  if (degraded) summary.degraded = true;
+  return summary;
 }
 
 async function findIssueFile(projectId: string | undefined, issueId: string): Promise<{ filePath: string; filename: string } | null> {
@@ -530,10 +646,14 @@ async function findIssueFile(projectId: string | undefined, issueId: string): Pr
       return { filePath: path.join(issuesDir, issueId), filename: issueId };
     }
 
-    // Try with .md extension
-    const withMd = issueId.endsWith('.md') ? issueId : `${issueId}.md`;
-    if (files.includes(withMd)) {
-      return { filePath: path.join(issuesDir, withMd), filename: withMd };
+    // Try each record extension (.md, .yml, .yaml)
+    if (!isRecordFile(issueId)) {
+      for (const ext of ['.md', '.yml', '.yaml']) {
+        const candidate = `${issueId}${ext}`;
+        if (files.includes(candidate)) {
+          return { filePath: path.join(issuesDir, candidate), filename: candidate };
+        }
+      }
     }
 
     // ISS-NNNN: match filename prefix with word boundary, or frontmatter id
@@ -542,19 +662,19 @@ async function findIssueFile(projectId: string | undefined, issueId: string): Pr
       const padded = `ISS-${issMatch[1].padStart(4, '0')}`.toLowerCase();
       const prefixHit = files.find((f) => {
         const lower = f.toLowerCase();
-        return lower.startsWith(`${padded}-`) || lower === `${padded}.md`;
+        return lower.startsWith(`${padded}-`) || stripRecordExt(lower) === padded;
       });
       if (prefixHit) {
         return { filePath: path.join(issuesDir, prefixHit), filename: prefixHit };
       }
       // Scan frontmatter for legacy retroactively-stamped issues
       for (const f of files) {
-        if (!f.endsWith('.md')) continue;
+        if (!isRecordFile(f)) continue;
         try {
           const content = await fs.readFile(path.join(issuesDir, f), 'utf-8');
-          const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-          if (!fmMatch) continue;
-          const idLine = fmMatch[1].split('\n').find((l) => l.trim().toLowerCase().startsWith('id:'));
+          const region = frontmatterRegion(content);
+          if (!region) continue;
+          const idLine = region.split('\n').find((l) => l.trim().toLowerCase().startsWith('id:'));
           if (!idLine) continue;
           const idVal = idLine.slice(idLine.indexOf(':') + 1).trim().toLowerCase();
           if (idVal === padded) {
@@ -586,7 +706,7 @@ async function getProjectIssues(projectId?: string): Promise<Array<{ id: string;
   try {
     const files = await fs.readdir(issuesDir);
     for (const file of files) {
-      if (!file.endsWith('.md')) continue;
+      if (!isRecordFile(file)) continue;
       const filePath = path.join(issuesDir, file);
       const issue = await parseIssueFile(filePath);
       if (issue) {
@@ -699,6 +819,67 @@ export async function createIssue(
   };
 }
 
+/**
+ * Split a bare-YAML record into its YAML region and any trailing markdown.
+ * close_issue historically appended a `## Resolution` section to bare-YAML
+ * records; that tail is pre-existing corruption we preserve rather than
+ * discard, while writing new fields into the YAML region where they belong.
+ */
+function splitBareYamlRecord(content: string): { yaml: string[]; tail: string[] } {
+  const lines = content.split('\n');
+  const headingIdx = lines.findIndex((l) => /^#{1,6}\s/.test(l));
+  if (headingIdx < 0) return { yaml: lines, tail: [] };
+  return { yaml: lines.slice(0, headingIdx), tail: lines.slice(headingIdx) };
+}
+
+/** Replace a column-0 scalar key in a YAML region, appending it if absent. */
+function setYamlScalarField(lines: string[], key: string, value: string): string[] {
+  const re = new RegExp(`^${key}:`);
+  const idx = lines.findIndex((l) => re.test(l));
+  if (idx >= 0) {
+    const out = [...lines];
+    out[idx] = `${key}: ${value}`;
+    return out;
+  }
+  // Append after the last non-blank line so we don't strand it past a gap.
+  const out = [...lines];
+  while (out.length > 0 && out[out.length - 1].trim() === '') out.pop();
+  out.push(`${key}: ${value}`);
+  return out;
+}
+
+/** Replace a column-0 block-scalar key (and its indented continuation). */
+function setYamlBlockField(lines: string[], key: string, value: string): string[] {
+  const re = new RegExp(`^${key}:`);
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (re.test(lines[i])) {
+      i++;
+      // Consume the indented continuation block, including interior blank
+      // lines, but stop before the next column-0 key.
+      while (i < lines.length) {
+        if (lines[i].trim() === '') {
+          let j = i;
+          while (j < lines.length && lines[j].trim() === '') j++;
+          if (j >= lines.length || /^\S/.test(lines[j])) break;
+          i = j;
+          continue;
+        }
+        if (/^\s/.test(lines[i])) { i++; continue; }
+        break;
+      }
+      continue;
+    }
+    out.push(lines[i]);
+    i++;
+  }
+  while (out.length > 0 && out[out.length - 1].trim() === '') out.pop();
+  out.push(`${key}: |-`);
+  for (const l of value.split('\n')) out.push(`  ${l}`);
+  return out;
+}
+
 export async function closeIssue(
   input: CloseIssueInput
 ): Promise<CloseIssueOutput | CloseIssueError | ProjectResolutionError> {
@@ -729,43 +910,64 @@ export async function closeIssue(
   const closedAt = now.toISOString();
   const newStatus: IssueStatus = input.status || 'closed';
 
-  // Update frontmatter
-  let updatedContent = content.replace(
-    /^(---\n[\s\S]*?)status: \w+/m,
-    `$1status: ${newStatus}`
-  );
+  let updatedContent: string;
 
-  // Add closed_at to frontmatter if not present
-  if (!updatedContent.includes('closed_at:')) {
-    updatedContent = updatedContent.replace(
-      /^(---\n[\s\S]*?)(---)$/m,
-      `$1closed_at: ${closedAt}\n$2`
+  if (/^---\r?\n/.test(content)) {
+    // ---- Markdown-with-frontmatter record ------------------------------------
+    updatedContent = content.replace(
+      /^(---\n[\s\S]*?)status: \w+/m,
+      `$1status: ${newStatus}`
     );
-  } else {
-    updatedContent = updatedContent.replace(
-      /closed_at: .*/,
-      `closed_at: ${closedAt}`
-    );
-  }
 
-  // Update status in body
-  updatedContent = updatedContent.replace(
-    /\*\*Status:\*\* \w+/,
-    `**Status:** ${newStatus}`
-  );
-
-  // Add resolution section if provided
-  if (input.resolution) {
-    if (updatedContent.includes('## Resolution')) {
-      // Replace existing resolution
+    // Add closed_at to frontmatter if not present
+    if (!updatedContent.includes('closed_at:')) {
       updatedContent = updatedContent.replace(
-        /## Resolution\n\n[\s\S]*?(?=\n## |$)/,
-        `## Resolution\n\n${input.resolution}\n`
+        /^(---\n[\s\S]*?)(---)$/m,
+        `$1closed_at: ${closedAt}\n$2`
       );
     } else {
-      // Add resolution section at the end
-      updatedContent = updatedContent.trimEnd() + `\n\n## Resolution\n\n${input.resolution}\n`;
+      updatedContent = updatedContent.replace(
+        /closed_at: .*/,
+        `closed_at: ${closedAt}`
+      );
     }
+
+    // Update status in body
+    updatedContent = updatedContent.replace(
+      /\*\*Status:\*\* \w+/,
+      `**Status:** ${newStatus}`
+    );
+
+    // Add resolution section if provided
+    if (input.resolution) {
+      if (updatedContent.includes('## Resolution')) {
+        // Replace existing resolution
+        updatedContent = updatedContent.replace(
+          /## Resolution\n\n[\s\S]*?(?=\n## |$)/,
+          `## Resolution\n\n${input.resolution}\n`
+        );
+      } else {
+        // Add resolution section at the end
+        updatedContent = updatedContent.trimEnd() + `\n\n## Resolution\n\n${input.resolution}\n`;
+      }
+    }
+  } else {
+    // ---- Bare-YAML record ----------------------------------------------------
+    // The frontmatter regexes above are all anchored on a leading `---`, so on
+    // a bare-YAML record they silently no-op: status stayed `open` while the
+    // markdown resolution append (which had no such guard) still fired. That
+    // both corrupted the YAML and left the issue looking open, while
+    // close_issue returned success. Write real YAML fields instead.
+    const { yaml, tail } = splitBareYamlRecord(content);
+    let region = setYamlScalarField(yaml, 'status', newStatus);
+    region = setYamlScalarField(region, 'closed_at', closedAt);
+    if (input.resolution) {
+      region = setYamlBlockField(region, 'resolution', input.resolution);
+    }
+    // Preserve any pre-existing markdown tail verbatim — repairing already
+    // corrupted files is a separate, reviewed migration (see ISS-0129).
+    const parts = tail.length > 0 ? [...region, '', ...tail] : region;
+    updatedContent = parts.join('\n').replace(/\n*$/, '\n');
   }
 
   await fs.writeFile(filePath, updatedContent, 'utf-8');
@@ -804,14 +1006,16 @@ export async function listRepoIssues(
   const issuesDir = resolved.subPath('sentinel', 'issues');
   const issues: IssueSummary[] = [];
   const malformedFiles: string[] = [];
+  const degradedFiles: string[] = [];
 
   try {
     const files = await fs.readdir(issuesDir);
     for (const file of files) {
-      if (!file.endsWith('.md')) continue;
+      if (!isRecordFile(file)) continue;
       const filePath = path.join(issuesDir, file);
       const issue = await parseIssueFile(filePath);
       if (issue) {
+        if (issue.degraded) degradedFiles.push(file);
         // Apply status filter
         if (input.status && issue.status !== input.status) continue;
         issues.push(issue);
@@ -827,10 +1031,16 @@ export async function listRepoIssues(
   // Sort by filename (newest first based on timestamp)
   issues.sort((a, b) => b.id.localeCompare(a.id));
 
+  const out: ListRepoIssuesOutput = { issues };
   if (malformedFiles.length > 0) {
-    return { issues, malformed: malformedFiles.length, malformed_files: malformedFiles };
+    out.malformed = malformedFiles.length;
+    out.malformed_files = malformedFiles;
   }
-  return { issues };
+  if (degradedFiles.length > 0) {
+    out.degraded = degradedFiles.length;
+    out.degraded_files = degradedFiles;
+  }
+  return out;
 }
 
 // ============================================================================
@@ -941,7 +1151,7 @@ export async function listEpics(input: ListEpicsInput): Promise<ListEpicsOutput 
   try {
     const files = await fs.readdir(epicsDir);
     for (const file of files) {
-      if (!file.endsWith('.md')) continue;
+      if (!isRecordFile(file)) continue;
 
       const filePath = path.join(epicsDir, file);
       const epic = await parseEpicFile(filePath);
@@ -1018,7 +1228,7 @@ export async function getEpicIssues(
     const issueFiles = await fs.readdir(issuesDir);
 
     for (const file of issueFiles) {
-      if (!file.endsWith('.md')) continue;
+      if (!isRecordFile(file)) continue;
       const filePath = path.join(issuesDir, file);
       // Parse first, then filter on the parsed epic_id field. Previously this
       // used a brittle `content.includes('epic_id: ${epic_id}')` substring

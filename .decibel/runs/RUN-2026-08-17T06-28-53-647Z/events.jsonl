@@ -1,0 +1,5 @@
+{"ts":"2026-08-17T06:28:53.648Z","run_id":"RUN-2026-08-17T06-28-53-647Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-08-17T06:27:22Z","run_id":"RUN-2026-08-17T06-28-53-647Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-17T06:27:31Z","run_id":"RUN-2026-08-17T06-28-53-647Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Read","source":"hook_import"}}
+{"ts":"2026-08-17T06:28:13Z","run_id":"RUN-2026-08-17T06-28-53-647Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-17T06:28:53.988Z","run_id":"RUN-2026-08-17T06-28-53-647Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"friction_log","result":"success","summary":"friction_log completed"}}

@@ -1,0 +1,11 @@
+event_id: PROV-20260814T192450-615
+timestamp: 2026-08-14T19:24:50.615Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0122-multi-client-meeting-routing-per-project-match-rul.md
+reason_code: initial_creation
+summary: "Created issue: Multi-client meeting routing: per-project match rules, sync_all fan-out, unrouted bucket"
+fingerprint_before: null
+fingerprint_after: sha256:214c22acf9ae36be

@@ -1,0 +1,11 @@
+{"ts":"2026-08-20T04:24:50.907Z","run_id":"RUN-2026-08-20T04-24-50-906Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-08-20T04:20:44Z","run_id":"RUN-2026-08-20T04-24-50-906Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-20T04:20:49Z","run_id":"RUN-2026-08-20T04-24-50-906Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-20T04:21:10Z","run_id":"RUN-2026-08-20T04-24-50-906Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-20T04:21:25Z","run_id":"RUN-2026-08-20T04-24-50-906Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-20T04:21:36Z","run_id":"RUN-2026-08-20T04-24-50-906Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-20T04:21:45Z","run_id":"RUN-2026-08-20T04-24-50-906Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-20T04:24:06Z","run_id":"RUN-2026-08-20T04-24-50-906Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-20T04:24:20Z","run_id":"RUN-2026-08-20T04-24-50-906Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-20T04:24:32Z","run_id":"RUN-2026-08-20T04-24-50-906Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-20T04:24:51.279Z","run_id":"RUN-2026-08-20T04-24-50-906Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"sentinel_create_issue","result":"success","summary":"Created issue ISS-0131: Duplicate issue ids make findIssueFile resolution readdir-order-dependent — update_issue/close_issue can silently write to the wrong issue"}}

@@ -1,0 +1,11 @@
+event_id: PROV-20260820T010954-638
+timestamp: 2026-08-20T01:09:54.638Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0129-close-issue-corrupts-bare-yaml-issue-records-by-ap.md
+reason_code: initial_creation
+summary: "Created issue: close_issue corrupts bare-YAML issue records by appending a markdown Resolution section"
+fingerprint_before: null
+fingerprint_after: sha256:aef647407f4a12d0

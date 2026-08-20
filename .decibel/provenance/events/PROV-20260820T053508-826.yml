@@ -1,0 +1,11 @@
+event_id: PROV-20260820T053508-826
+timestamp: 2026-08-20T05:35:08.826Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0134-daemon-ingest-must-resolve-a-registering-session-t.md
+reason_code: initial_creation
+summary: "Created issue: Daemon ingest must resolve a registering session to a durable hq.agents identity (agent_id seam for EPIC-0037)"
+fingerprint_before: null
+fingerprint_after: sha256:0f50ae6cfaa86c81
