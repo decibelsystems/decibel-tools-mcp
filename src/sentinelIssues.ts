@@ -160,10 +160,15 @@ export async function listIssuesForProject(
         continue;
       }
 
-      // Skip duplicates (primary takes precedence)
-      if (seenIds.has(id)) {
-        log(`sentinelIssues: Skipping duplicate ${id} from ${source} path`);
-        continue;
+      // Two DIFFERENT issues can claim one id (ISS-0131). Dropping the second
+      // made it unreachable to read_issue/update_issue while the tool still
+      // reported success on the first — so keep both and mark them instead.
+      // (Cross-path duplicates of the SAME file are already deduped by
+      // filename in readFilesFromBothPaths, so this only ever fires on a real
+      // id collision.)
+      const isDuplicate = seenIds.has(id);
+      if (isDuplicate) {
+        log(`sentinelIssues: Duplicate id ${id} from ${source} path — both retained, marked ambiguous`);
       }
       seenIds.add(id);
 
@@ -195,6 +200,20 @@ export async function listIssuesForProject(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log(`sentinelIssues: Failed to parse ${filePath}: ${message}`);
+    }
+  }
+
+  // Mark EVERY member of a colliding id, not just the ones seen second — a
+  // caller holding the first file is in exactly as much danger as one holding
+  // the second, and neither can be safely written by id alone.
+  const byId = new Map<string, SentinelIssue[]>();
+  for (const issue of issues) {
+    const key = issue.id.toUpperCase();
+    byId.set(key, [...(byId.get(key) ?? []), issue]);
+  }
+  for (const group of byId.values()) {
+    if (group.length > 1) {
+      for (const issue of group) issue.duplicate_id = true;
     }
   }
 
@@ -288,6 +307,28 @@ export async function createIssue(
 }
 
 /**
+ * Build the refusal for an id that names more than one record. Callers get the
+ * candidate filenames because each one is itself a valid, unambiguous id —
+ * without them the error would be a dead end rather than a next step.
+ */
+function ambiguousIssueId(
+  issueId: string,
+  projectId: string,
+  candidates: Array<{ filename?: unknown; title?: string }>
+): Error {
+  const names = candidates.map((c) =>
+    typeof c.filename === 'string' ? c.filename : String(c.title ?? '?')
+  );
+  const err = new Error(
+    `AMBIGUOUS_ISSUE_ID: "${issueId}" matches ${names.length} records in project "${projectId}", ` +
+      `so the target is undefined and nothing was changed. ` +
+      `Re-run with one of these filenames as issue_id: ${names.join(', ')}`
+  );
+  err.name = 'AmbiguousIssueIdError';
+  return err;
+}
+
+/**
  * Get a single issue by ID (e.g., "ISS-0005") with full content
  */
 export async function getIssueById(
@@ -299,13 +340,19 @@ export async function getIssueById(
   const norm = (s: string) => s.toUpperCase().replace(/\.(MD|YA?ML)$/, '');
   const issues = await listIssuesForProject(projectId);
   const normalizedId = norm(issueId);
-  return (
-    issues.find(
-      (i) =>
-        norm(i.id) === normalizedId ||
-        (typeof i.filename === 'string' && norm(i.filename) === normalizedId)
-    ) ?? null
+
+  // Filename is the more specific form and can only match one record, so it
+  // wins outright — that keeps "retry with the filename" a working escape
+  // hatch out of an ambiguous id.
+  const byFilename = issues.filter(
+    (i) => typeof i.filename === 'string' && norm(i.filename) === normalizedId
   );
+  if (byFilename.length === 1) return byFilename[0];
+
+  const byId = issues.filter((i) => norm(i.id) === normalizedId);
+  if (byId.length === 0) return null;
+  if (byId.length > 1) throw ambiguousIssueId(issueId, projectId, byId);
+  return byId[0];
 }
 
 // ============================================================================
@@ -339,18 +386,38 @@ export async function updateIssue(
   const files = await readFilesFromBothPaths(projectId, ISSUES_SUBPATH);
   const normalizedId = issueId.toUpperCase();
 
-  let matchedFile: { filePath: string } | undefined;
-  for (const f of files) {
-    const basename = path.basename(f.filePath).toUpperCase();
-    if (basename.startsWith(normalizedId)) {
-      matchedFile = f;
-      break;
-    }
-  }
+  // Exact filename beats a prefix, so naming the file disambiguates a
+  // duplicate id. Checked first and returned outright.
+  const exact = files.filter(
+    (f) => path.basename(f.filePath).toUpperCase() === normalizedId
+  );
 
-  if (!matchedFile) {
+  // A bare `startsWith` had no boundary: "ISS-011" swallowed ISS-0110,
+  // ISS-0112 and ISS-0119, and `break` then wrote to whichever readdir
+  // happened to yield first. Require the id to end at a separator or the
+  // extension, and collect every hit rather than stopping at the first.
+  const prefixed = files.filter((f) => {
+    const basename = path.basename(f.filePath).toUpperCase();
+    if (!basename.startsWith(normalizedId)) return false;
+    const rest = basename.slice(normalizedId.length);
+    return rest === '' || rest.startsWith('-') || /^\.(MD|YA?ML)$/.test(rest);
+  });
+
+  const matches = exact.length > 0 ? exact : prefixed;
+
+  if (matches.length === 0) {
     throw new Error(`Issue ${issueId} not found in project ${projectId}`);
   }
+
+  if (matches.length > 1) {
+    throw ambiguousIssueId(
+      issueId,
+      projectId,
+      matches.map((f) => ({ filename: path.basename(f.filePath) }))
+    );
+  }
+
+  const matchedFile = matches[0];
 
   // Read and parse. Two on-disk formats exist:
   //   1. Markdown with `---` frontmatter delimiters + body (tools/sentinel.ts createIssue)

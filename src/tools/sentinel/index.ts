@@ -177,7 +177,10 @@ export const sentinelCloseIssueTool: ToolSpec = {
 
         const result = await closeIssue(args as CloseIssueInput);
 
-        if ('error' in result && result.error === 'ISSUE_NOT_FOUND') {
+        // Any error-shaped result is an error. Matching on ISSUE_NOT_FOUND
+        // alone let AMBIGUOUS_ISSUE_ID (and project-resolution failures) be
+        // reported to the caller as a successful close.
+        if ('error' in result) {
           return toolError(JSON.stringify(result));
         }
 

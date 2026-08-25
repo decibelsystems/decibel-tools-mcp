@@ -137,6 +137,20 @@ export interface CloseIssueError {
   available_issues: Array<{ id: string; title: string }>;
 }
 
+/**
+ * More than one record answers to the same id, so the write target is
+ * undefined. Refusing is the only safe answer: picking readdir-first silently
+ * edited one issue and left its twin untouched (ISS-0131).
+ */
+export interface AmbiguousIssueIdError {
+  error: 'AMBIGUOUS_ISSUE_ID';
+  projectId: string;
+  issue_id: string;
+  message: string;
+  /** Filenames that all matched, each usable verbatim as an unambiguous id. */
+  candidates: string[];
+}
+
 export interface ListRepoIssuesInput {
   projectId?: string;
   status?: IssueStatus;
@@ -152,6 +166,11 @@ export interface ListRepoIssuesOutput {
    *  the underlying files need repair. */
   degraded?: number;
   degraded_files?: string[];
+  /** Ids claimed by more than one record. Writers refuse to target these
+   *  (AMBIGUOUS_ISSUE_ID), so they are a data-repair queue, not a cosmetic
+   *  nit — surfaced here rather than discovered mid-incident (ISS-0131). */
+  duplicate_ids?: number;
+  duplicate_id_files?: Record<string, string[]>;
 }
 
 // ============================================================================
@@ -329,6 +348,20 @@ function formatEpicId(num: number): string {
 
 function formatIssueId(num: number): string {
   return `ISS-${num.toString().padStart(4, '0')}`;
+}
+
+/**
+ * The identity a writer would collide on: the padded ISS-NNNN from the
+ * filename, else from frontmatter, else the filename itself (which is unique
+ * by construction). Mirrors the tier-3/tier-4 matching in findIssueCandidates
+ * so the collision report and the write refusal agree on what "same id" means.
+ */
+function canonicalIssueKey(filename: string, summaryId: string): string {
+  const fromName = filename.match(/^ISS-(\d+)/i);
+  if (fromName) return `ISS-${fromName[1].padStart(4, '0')}`.toUpperCase();
+  const fromFrontmatter = summaryId.match(/^ISS-(\d+)$/i);
+  if (fromFrontmatter) return `ISS-${fromFrontmatter[1].padStart(4, '0')}`.toUpperCase();
+  return filename;
 }
 
 async function getNextIssueNumber(issuesDir: string): Promise<number> {
@@ -634,24 +667,43 @@ function buildIssueSummary(
   return summary;
 }
 
-async function findIssueFile(projectId: string | undefined, issueId: string): Promise<{ filePath: string; filename: string } | null> {
+/**
+ * Resolve an issue id to every file it could plausibly mean.
+ *
+ * Matching runs in tiers of decreasing specificity and returns only the FIRST
+ * NON-EMPTY tier. That ordering is load-bearing: an exact filename outranks an
+ * ISS-NNNN prefix, so passing a filename stays a reliable way to name one
+ * member of a duplicate-id pair. Ambiguity is only ever reported within a
+ * single tier, never across tiers.
+ *
+ * Returning an array rather than the first hit is the point. Duplicate ISS-NNNN
+ * ids exist in the wild (ISS-0131), and `files.find(...)` resolved them in
+ * fs.readdir order — so every writer had an undefined target, silently edited
+ * one record, silently left the other untouched, and returned success.
+ */
+async function findIssueCandidates(
+  projectId: string | undefined,
+  issueId: string
+): Promise<Array<{ filePath: string; filename: string }>> {
   const resolved = resolveProjectPaths(projectId);
   const issuesDir = resolved.subPath('sentinel', 'issues');
+  const at = (filename: string) => ({ filePath: path.join(issuesDir, filename), filename });
 
   try {
     const files = await fs.readdir(issuesDir);
 
-    // Try exact match first
+    // Tier 1: exact filename. A directory cannot hold two of these.
     if (files.includes(issueId)) {
-      return { filePath: path.join(issuesDir, issueId), filename: issueId };
+      return [at(issueId)];
     }
 
-    // Try each record extension (.md, .yml, .yaml)
+    // Tier 2: filename + record extension. At most one per extension, and the
+    // extension order (.md, .yml, .yaml) is the established precedence.
     if (!isRecordFile(issueId)) {
       for (const ext of ['.md', '.yml', '.yaml']) {
         const candidate = `${issueId}${ext}`;
         if (files.includes(candidate)) {
-          return { filePath: path.join(issuesDir, candidate), filename: candidate };
+          return [at(candidate)];
         }
       }
     }
@@ -660,14 +712,18 @@ async function findIssueFile(projectId: string | undefined, issueId: string): Pr
     const issMatch = issueId.match(/^ISS-(\d+)$/i);
     if (issMatch) {
       const padded = `ISS-${issMatch[1].padStart(4, '0')}`.toLowerCase();
-      const prefixHit = files.find((f) => {
+
+      // Tier 3: filename prefix. THIS is where duplicates collide.
+      const prefixHits = files.filter((f) => {
         const lower = f.toLowerCase();
         return lower.startsWith(`${padded}-`) || stripRecordExt(lower) === padded;
       });
-      if (prefixHit) {
-        return { filePath: path.join(issuesDir, prefixHit), filename: prefixHit };
+      if (prefixHits.length > 0) {
+        return prefixHits.map(at);
       }
-      // Scan frontmatter for legacy retroactively-stamped issues
+
+      // Tier 4: frontmatter id, for legacy retroactively-stamped issues.
+      const fmHits: string[] = [];
       for (const f of files) {
         if (!isRecordFile(f)) continue;
         try {
@@ -677,24 +733,20 @@ async function findIssueFile(projectId: string | undefined, issueId: string): Pr
           const idLine = region.split('\n').find((l) => l.trim().toLowerCase().startsWith('id:'));
           if (!idLine) continue;
           const idVal = idLine.slice(idLine.indexOf(':') + 1).trim().toLowerCase();
-          if (idVal === padded) {
-            return { filePath: path.join(issuesDir, f), filename: f };
-          }
+          if (idVal === padded) fmHits.push(f);
         } catch {
           // skip unreadable
         }
       }
+      if (fmHits.length > 0) return fmHits.map(at);
     }
 
-    // Fuzzy match - find file containing the query
-    const match = files.find(f => f.toLowerCase().includes(issueId.toLowerCase()));
-    if (match) {
-      return { filePath: path.join(issuesDir, match), filename: match };
-    }
-
-    return null;
+    // Tier 5: fuzzy substring. Genuinely ambiguous when it hits more than once
+    // (`ISS-011` spans ISS-0110, ISS-0112, ISS-0119), so it reports all of them.
+    const fuzzyHits = files.filter((f) => f.toLowerCase().includes(issueId.toLowerCase()));
+    return fuzzyHits.map(at);
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -882,7 +934,7 @@ function setYamlBlockField(lines: string[], key: string, value: string): string[
 
 export async function closeIssue(
   input: CloseIssueInput
-): Promise<CloseIssueOutput | CloseIssueError | ProjectResolutionError> {
+): Promise<CloseIssueOutput | CloseIssueError | AmbiguousIssueIdError | ProjectResolutionError> {
   // Resolve project paths first
   let resolved: ResolvedProjectPaths;
   try {
@@ -891,9 +943,9 @@ export async function closeIssue(
     return makeProjectResolutionError('close issue');
   }
 
-  const found = await findIssueFile(input.projectId, input.issue_id);
+  const candidates = await findIssueCandidates(input.projectId, input.issue_id);
 
-  if (!found) {
+  if (candidates.length === 0) {
     const available = await getProjectIssues(input.projectId);
     return {
       error: 'ISSUE_NOT_FOUND',
@@ -904,7 +956,21 @@ export async function closeIssue(
     };
   }
 
-  const { filePath, filename } = found;
+  if (candidates.length > 1) {
+    const names = candidates.map((c) => c.filename);
+    return {
+      error: 'AMBIGUOUS_ISSUE_ID',
+      projectId: resolved.id,
+      issue_id: input.issue_id,
+      message:
+        `"${input.issue_id}" matches ${names.length} records in project "${resolved.id}", ` +
+        `so the write target is undefined and nothing was changed. ` +
+        `Re-run with one of these filenames as issue_id: ${names.join(', ')}`,
+      candidates: names,
+    };
+  }
+
+  const { filePath, filename } = candidates[0];
   const content = await fs.readFile(filePath, 'utf-8');
   const now = new Date();
   const closedAt = now.toISOString();
@@ -1008,6 +1074,11 @@ export async function listRepoIssues(
   const malformedFiles: string[] = [];
   const degradedFiles: string[] = [];
 
+  // id -> filenames claiming it. Built BEFORE the status filter: a closed twin
+  // still makes the id ambiguous for writers, so filtering it out of the list
+  // must not filter it out of the collision report.
+  const idClaims = new Map<string, string[]>();
+
   try {
     const files = await fs.readdir(issuesDir);
     for (const file of files) {
@@ -1016,6 +1087,8 @@ export async function listRepoIssues(
       const issue = await parseIssueFile(filePath);
       if (issue) {
         if (issue.degraded) degradedFiles.push(file);
+        const key = canonicalIssueKey(file, issue.id);
+        idClaims.set(key, [...(idClaims.get(key) ?? []), file]);
         // Apply status filter
         if (input.status && issue.status !== input.status) continue;
         issues.push(issue);
@@ -1028,6 +1101,8 @@ export async function listRepoIssues(
     // Directory doesn't exist
   }
 
+  const duplicates = [...idClaims.entries()].filter(([, f]) => f.length > 1);
+
   // Sort by filename (newest first based on timestamp)
   issues.sort((a, b) => b.id.localeCompare(a.id));
 
@@ -1039,6 +1114,10 @@ export async function listRepoIssues(
   if (degradedFiles.length > 0) {
     out.degraded = degradedFiles.length;
     out.degraded_files = degradedFiles;
+  }
+  if (duplicates.length > 0) {
+    out.duplicate_ids = duplicates.length;
+    out.duplicate_id_files = Object.fromEntries(duplicates);
   }
   return out;
 }
