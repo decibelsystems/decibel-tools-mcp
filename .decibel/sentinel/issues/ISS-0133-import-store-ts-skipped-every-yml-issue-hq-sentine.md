@@ -2,8 +2,9 @@
 id: ISS-0133
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: in_progress
 created_at: 2026-08-20T05:31:13.936Z
+updated_at: 2026-08-20T19:03:06.100Z
 ---
 
 # import-store.ts skipped every .yml issue — hq.sentinel_issues undercounted for months (code fixed, re-import not run)
@@ -40,3 +41,5 @@ The re-import has NOT been run. It writes to Supabase with SERVICE_ROLE across 1
 So the real question is not "re-run the importer" but "does the importer become a projector", which is an ADR-0008 conversation on the decibel-hq side. Tracked there as their ISS-0001.
 
 Related: ISS-0130 (src/store is dead code — import-store.ts turns out to be its only consumer, so it is not deletable as filed), ISS-0129, ISS-0131.
+
+[2026-08-20] Code half shipped in 4ecad91 / 2.2.0-beta.0 (npm tag `beta`): import-store.ts exts widened to .md/.yml/.yaml, source_key strips /\.(md|ya?ml)$/i, parseIssueMarkdown parses bare YAML with the column-0 salvage boundary. Staying OPEN deliberately — the re-import against Supabase (SERVICE_ROLE, 15 projects) has NOT been run and is Ben's decision, and it should not run in isolation given the stale-since-2026-05-25 finding. Real question remains "does the importer become a projector" (decibel-hq ADR-0008 conversation, their ISS-0001). Note: commit 4ecad91 carries a `Closes: ISS-0133` trailer that overstates this — the trailer is wrong, the remaining work is the re-import decision.
