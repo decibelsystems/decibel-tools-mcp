@@ -2,14 +2,15 @@
 id: ISS-0131
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: closed
 created_at: 2026-08-20T04:24:50.842Z
+closed_at: 2026-08-25T20:06:15.417Z
 ---
 
 # Duplicate issue ids make findIssueFile resolution readdir-order-dependent — update_issue/close_issue can silently write to the wrong issue
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -51,3 +52,22 @@ SUGGESTED FIX (not applied — needs a call on caller impact):
 3. Renumbering the existing 63 duplicates is a data migration, separate from the code fix.
 
 Related: ISS-0129 (close_issue bare-YAML corruption), ISS-0130 (dead src/store), ISS-0105 (converge issue stores).
+
+## Resolution
+
+Fixed in bbc50d7. All three silent-pick sites now refuse an ambiguous id instead of resolving it in fs.readdir order.
+
+WHAT SHIPPED:
+1. tools/sentinel.ts: findIssueFile became findIssueCandidates, matching in tiers of decreasing specificity (exact filename > filename+ext > ISS-NNNN prefix > frontmatter id > fuzzy) and returning only the first non-empty tier. Ambiguity is reported within a tier, never across, so an exact filename still outranks a prefix and remains a working escape hatch. close_issue returns AMBIGUOUS_ISSUE_ID listing every candidate filename, each of which is itself a valid unambiguous id.
+2. sentinelIssues.ts updateIssue: the bare `basename.startsWith(id)` + `break` had no boundary check, so "ISS-011" matched ISS-0110/ISS-0112/ISS-0119 and wrote to whichever readdir yielded first. Now requires the id to end at a separator or record extension, and collects every hit rather than stopping at the first. This was a second, separate defect beyond duplicates and is why update_issue was affected as the issue predicted.
+3. sentinelIssues.ts listIssuesForProject: deduped by id and DROPPED the loser, making one of two colliding issues unreachable to read_issue entirely. Both are now retained and EVERY member of a collision is marked duplicate_id (not just the one seen second — a caller holding the first file is in equal danger).
+
+Also fixed en route: the close_issue tool handler matched only ISSUE_NOT_FOUND, so any other error shape — the new AMBIGUOUS_ISSUE_ID, and pre-existing project-resolution failures — was returned to the caller as a SUCCESSFUL close.
+
+REPORTING (suggested fix item 2): list_issues now emits duplicate_ids and duplicate_id_files. Keyed on the RESOLVED id (filename prefix, else frontmatter id) rather than the filename, which matters: on this repo it finds 4 collisions where a filename-only grep finds 3. The extra one is ISS-0054, a timestamp-named file carrying the id in frontmatter colliding with an ISS-named file — exactly the cross-format case the issue flagged as under-counted.
+
+NOT IN SCOPE, deliberately: renumbering the colliding data. Filed as ISS-0136 with the current census and a note that any migration must key on resolved id, not filename, or it will leave cross-format pairs behind.
+
+ROOT-CAUSE CORRECTION worth recording: these collisions are NOT the allocator racing. Verified on the ISS-0112 pair with `git log --diff-filter=A` — the record carrying created_at 2026-06-25 was ADDED to the repo on 2026-08-02, well after ISS-0112 was legitimately allocated on 2026-07-11. getNextIssueNumber takes max+1 over the directory and is correct when the directory is complete; an import/replay path injects records with foreign ids and bypasses it. Hardening createIssue alone would not stop new collisions. This also means the open friction entry "sentinel create_issue allocates colliding ISS-NNNN ids" is misattributed — the allocator is not the culprit.
+
+TESTING: 21 new tests across tests/unit/duplicateIssueIds.test.ts and duplicateIssueIdsStore.test.ts, including that a refusal leaves BOTH files byte-identical. Full suite 422/422. The new tests were mutation-checked by restoring the pick-first behaviour, which fails 4 of them — they are not vacuous.
