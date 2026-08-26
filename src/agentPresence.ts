@@ -88,6 +88,129 @@ async function resolveProjectId(client: DbClient, cwd: string): Promise<string |
   return projectMap.get(key) ?? null;
 }
 
+// ============================================================================
+// Durable agent identity — the agent_id seam (ISS-0134 / EPIC-0037)
+// ============================================================================
+// hq.agent_sessions is EPHEMERAL: session_key dies with the process. hq.agents
+// is DURABLE: "this repo's Claude Code agent", stable across restarts, and it
+// is what a post-office message is addressed to. agent_sessions.agent_id is the
+// resolution edge between them, and HQ cannot populate it — the daemon owns
+// this write path, so the column stays inert until the code below fills it.
+//
+// Without it hq.resolve_agent_session() finds nothing, every message resolves
+// to delivered_session_key = NULL, and the post office records traffic it never
+// delivers. Honest, but inert.
+//
+// CARDINALITY IS MANY SESSIONS : ONE AGENT. That is not an assumption — HQ's
+// resolve_agent_session() ends in `order by last_seen_at desc limit 1`, which
+// only makes sense if several live sessions can share one agent_id. Two Claude
+// Code windows open on the same repo are one addressable agent; delivery goes
+// to whichever is most recently active.
+
+/**
+ * Derive the DURABLE address for a session.
+ *
+ * Must be stable across restarts, so anything process-scoped is disqualified:
+ * not the session key, not a PID, not a TTY. The claude-peers broker id looks
+ * stable but is not — it carries a random suffix (`decibel-hq-nby9`), so a
+ * restart would silently mint a second agent and split the thread history.
+ *
+ * Repo identity + runtime is the stable pair: the same checkout on the same
+ * runtime is the same logical agent, session after session.
+ *
+ * DELIBERATELY NOT caller-supplied. `reg.agent` is an untrusted display label
+ * from a local process, and a local caller that could name its own durable
+ * address could claim an EXISTING agent's name — resolve_agent_session picks
+ * the most recently seen session, so a frequent heartbeater would capture that
+ * agent's inbound mail. That is the principal-not-label gap (EPIC-0007) which
+ * Ben accepted as risk for EPIC-0037; accepting it is not a reason to widen it.
+ * An operator can still set the name explicitly via DECIBEL_AGENT_NAME, which
+ * is daemon-scoped env (trusted) rather than per-request payload.
+ */
+export function deriveAgentName(input: {
+  gitRoot?: string | null;
+  cwd?: string | null;
+  runtime: string;
+  host: string;
+}): string {
+  const explicit = process.env.DECIBEL_AGENT_NAME;
+  if (explicit && explicit.trim()) return explicit.trim().slice(0, 200);
+
+  // basename of the git root, else of the cwd — the repo IS the identity.
+  const root = (input.gitRoot || input.cwd || '').trim();
+  const key = root ? path.basename(root) : '';
+  // No filesystem context at all (a runtime that registered without a cwd):
+  // fall back to the daemon host so the name is still stable, just coarser.
+  const scope = key || input.host;
+  return `${scope}/${input.runtime}`.slice(0, 200);
+}
+
+/**
+ * agent name -> hq.agents.id, memoised for the process. The presence loop runs
+ * every 30s over every peer; without this each tick would re-round-trip the
+ * same handful of names forever.
+ */
+const agentIdCache = new Map<string, string>();
+
+/**
+ * Resolve (or create) the durable hq.agents row for `name` and return its id.
+ *
+ * Returns null rather than throwing when the table is absent — this ships
+ * BEFORE decibel-hq applies the post-office migration, and presence writing
+ * must keep working untouched in the meantime. When the migration lands the
+ * same code starts populating agent_id with no redeploy.
+ *
+ * `runtime` is written as a self-declared LABEL only. HQ's schema comment is
+ * explicit that it is never a trust signal, so nothing here gates on it.
+ */
+export async function resolveAgentId(
+  client: DbClient,
+  name: string,
+  runtime: string
+): Promise<string | null> {
+  const cached = agentIdCache.get(name);
+  if (cached) return cached;
+
+  // Upsert on the (org_id, name) unique key, then read the id back. Doing it as
+  // an upsert rather than select-then-insert keeps two daemons racing on the
+  // same name from both inserting.
+  const { data, error } = await withRetryResult(
+    () =>
+      client
+        .from('agents')
+        .upsert(
+          { org_id: ORG_ID, name, runtime },
+          { onConflict: 'org_id,name', ignoreDuplicates: false }
+        )
+        .select('id')
+        .maybeSingle(),
+    `presence.agent-resolve ${name}`
+  );
+
+  if (error) {
+    // Table not yet created (migration unapplied) is the EXPECTED state today,
+    // so log it once per name at low volume rather than every 30s tick.
+    if (!agentResolveWarned.has(name)) {
+      agentResolveWarned.add(name);
+      log(`Presence: agent identity unavailable for "${name}" (${error.message}) — agent_id left null.`);
+    }
+    return null;
+  }
+
+  const id = (data as { id?: string } | null)?.id;
+  if (!id) return null;
+  agentIdCache.set(name, id);
+  return id;
+}
+
+const agentResolveWarned = new Set<string>();
+
+/** Test seam: drop memoised ids so a test can observe a fresh resolve. */
+export function __resetAgentIdCache(): void {
+  agentIdCache.clear();
+  agentResolveWarned.clear();
+}
+
 async function tick(client: DbClient): Promise<void> {
   const host = resolveHost();
   const nowMs = Date.now();
@@ -97,6 +220,13 @@ async function tick(client: DbClient): Promise<void> {
   for (const p of peers) {
     if (!p.id) continue;
     const project_id = await resolveProjectId(client, p.cwd);
+    // Durable identity for this session. git_root is preferred over cwd: a peer
+    // sitting in a subdirectory of the repo is the same agent as one at the top.
+    const agent_id = await resolveAgentId(
+      client,
+      deriveAgentName({ gitRoot: p.git_root, cwd: p.cwd, runtime: 'claude-code', host }),
+      'claude-code'
+    );
     const row = {
       org_id: ORG_ID,
       host,
@@ -105,6 +235,10 @@ async function tick(client: DbClient): Promise<void> {
       // These are Claude Code sessions read from the claude-peers broker; tag the
       // runtime so HQ's /agents board renders the runtime badge + filter (P1/P5).
       runtime: 'claude-code',
+      // Only sent once resolvable. Before the post-office migration lands the
+      // column does not exist and PostgREST rejects the ENTIRE row on an
+      // unknown key — which would take down presence writing that works today.
+      ...(agent_id ? { agent_id } : {}),
       summary: p.summary || null,
       cwd: p.cwd || null,
       project_id,
@@ -218,11 +352,21 @@ export async function writeLocalAgentSession(reg: LocalAgentRegistration): Promi
   const nowIso = new Date().toISOString();
   const project_id = await resolveProjectId(client, reg.cwd || '');
   const ended = reg.status === 'ended';
+  // Durable identity. The SDK gives us no git_root, so the cwd basename is the
+  // repo key. Note the address is derived from WHERE the runtime is, never from
+  // reg.agent — see deriveAgentName on why a caller must not name itself.
+  const agent_id = await resolveAgentId(
+    client,
+    deriveAgentName({ cwd: reg.cwd, runtime: reg.runtime, host }),
+    reg.runtime
+  );
   const row = {
     org_id: ORG_ID,
     host,
     session_key: reg.session_key,
     runtime: reg.runtime,
+    // See the claude-peers path: omitted, not nulled, until the column exists.
+    ...(agent_id ? { agent_id } : {}),
     // Non-encoding belt on caller-supplied display fields (store-raw / escape-at-
     // render is HQ's job; we only cap length + strip control chars/null bytes).
     agent: sanitizeText(reg.agent, FIELD_CAPS.agent),
