@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   deriveAgentName,
   resolveAgentId,
+  listAgentRoster,
   __resetAgentIdCache,
 } from '../../src/agentPresence.js';
 
@@ -175,5 +176,133 @@ describe('durable agent identity (ISS-0134)', () => {
       const client = fakeClient({ data: null });
       await expect(resolveAgentId(client, 'repo/claude-code', 'claude-code')).resolves.toBeNull();
     });
+  });
+});
+
+/** Builder stub for the two-query roster path. */
+function rosterClient(opts: {
+  agents?: unknown[];
+  agentsError?: { message: string };
+  sessions?: unknown[];
+}) {
+  const queries: Array<{ table: string; filters: Record<string, unknown> }> = [];
+  const client = {
+    queries,
+    from(table: string) {
+      const filters: Record<string, unknown> = {};
+      queries.push({ table, filters });
+      const builder: Record<string, unknown> = {};
+      const chain = () => builder;
+      builder.select = chain;
+      builder.eq = (k: string, v: unknown) => {
+        filters[k] = v;
+        return builder;
+      };
+      builder.gt = (k: string, v: unknown) => {
+        filters[`gt:${k}`] = v;
+        return builder;
+      };
+      builder.order = chain;
+      // Awaited by withRetryResult.
+      builder.then = (resolve: (r: unknown) => unknown) =>
+        resolve(
+          table === 'agents'
+            ? { data: opts.agents ?? [], error: opts.agentsError ?? null }
+            : { data: opts.sessions ?? [], error: null }
+        );
+      return builder;
+    },
+  };
+  return client as unknown as Parameters<typeof listAgentRoster>[0] & { queries: typeof queries };
+}
+
+describe('agents.list roster — durable agents LEFT JOIN liveness (ISS-0134)', () => {
+  const AGENTS = [
+    { id: 'a1', name: 'decibel-tools-mcp/claude-code', runtime: 'claude-code', role: null, capabilities: [], status: 'active' },
+    { id: 'a2', name: 'decibel-hq/claude-code', runtime: 'claude-code', role: null, capabilities: [], status: 'active' },
+  ];
+
+  it('keeps an OFFLINE agent visible instead of letting it vanish', async () => {
+    // The whole point: a roster built from live sessions would silently drop
+    // the agent you are trying and failing to reach.
+    const client = rosterClient({
+      agents: AGENTS,
+      sessions: [{ agent_id: 'a1', session_key: 'sess-1', last_seen_at: '2026-08-26T00:00:10Z' }],
+    });
+
+    const roster = await listAgentRoster(client);
+
+    expect(roster).toHaveLength(2);
+    expect(roster!.find((a) => a.id === 'a2')).toMatchObject({
+      name: 'decibel-hq/claude-code',
+      online: false,
+      session_key: null,
+    });
+  });
+
+  it('reports the resolvable session for an online agent', async () => {
+    const client = rosterClient({
+      agents: AGENTS,
+      sessions: [{ agent_id: 'a1', session_key: 'sess-1', last_seen_at: '2026-08-26T00:00:10Z' }],
+    });
+
+    const roster = await listAgentRoster(client);
+
+    expect(roster!.find((a) => a.id === 'a1')).toMatchObject({
+      online: true,
+      session_key: 'sess-1',
+    });
+  });
+
+  it('picks the MOST RECENT session when one agent has several live ones', async () => {
+    // Mirrors resolve_agent_session's `order by last_seen_at desc limit 1` —
+    // two Claude Code windows on one repo are one agent.
+    const client = rosterClient({
+      agents: AGENTS,
+      sessions: [
+        { agent_id: 'a1', session_key: 'newest', last_seen_at: '2026-08-26T00:00:30Z' },
+        { agent_id: 'a1', session_key: 'older', last_seen_at: '2026-08-26T00:00:05Z' },
+      ],
+    });
+
+    const roster = await listAgentRoster(client);
+
+    expect(roster!.find((a) => a.id === 'a1')!.session_key).toBe('newest');
+  });
+
+  it('applies the 60s liveness window as a server-side filter', async () => {
+    const client = rosterClient({ agents: AGENTS, sessions: [] });
+
+    await listAgentRoster(client);
+
+    const sessionQuery = client.queries.find((q) => q.table === 'agent_sessions')!;
+    expect(sessionQuery.filters.status).toBe('active');
+    const cutoff = Date.parse(sessionQuery.filters['gt:last_seen_at'] as string);
+    // ~60s ago, allowing for test execution time.
+    expect(Date.now() - cutoff).toBeGreaterThanOrEqual(59_000);
+    expect(Date.now() - cutoff).toBeLessThan(65_000);
+  });
+
+  it('ignores sessions with no agent_id rather than inventing a roster entry', async () => {
+    const client = rosterClient({
+      agents: AGENTS,
+      sessions: [{ agent_id: null, session_key: 'unstamped', last_seen_at: '2026-08-26T00:00:30Z' }],
+    });
+
+    const roster = await listAgentRoster(client);
+
+    expect(roster!.every((a) => a.online === false)).toBe(true);
+  });
+
+  it('returns null (not empty) when the table is absent, so "not deployed" is distinguishable', async () => {
+    const client = rosterClient({ agentsError: { message: 'relation "hq.agents" does not exist' } });
+
+    await expect(listAgentRoster(client)).resolves.toBeNull();
+  });
+
+  it('returns an empty roster when the org genuinely has no agents', async () => {
+    const client = rosterClient({ agents: [], sessions: [] });
+
+    await expect(listAgentRoster(client)).resolves.toEqual([]);
   });
 });

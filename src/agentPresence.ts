@@ -211,6 +211,103 @@ export function __resetAgentIdCache(): void {
   agentResolveWarned.clear();
 }
 
+/**
+ * Liveness window. MUST match hq.resolve_agent_session's `interval '60 seconds'`
+ * — if these drift, the roster says "online" for an agent the delivery path
+ * will refuse to deliver to, which is worse than either answer alone.
+ */
+const LIVENESS_WINDOW_MS = 60_000;
+
+export interface AgentRosterEntry {
+  id: string;
+  name: string;
+  runtime: string;
+  role: string | null;
+  capabilities: string[];
+  /** Durable lifecycle from hq.agents: 'active' | 'retired'. NOT liveness. */
+  status: string;
+  /** Liveness: does a live session currently resolve for this agent? */
+  online: boolean;
+  /** The session a message would be delivered into right now, or null. */
+  session_key: string | null;
+  last_seen_at: string | null;
+}
+
+/**
+ * The agents.list roster: hq.agents LEFT JOIN liveness.
+ *
+ * The roster is the DURABLE agents, each annotated with whether a live session
+ * resolves. An agent that exists but is offline MUST appear, marked offline,
+ * rather than vanish — a roster built from live sessions would silently drop
+ * exactly the agent you are trying and failing to reach, which is the same
+ * failure class as addressing a dead session.
+ *
+ * Two queries and a join in memory rather than one call to
+ * hq.resolve_agent_session per agent, which would be N round trips to render
+ * one board.
+ *
+ * CLOCK CAVEAT, and it is why this is a DISPLAY path only: the cutoff below is
+ * computed from the daemon's clock, while resolve_agent_session uses the
+ * database's now(). Skew between them can disagree at the 60s boundary. The
+ * authoritative answer at DELIVERY time is HQ's function, never this. Do not
+ * route a message using this roster's `online`.
+ *
+ * Returns null (not an empty roster) when the table is absent, so a caller can
+ * distinguish "no agents" from "post office not deployed yet".
+ */
+export async function listAgentRoster(client: DbClient): Promise<AgentRosterEntry[] | null> {
+  const { data: agents, error: agentsErr } = await withRetryResult(
+    () =>
+      client
+        .from('agents')
+        .select('id,name,runtime,role,capabilities,status')
+        .eq('org_id', ORG_ID),
+    'presence.agent-roster'
+  );
+  if (agentsErr) {
+    log(`Presence: agent roster unavailable (${agentsErr.message}).`);
+    return null;
+  }
+
+  const cutoff = new Date(Date.now() - LIVENESS_WINDOW_MS).toISOString();
+  const { data: sessions } = await withRetryResult(
+    () =>
+      client
+        .from('agent_sessions')
+        .select('agent_id,session_key,last_seen_at')
+        .eq('org_id', ORG_ID)
+        .eq('status', 'active')
+        .gt('last_seen_at', cutoff)
+        .order('last_seen_at', { ascending: false }),
+    'presence.agent-roster-liveness'
+  );
+
+  // Most recent wins, mirroring `order by last_seen_at desc limit 1`. The query
+  // is already sorted, so the first entry seen for an agent is the winner.
+  const live = new Map<string, { session_key: string; last_seen_at: string }>();
+  for (const s of (sessions ?? []) as Array<{
+    agent_id: string | null;
+    session_key: string;
+    last_seen_at: string;
+  }>) {
+    if (!s.agent_id || live.has(s.agent_id)) continue;
+    live.set(s.agent_id, { session_key: s.session_key, last_seen_at: s.last_seen_at });
+  }
+
+  return ((agents ?? []) as Array<Omit<AgentRosterEntry, 'online' | 'session_key' | 'last_seen_at'>>).map(
+    (a) => {
+      const hit = live.get(a.id);
+      return {
+        ...a,
+        capabilities: a.capabilities ?? [],
+        online: Boolean(hit),
+        session_key: hit?.session_key ?? null,
+        last_seen_at: hit?.last_seen_at ?? null,
+      };
+    }
+  );
+}
+
 async function tick(client: DbClient): Promise<void> {
   const host = resolveHost();
   const nowMs = Date.now();
