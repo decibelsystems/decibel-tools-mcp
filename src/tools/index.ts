@@ -47,9 +47,11 @@ import {
   graduatedToolsToMcpDefinitions,
 } from './dojoGraduated.js';
 
-// Tier gating (in production, require explicit env vars; in dev, always enabled)
-const PRO_ENABLED = process.env.DECIBEL_PRO === '1' || process.env.NODE_ENV !== 'production';
-const APPS_ENABLED = process.env.DECIBEL_APPS === '1' || process.env.NODE_ENV !== 'production';
+// Tier gating — require explicit opt-in. See the matching note in kernel.ts:
+// keying off `NODE_ENV !== 'production'` failed open on every install that
+// leaves NODE_ENV unset, which is the default case.
+const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
+const APPS_ENABLED = process.env.DECIBEL_APPS === '1';
 
 // ============================================================================
 // Aggregate All Tools

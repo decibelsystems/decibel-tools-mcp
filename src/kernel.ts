@@ -53,9 +53,16 @@ export interface DispatchContext {
   requestId?: string;
 }
 
-// Tier gating (same logic as tools/index.ts)
-const PRO_ENABLED = process.env.DECIBEL_PRO === '1' || process.env.NODE_ENV !== 'production';
-const APPS_ENABLED = process.env.DECIBEL_APPS === '1' || process.env.NODE_ENV !== 'production';
+// Tier gating (same logic as tools/index.ts).
+//
+// Fails CLOSED: opt in explicitly. The previous form OR'd in
+// `NODE_ENV !== 'production'`, which is true whenever NODE_ENV is simply unset —
+// the default for a plain `npx @decibelsystems/tools` install and for any client
+// that spawns the server without a curated env (Claude Desktop, Cursor). That
+// silently exposed every pro and apps facade, including `terminal` (reads
+// DX_WALLET_PRIVATE_KEY) and the Postgres trading facades, to ordinary users.
+const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
+const APPS_ENABLED = process.env.DECIBEL_APPS === '1';
 
 // ============================================================================
 // Tool Kernel

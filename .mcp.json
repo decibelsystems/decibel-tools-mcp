@@ -4,6 +4,8 @@
       "command": "node",
       "args": ["--env-file=.env", "dist/server.js"],
       "env": {
+        "DECIBEL_PRO": "1",
+        "DECIBEL_APPS": "1",
         "SUPABASE_URL": "${SUPABASE_URL:-}",
         "SUPABASE_ANON_KEY": "${SUPABASE_ANON_KEY:-}",
         "SUPABASE_SERVICE_KEY": "${SUPABASE_SERVICE_KEY:-}",
