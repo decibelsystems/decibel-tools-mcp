@@ -3,6 +3,7 @@ import path from 'path';
 import { parse as parseYaml, parseAllDocuments, stringify as stringifyYaml } from 'yaml';
 import { log } from './config.js';
 import { getWritePath, readFilesFromBothPaths } from './decibelPaths.js';
+import { allocateAndWriteIssue } from './lib/issueIdAllocator.js';
 
 // ============================================================================
 // Types
@@ -235,69 +236,51 @@ export async function createIssue(
   const issuesDir = await getWritePath(projectId, ISSUES_SUBPATH);
   await ensureDir(issuesDir);
 
-  // Find next issue number
-  const existingIssues = await listIssuesForProject(projectId);
-  const maxNum = existingIssues.reduce(
-    (max, issue) => Math.max(max, extractIssueNumber(issue.id)),
-    0
-  );
-  const newNum = maxNum + 1;
-  const newId = formatIssueId(newNum);
-
-  // Build filename
+  // Id allocation and the write are held under one cross-process lock, shared
+  // with src/tools/sentinel.ts. Both implementations allocate from a single
+  // ISS-NNNN space into the same directory, so they must serialize against each
+  // other — not just against other instances of themselves.
   const slug = slugify(title);
-  const filename = `${newId}-${slug}.yml`;
-  const filePath = path.join(issuesDir, filename);
-
-  // Build issue object
   const now = new Date().toISOString();
-  const issue: SentinelIssue = {
-    id: newId,
-    title,
-    project: projectId,
-    status: 'open',
-    priority: priority || 'medium',
-    tags: tags || [],
-    created_at: now,
-    updated_at: now,
+
+  const buildIssue = (newId: string): SentinelIssue => {
+    const issue: SentinelIssue = {
+      id: newId,
+      title,
+      project: projectId,
+      status: 'open',
+      priority: priority || 'medium',
+      tags: tags || [],
+      created_at: now,
+      updated_at: now,
+    };
+    if (epicId) issue.epicId = epicId;
+    if (description) issue.description = description;
+    return issue;
   };
 
-  if (epicId) {
-    issue.epicId = epicId;
-  }
-
-  if (description) {
-    issue.description = description;
-  }
-
-  // Build YAML content
-  // Use a specific field order for cleaner output
-  const yamlObj: Record<string, unknown> = {
-    id: issue.id,
-    title: issue.title,
-    project: issue.project,
-    status: issue.status,
-    priority: issue.priority,
+  // Serialize with an explicit field order for stable, reviewable diffs.
+  const buildIssueYaml = (newId: string): string => {
+    const built = buildIssue(newId);
+    const yamlObj: Record<string, unknown> = {
+      id: built.id,
+      title: built.title,
+      project: built.project,
+      status: built.status,
+      priority: built.priority,
+    };
+    if (epicId) yamlObj.epic_id = epicId;
+    yamlObj.tags = built.tags;
+    yamlObj.created_at = built.created_at;
+    yamlObj.updated_at = built.updated_at;
+    if (description) yamlObj.description = description;
+    return stringifyYaml(yamlObj, { lineWidth: 0 }); // Don't wrap lines
   };
 
-  if (epicId) {
-    yamlObj.epic_id = epicId;
-  }
+  const allocated = await allocateAndWriteIssue(issuesDir, 'yml', slug, buildIssueYaml);
+  const { id: newId, filename, filePath } = allocated;
+  const issue = buildIssue(newId);
 
-  yamlObj.tags = issue.tags;
-  yamlObj.created_at = issue.created_at;
-  yamlObj.updated_at = issue.updated_at;
-
-  if (description) {
-    yamlObj.description = description;
-  }
-
-  const yamlContent = stringifyYaml(yamlObj, {
-    lineWidth: 0, // Don't wrap lines
-  });
-
-  // Write file
-  await fs.writeFile(filePath, yamlContent, 'utf-8');
   log(`sentinelIssues: Created issue at ${filePath}`);
 
   return {

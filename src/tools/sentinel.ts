@@ -5,6 +5,7 @@ import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
 import { emitCreateProvenance } from './provenance.js';
 import { safeParseYaml } from '../sentinelIssues.js';
+import { allocateAndWriteIssue } from '../lib/issueIdAllocator.js';
 
 /**
  * Sentinel record files exist in two on-disk formats: markdown-with-frontmatter
@@ -814,43 +815,50 @@ export async function createIssue(
   const slug = slugify(input.title);
 
   ensureDir(issuesDir);
-  const issueNum = await getNextIssueNumber(issuesDir);
-  const issueId = formatIssueId(issueNum);
-  const filename = `${issueId}-${slug}.md`;
 
-  const filePath = path.join(issuesDir, filename);
-  validateWritePath(filePath, resolved);
+  // Allocation and write happen under one cross-process lock. Serializing only
+  // the id scan would leave the race intact — two processes still compute the
+  // same next id before either file lands. See lib/issueIdAllocator.ts.
+  const buildIssueContent = (issueId: string): string => {
+    // Build frontmatter with optional epic_id
+    const frontmatterLines = [
+      '---',
+      `id: ${issueId}`,
+      `projectId: ${resolved.id}`,
+      `severity: ${input.severity}`,
+      `status: open`,
+      `created_at: ${timestamp}`,
+    ];
+    if (input.epic_id) {
+      frontmatterLines.push(`epic_id: ${input.epic_id}`);
+    }
+    frontmatterLines.push('---');
+    const frontmatter = frontmatterLines.join('\n');
 
-  // Build frontmatter with optional epic_id
-  const frontmatterLines = [
-    '---',
-    `id: ${issueId}`,
-    `projectId: ${resolved.id}`,
-    `severity: ${input.severity}`,
-    `status: open`,
-    `created_at: ${timestamp}`,
-  ];
-  if (input.epic_id) {
-    frontmatterLines.push(`epic_id: ${input.epic_id}`);
-  }
-  frontmatterLines.push('---');
-  const frontmatter = frontmatterLines.join('\n');
+    const bodyLines = [
+      `# ${input.title}`,
+      '',
+      `**Severity:** ${input.severity}`,
+      `**Status:** open`,
+    ];
+    if (input.epic_id) {
+      bodyLines.push(`**Epic:** ${input.epic_id}`);
+    }
+    bodyLines.push('', '## Details', '', input.details);
+    const body = bodyLines.join('\n');
 
-  const bodyLines = [
-    `# ${input.title}`,
-    '',
-    `**Severity:** ${input.severity}`,
-    `**Status:** open`,
-  ];
-  if (input.epic_id) {
-    bodyLines.push(`**Epic:** ${input.epic_id}`);
-  }
-  bodyLines.push('', '## Details', '', input.details);
-  const body = bodyLines.join('\n');
+    return `${frontmatter}\n\n${body}\n`;
+  };
 
-  const content = `${frontmatter}\n\n${body}\n`;
+  const allocated = await allocateAndWriteIssue(issuesDir, 'md', slug, (issueId) => {
+    // Path validation must run against the concrete allocated path, inside the
+    // lock, so a traversal attempt cannot slip in between check and write.
+    validateWritePath(path.join(issuesDir, `${issueId}-${slug}.md`), resolved);
+    return buildIssueContent(issueId);
+  });
 
-  await fs.writeFile(filePath, content, 'utf-8');
+  const { id: issueId, filename, filePath } = allocated;
+  const content = buildIssueContent(issueId);
   log(`Sentinel: Created issue at ${filePath} (project: ${resolved.id})`);
 
   // Emit provenance event for this creation
