@@ -30,6 +30,14 @@ jobs:
       - name: Type check
         run: npm run lint
 
+      # Some tests spawn real child processes against the compiled output —
+      # the cross-process id-allocation test cannot exercise O_EXCL across
+      # process boundaries by importing TypeScript. Building here keeps the
+      # unit suite self-contained rather than depending on the `build` job,
+      # which runs after this one.
+      - name: Build (required by cross-process tests)
+        run: npm run build
+
       - name: Run tests
         run: npm test
 
