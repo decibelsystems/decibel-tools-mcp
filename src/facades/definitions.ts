@@ -17,7 +17,7 @@ import type { FacadeSpec } from './types.js';
 export const coreFacades: FacadeSpec[] = [
   {
     name: 'sentinel',
-    description: 'Work tracking: epics, issues, test specs, code scanning. Use this instead of creating markdown files for task tracking. Always read_issue before update_issue. Pass project_id when filing cross-repo issues. For large features use log_epic first, then create_issue for sub-tasks. Actions: create_issue, read_issue, update_issue, close_issue, list_issues, log_epic, list_epics, read_epic, resolve_epic, list_epic_issues, create_test_spec, list_test_specs, compile_tests, audit_policies, scan, scan_data, scan_codebase, scan_config, scan_coverage, auto_link, link_commit, list_linked_commits',
+    description: 'Work tracking: epics, issues, test specs, code scanning. Use this instead of creating markdown files for task tracking. Always read_issue before update_issue. Pass project_id when filing cross-repo issues. For large features use log_epic first, then create_issue for sub-tasks. Actions: create_issue, read_issue, update_issue, close_issue, list_issues, log_epic, list_epics, read_epic, update_epic, resolve_epic, list_epic_issues, create_test_spec, list_test_specs, compile_tests, audit_policies, scan, scan_data, scan_codebase, scan_config, scan_coverage, auto_link, link_commit, list_linked_commits',
     compactDescription: 'Track epics, issues, test specs, and scan code',
     microEligible: true,
     tier: 'core',
@@ -30,6 +30,7 @@ export const coreFacades: FacadeSpec[] = [
       log_epic: 'sentinel_log_epic',
       list_epics: 'sentinel_list_epics',
       read_epic: 'sentinel_read_epic',
+      update_epic: 'sentinel_update_epic',
       resolve_epic: 'sentinel_resolve_epic',
       list_epic_issues: 'sentinel_list_epic_issues',
       create_test_spec: 'sentinel_createTestSpec',

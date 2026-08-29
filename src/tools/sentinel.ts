@@ -1,11 +1,13 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { stringify as stringifyYaml } from 'yaml';
 import { getConfig, log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
 import { emitCreateProvenance } from './provenance.js';
 import { safeParseYaml } from '../sentinelIssues.js';
 import { allocateAndWriteIssue } from '../lib/issueIdAllocator.js';
+import { writeFileAtomic } from '../lib/atomicWrite.js';
 
 /**
  * Sentinel record files exist in two on-disk formats: markdown-with-frontmatter
@@ -239,6 +241,38 @@ export interface Epic {
 export interface GetEpicOutput {
   epic: Epic | null;
   error?: string;
+}
+
+export interface UpdateEpicInput {
+  projectId?: string;
+  epic_id: string;
+  status?: EpicStatus;
+  priority?: Priority;
+  summary?: string;
+  title?: string;
+  owner?: string;
+  squad?: string;
+  tags?: string[];
+  /** Appended to the body as a timestamped entry, preserving prior notes. */
+  note?: string;
+}
+
+export interface UpdateEpicOutput {
+  id: string;
+  path: string;
+  status: EpicStatus;
+  priority: Priority;
+  updated_at: string;
+  /** Human-readable field transitions; empty when the patch was a no-op. */
+  changes: string[];
+}
+
+/** More than one epic record answers to the id, so the write target is undefined. */
+export interface AmbiguousEpicIdError {
+  error: 'AMBIGUOUS_EPIC_ID';
+  epic_id: string;
+  message: string;
+  candidates: string[];
 }
 
 export interface GetEpicIssuesInput {
@@ -1044,7 +1078,7 @@ export async function closeIssue(
     updatedContent = parts.join('\n').replace(/\n*$/, '\n');
   }
 
-  await fs.writeFile(filePath, updatedContent, 'utf-8');
+  await writeFileAtomic(filePath, updatedContent);
   log(`Sentinel: Closed issue at ${filePath}`);
 
   // Prefer ISS-NNNN id from filename or frontmatter for the return value
@@ -1205,7 +1239,7 @@ export async function logEpic(input: LogEpicInput): Promise<LogEpicOutput | Proj
 
   const content = `${frontmatter}\n\n${sections.join('\n')}\n`;
 
-  await fs.writeFile(filePath, content, 'utf-8');
+  await writeFileAtomic(filePath, content);
   log(`Sentinel: Created epic at ${filePath} (project: ${resolved.id})`);
 
   // Emit provenance event for this creation
@@ -1297,6 +1331,180 @@ export async function getEpic(input: GetEpicInput): Promise<GetEpicOutput | Proj
   } catch {
     return { epic: null, error: `Epic not found: ${input.epic_id}` };
   }
+}
+
+/**
+ * Locate the file backing an epic id.
+ *
+ * Boundary-matched deliberately. A bare `startsWith` has no boundary, so
+ * `EPIC-003` would match EPIC-0030, EPIC-0031 and EPIC-0038 at once and the
+ * caller would silently write to whichever readdir returned first — the same
+ * defect that made issue resolution unsafe (ISS-0131). Returning every match
+ * lets the caller refuse rather than guess.
+ */
+async function findEpicFiles(epicsDir: string, epicId: string): Promise<string[]> {
+  let files: string[];
+  try {
+    files = await fs.readdir(epicsDir);
+  } catch {
+    return [];
+  }
+  const padded = epicId.match(/^EPIC-(\d+)$/i);
+  const canonical = padded ? `epic-${padded[1].padStart(4, '0')}` : epicId.toLowerCase();
+  return files.filter((f) => {
+    if (!isRecordFile(f)) return false;
+    const lower = f.toLowerCase();
+    // Exact filename, or the id followed by a non-digit separator.
+    return lower === epicId.toLowerCase() || new RegExp(`^${canonical}(?![0-9])`).test(lower);
+  });
+}
+
+/**
+ * Update an epic in place.
+ *
+ * Epics were write-once: log_epic created them and nothing could change status,
+ * priority, summary, or ownership afterwards (ISS-0140). The practical effects
+ * were that `status` stayed `planned` forever — making list_epics(status:...)
+ * useless and feeding wrong epic state into oracle/roadmap reporting
+ * (ISS-0110) — and that correcting an epic meant hand-editing the file, which
+ * is the markdown-into-YAML write hazard that corrupted issue records in the
+ * first place.
+ *
+ * Frontmatter is mutated as a parsed object and re-serialized, never patched by
+ * regex, and the file is replaced atomically. The body's `## Summary` section
+ * mirrors the frontmatter `summary` field, so both are updated together —
+ * leaving them to drift is what makes hand-editing an epic error-prone.
+ */
+export async function updateEpic(
+  input: UpdateEpicInput
+): Promise<UpdateEpicOutput | EpicNotFoundError | AmbiguousEpicIdError | ProjectResolutionError> {
+  let resolved: ResolvedProjectPaths;
+  try {
+    resolved = resolveProjectPaths(input.projectId);
+  } catch {
+    return makeProjectResolutionError('update epic');
+  }
+
+  const epicsDir = resolved.subPath('sentinel', 'epics');
+  const matches = await findEpicFiles(epicsDir, input.epic_id);
+
+  if (matches.length === 0) {
+    const all = await getAllEpics(input.projectId);
+    return {
+      error: 'EPIC_NOT_FOUND',
+      epic_id: input.epic_id,
+      message: `Unknown epic_id ${input.epic_id}.`,
+      suggested_epics: all.slice(0, 5).map((e) => ({ id: e.id, title: e.title })),
+    };
+  }
+  if (matches.length > 1) {
+    return {
+      error: 'AMBIGUOUS_EPIC_ID',
+      epic_id: input.epic_id,
+      message:
+        `${matches.length} epic records match "${input.epic_id}". ` +
+        `Pass an exact filename to disambiguate.`,
+      candidates: matches,
+    };
+  }
+
+  const filePath = path.join(epicsDir, matches[0]);
+  validateWritePath(filePath, resolved);
+  const content = await fs.readFile(filePath, 'utf-8');
+
+  const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!fmMatch) {
+    return {
+      error: 'EPIC_NOT_FOUND',
+      epic_id: input.epic_id,
+      message: `Epic record ${matches[0]} has no parseable frontmatter; refusing to write into a malformed file.`,
+      suggested_epics: [],
+    };
+  }
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = safeParseYaml(fmMatch[1]);
+  } catch (err) {
+    return {
+      error: 'EPIC_NOT_FOUND',
+      epic_id: input.epic_id,
+      message: `Epic record ${matches[0]} has unparseable frontmatter (${
+        err instanceof Error ? err.message : String(err)
+      }); refusing to write into it.`,
+      suggested_epics: [],
+    };
+  }
+
+  let body = fmMatch[2];
+  const changes: string[] = [];
+
+  const applyScalar = (key: string, value: unknown, label = key): void => {
+    if (value === undefined) return;
+    const before = parsed[key];
+    if (before === value) return;
+    parsed[key] = value;
+    changes.push(`${label}: ${before ?? 'unset'} → ${value}`);
+  };
+
+  applyScalar('status', input.status);
+  applyScalar('priority', input.priority);
+  applyScalar('title', input.title);
+  applyScalar('owner', input.owner);
+  applyScalar('squad', input.squad);
+
+  if (input.tags !== undefined) {
+    parsed.tags = input.tags;
+    changes.push(`tags: ${input.tags.length} tag(s)`);
+  }
+
+  if (input.summary !== undefined) {
+    parsed.summary = input.summary;
+    changes.push('summary rewritten');
+    // Keep the body's Summary section in step with frontmatter. They are two
+    // copies of one value; letting them diverge is what makes an epic
+    // untrustworthy to read.
+    const summarySection = /^## Summary\s*\n[\s\S]*?(?=\n## |\s*$)/m;
+    const replacement = `## Summary\n\n${input.summary}\n`;
+    body = summarySection.test(body)
+      ? body.replace(summarySection, replacement)
+      : `${body.trimEnd()}\n\n${replacement}`;
+  }
+
+  if (input.note) {
+    const stamp = new Date().toISOString();
+    body = `${body.trimEnd()}\n\n## Note (${stamp})\n\n${input.note}\n`;
+    changes.push('note appended');
+  }
+
+  if (changes.length === 0) {
+    return {
+      id: String(parsed.id ?? input.epic_id),
+      path: filePath,
+      status: (parsed.status as EpicStatus) ?? 'planned',
+      priority: (parsed.priority as Priority) ?? 'medium',
+      updated_at: String(parsed.updated_at ?? ''),
+      changes: [],
+    };
+  }
+
+  const updatedAt = new Date().toISOString();
+  parsed.updated_at = updatedAt;
+
+  const frontmatter = stringifyYaml(parsed, { lineWidth: 0 }).trimEnd();
+  const rebuilt = `---\n${frontmatter}\n---\n\n${body.replace(/^\n+/, '').trimEnd()}\n`;
+
+  await writeFileAtomic(filePath, rebuilt);
+  log(`Sentinel: Updated epic ${parsed.id} at ${filePath} — ${changes.join(', ')}`);
+
+  return {
+    id: String(parsed.id ?? input.epic_id),
+    path: filePath,
+    status: (parsed.status as EpicStatus) ?? 'planned',
+    priority: (parsed.priority as Priority) ?? 'medium',
+    updated_at: updatedAt,
+    changes,
+  };
 }
 
 export async function getEpicIssues(

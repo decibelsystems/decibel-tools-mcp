@@ -22,7 +22,9 @@ import {
   listEpics,
   ListEpicsInput,
   getEpic,
+  updateEpic,
   GetEpicInput,
+  UpdateEpicInput,
   getEpicIssues,
   GetEpicIssuesInput,
   resolveEpic,
@@ -414,6 +416,76 @@ export const sentinelReadEpicTool: ToolSpec = {
       }
 
       return toolSuccess(result.epic);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+export const sentinelUpdateEpicTool: ToolSpec = {
+  definition: {
+    name: 'sentinel_update_epic',
+    description:
+      'Update an existing epic: status, priority, summary, title, owner, squad, tags, or append a timestamped note. ' +
+      'Use this instead of hand-editing the epic file — the summary is stored in both frontmatter and the body, and ' +
+      'this keeps them in step. Epics were previously write-once, which left status pinned at "planned" forever.',
+    annotations: {
+      title: 'Update Epic',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        epic_id: { type: 'string', description: 'Epic ID (e.g., "EPIC-0038")' },
+        status: {
+          type: 'string',
+          enum: ['planned', 'in_progress', 'shipped', 'on_hold', 'cancelled'],
+          description: 'New lifecycle status.',
+        },
+        priority: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          description: 'New priority.',
+        },
+        summary: {
+          type: 'string',
+          description: 'Replacement summary. Updates frontmatter and the body ## Summary section together.',
+        },
+        title: { type: 'string', description: 'New title.' },
+        owner: { type: 'string', description: 'New owner.' },
+        squad: { type: 'string', description: 'New squad.' },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Replacement tag list (not merged with existing tags).',
+        },
+        note: {
+          type: 'string',
+          description: 'Free-text note appended to the body with a timestamp, preserving prior notes.',
+        },
+      },
+      required: ['epic_id'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      requireFields(args, 'epic_id');
+      const result = await updateEpic(args as UpdateEpicInput);
+
+      if (isProjectResolutionError(result)) {
+        return toolError(JSON.stringify(result));
+      }
+      if ('error' in result) {
+        return toolError(JSON.stringify(result));
+      }
+
+      return toolSuccess(result);
     } catch (err) {
       return toolError(err instanceof Error ? err.message : String(err));
     }
@@ -1153,6 +1225,7 @@ export const sentinelTools: ToolSpec[] = [
   sentinelLogEpicTool,
   sentinelListEpicsTool,
   sentinelReadEpicTool,
+  sentinelUpdateEpicTool,
   sentinelListEpicIssuesTool,
   sentinelResolveEpicTool,
   // Data inspector tools

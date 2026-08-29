@@ -4,6 +4,7 @@ import { parse as parseYaml, parseAllDocuments, stringify as stringifyYaml } fro
 import { log } from './config.js';
 import { getWritePath, readFilesFromBothPaths } from './decibelPaths.js';
 import { allocateAndWriteIssue } from './lib/issueIdAllocator.js';
+import { writeFileAtomic } from './lib/atomicWrite.js';
 
 // ============================================================================
 // Types
@@ -461,7 +462,7 @@ export async function updateIssue(
   const writeDir = await getWritePath(projectId, ISSUES_SUBPATH);
   await ensureDir(writeDir);
   const writePath = path.join(writeDir, path.basename(matchedFile.filePath));
-  await fs.writeFile(writePath, yamlContent, 'utf-8');
+  await writeFileAtomic(writePath, yamlContent);
   log(`sentinelIssues: Updated issue ${issueId} at ${writePath} — ${changes.join(', ')}`);
 
   // Build return object
