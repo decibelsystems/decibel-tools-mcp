@@ -51,6 +51,7 @@ import { listProjects } from './projectRegistry.js';
 import type { AgentRegistry } from './daemon.js';
 import { setDaemonPort } from './daemon.js';
 import type { DaemonConfig } from './daemonConfig.js';
+import { RUNTIME_PROTOCOL_VERSION } from './runtime/protocol.js';
 import {
   listEpics,
   listRepoIssues,
@@ -821,6 +822,10 @@ export async function startHttpServer(
         status: 'ok',
         version: PKG.version,
         api_version: 'v1',
+        // Wire-contract version, negotiated by ensureRuntime(). Distinct from
+        // `version` — a long-lived daemon can outlive the clients connecting to
+        // it, and most releases do not change the contract. See runtime/protocol.ts.
+        protocol_version: RUNTIME_PROTOCOL_VERSION,
         uptime_ms: uptimeMs,
         uptime_human: formatUptime(uptimeMs),
         pid: process.pid,
