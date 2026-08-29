@@ -1,0 +1,75 @@
+id: WISH-0021
+capability: "Single-service Decibel runtime: daemon owns all state, every MCP
+  client connection is a thin stdio→HTTP proxy"
+reason: >-
+  Ben, 2026-08-28. Originally framed as "would it make sense to make a custom
+  version of the CLI that integrated decibel memory?" — the tractable form is
+  consolidation, not a fork. Claude Code is not open source; the fork path is
+  the Claude Agent SDK (a harness-only library you still host), which would mean
+  rebuilding permissions, IDE integrations, plugins, and losing weekly upstream
+  improvements. The memory-integration goal is achievable without any of that.
+
+
+  Measured today: 7 concurrent stdio `dist/server.js` processes (Claude Desktop
+  x2, Claude Code sessions, terminals) plus 1 daemon = ~883 MB RSS, each a full
+  server with its own facade registry, project-registry cache, Supabase client,
+  and unsynchronized write access to the same `.decibel/` tree.
+
+
+  RAM is the cheap complaint. The real defect is that there is no single writer:
+  N processes independently allocate the next ISS-NNNN. That is the most likely
+  mechanism behind the open high-signal friction item ("sentinel create_issue
+  allocates colliding ISS-NNNN ids — reproduced independently") and ISS-0136
+  (renumber duplicate ids). Consolidation fixes a correctness bug, not just a
+  footprint.
+
+
+  Most of this already exists and is unused: session-init.sh already prefers the
+  daemon /batch endpoint and injects a compact digest (issue counts + top 3 next
+  actions) directly into context, falling back to the "please run these 4 tools"
+  nudge only when the daemon is unreachable. src/client/ already ships
+  FacadeClient with stdio, HTTP, and bridge transports; src/transports/bridge.ts
+  exists. The ambient-memory design is built — it has been degraded to nudge
+  mode because the daemon does not autostart (ISS-0127).</capability>
+
+  <parameter name="inputs">["Existing daemon HTTP surface (/call, /batch,
+  /health) on 127.0.0.1:4888", "src/client/transports.ts HttpClientTransport
+  (already written)", "src/transports/bridge.ts", "~/.decibel/daemon.meta for
+  port discovery", "session-init.sh daemon-first digest injection (already
+  written)"]
+inputs: []
+outputs: "A `--proxy` server mode: speaks MCP over stdio to the host client,
+  forwards every dispatch to the daemon over HTTP, and falls back to today's
+  in-process full server if the daemon cannot be reached or started. One
+  stateful process per machine; ~10 MB per client connection instead of ~100
+  MB."
+created_at: 2026-08-28T17:38:05.254Z
+status: open
+project_id: decibel-tools-mcp
+integration_point: src/server.ts (new --proxy mode + daemon health
+  check/self-spawn), src/transports/ (reuse HttpClientTransport), src/kernel.ts
+  (single dispatch path is already the right seam), src/sentinelIssues.ts (id
+  allocation becomes single-writer for free)
+success_metric: (1) Zero duplicate ISS-NNNN ids allocated under concurrent
+  create_issue from 3+ client processes — the current reproducible failure. (2)
+  Total decibel RSS under 200 MB with 6 clients connected (from ~883 MB). (3)
+  SessionStart injects the real digest rather than the nudge on every new
+  session for a week without manual daemon starts.
+risks:
+  - Daemon becomes a single point of failure — mitigated by the in-process
+    fallback, which is today's behavior, so worst case is no regression
+  - "Daemon lifecycle is the actual blocker: launchd never loads the job because
+    $HOME is /Volumes/Ashitaka, an external volume that mounts after login
+    (ISS-0127). Self-spawn from the proxy avoids launchd entirely"
+  - "Tier config sprawl: the launchd plist sets NODE_ENV=production with no
+    DECIBEL_PRO/DECIBEL_APPS, so a launchd-started daemon silently serves
+    core-only after 943a642. One service means one place to get this right, but
+    also one place to get it wrong for every client at once"
+  - Per-client cwd/project resolution must be passed explicitly to the daemon —
+    today each stdio process infers the project from its own cwd
+    (projectRegistry strategies 5-7). A shared daemon has no cwd per caller
+mvp: "Do not build the proxy first. Step 1 is daemon lifecycle only: make the
+  daemon reliably running (proxy self-spawn or a launchd plist that survives the
+  external-volume mount), which immediately restores the digest injection that
+  session-init.sh already implements. Measure whether ambient context alone
+  closes the gap before writing any proxy code."

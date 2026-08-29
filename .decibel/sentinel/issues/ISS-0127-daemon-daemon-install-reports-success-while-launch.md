@@ -4,6 +4,7 @@ projectId: decibel-tools-mcp
 severity: high
 status: open
 created_at: 2026-08-14T22:04:16.384Z
+updated_at: 2026-08-28T17:33:59.429Z
 ---
 
 # daemon --daemon install reports success while launchctl load silently fails (HOME on external volume)
@@ -37,3 +38,5 @@ FIX:
 4. Detect the external-HOME case and say so plainly, with the fallback (cron works fine on this machine — verified end to end under `env -i` by the plasiv agent). Related: existing note that $HOME is a RAID 0 external volume.
 
 IMPACT BEYOND THE DAEMON: anything scheduled through launchd later inherits this failure. Relevant to EPIC-0036 — a scheduled zoom sync must not be built on `--daemon install`.
+
+[2026-08-28] Reconfirmed 2026-08-28. `~/Library/LaunchAgents/com.decibel.daemon.plist` exists (dated Feb 26, RunAtLoad=true) but `launchctl list | grep -i decibel` returns nothing — the job is not loaded, so the daemon never autostarts. Meanwhile 6 stdio `dist/server.js` processes were running from Claude Desktop/Code, which is why tools work while /health on 4888 is dead. Also found stale state: `~/.decibel/daemon.meta` held pid 13425 from 2026-08-27T20:46Z with no matching `daemon.pid` — a dead instance left meta behind without cleanup. Second defect worth folding in: the plist sets NODE_ENV=production with no DECIBEL_PRO/DECIBEL_APPS, so post-943a642 (fail-closed tier gating) a launchd-started daemon would silently serve core-only.
