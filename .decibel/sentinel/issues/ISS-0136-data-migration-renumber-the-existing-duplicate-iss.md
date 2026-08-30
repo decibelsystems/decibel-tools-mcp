@@ -3,14 +3,24 @@ uid: 01a03a87-109d-78a4-bcf6-b194cb836f3b
 id: ISS-0136
 projectId: decibel-tools-mcp
 severity: med
-status: open
+status: closed
 created_at: 2026-08-25T20:05:25.277Z
+updated_at: 2026-08-30T22:00:15.111Z
+closed_at: 2026-08-30T22:00:15.046Z
+resolution: |-
+  Verified resolved 2026-08-30, two independent checks.
+
+  MECHANISM: src/lib/issueIdAllocator.ts takes a file lock spanning allocation THROUGH successful write (not just the id scan, which would leave the same race), and writes with O_EXCL so a caller that bypasses the lock fails with EEXIST rather than overwriting a real issue. Reachability confirmed, not assumed: allocateAndWriteIssue() is CALLED from src/sentinelIssues.ts:281 and src/domain/issueRepository.ts:301, and issueRepository is the live path (ISS-0149 was created through it this session and landed as ISS-0149-*.md with a correct unique id).
+
+  DATA: 0 duplicate id groups on disk, down from the 4 recorded in EPIC-0038's Measured state (ISS-0015, ISS-0028, ISS-0054, ISS-0112). Counted directly over .decibel/sentinel/issues by filename prefix AND frontmatter id: 147 records carry an ISS id, 147 distinct. list_issues independently reports no duplicate_ids key, which its contract emits only when the count is non-zero.
+
+  NOTE for whoever touches this next: src/tools/sentinel.ts:9 imports allocateAndWriteIssue but never calls it, and getNextIssueNumber() at src/tools/sentinel.ts:408 — the original racy scan-then-write allocator — is still defined and also never called. Both are dead but look live. Removing them is Phase 6 backlog hygiene; leaving them invites a future misdiagnosis.
 ---
 
 # Data migration: renumber the existing duplicate ISS-NNNN ids across projects
 
 **Severity:** med
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -40,3 +50,13 @@ SUGGESTED APPROACH (not started, needs a call on id-stability):
 ROOT CAUSE OF THE COLLISIONS, for the record: this is NOT the allocator racing. Verified on the ISS-0112 pair here via `git log --diff-filter=A` — the file carrying `created_at: 2026-06-25` was ADDED to the repo on 2026-08-02, well after ISS-0112 was legitimately allocated on 2026-07-11. A second writer (an import/replay path, not createIssue) injected a record whose id was allocated elsewhere. getNextIssueNumber takes max+1 over the directory and is correct as long as the directory is complete; the import path bypasses it. Any fix that only hardens createIssue will not stop new collisions — see also ISS-0133 (importer skipped .yml issues) and the agentic queue_sync replay path.
 
 Related: ISS-0131 (the code fix), ISS-0133, ISS-0105 (converge issue stores on one format).
+
+## Resolution
+
+Verified resolved 2026-08-30, two independent checks.
+
+MECHANISM: src/lib/issueIdAllocator.ts takes a file lock spanning allocation THROUGH successful write (not just the id scan, which would leave the same race), and writes with O_EXCL so a caller that bypasses the lock fails with EEXIST rather than overwriting a real issue. Reachability confirmed, not assumed: allocateAndWriteIssue() is CALLED from src/sentinelIssues.ts:281 and src/domain/issueRepository.ts:301, and issueRepository is the live path (ISS-0149 was created through it this session and landed as ISS-0149-*.md with a correct unique id).
+
+DATA: 0 duplicate id groups on disk, down from the 4 recorded in EPIC-0038's Measured state (ISS-0015, ISS-0028, ISS-0054, ISS-0112). Counted directly over .decibel/sentinel/issues by filename prefix AND frontmatter id: 147 records carry an ISS id, 147 distinct. list_issues independently reports no duplicate_ids key, which its contract emits only when the count is non-zero.
+
+NOTE for whoever touches this next: src/tools/sentinel.ts:9 imports allocateAndWriteIssue but never calls it, and getNextIssueNumber() at src/tools/sentinel.ts:408 — the original racy scan-then-write allocator — is still defined and also never called. Both are dead but look live. Removing them is Phase 6 backlog hygiene; leaving them invites a future misdiagnosis.

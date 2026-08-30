@@ -112,6 +112,11 @@ export interface CreateIssueInput {
   title: string;
   details: string;
   epic_id?: string;
+  /** Both of these are in the canonical Issue model and in CreateIssueSpec.
+   *  They were absent here, so create_issue accepted them (the MCP schema is
+   *  additionalProperties: true) and silently dropped them. */
+  priority?: Priority;
+  tags?: string[];
 }
 
 export interface CreateIssueOutput {
@@ -924,6 +929,12 @@ export async function createIssue(
     severity: input.severity,
     epicId: input.epic_id,
     project: resolved.id,
+    // Forwarded rather than dropped. CreateIssueSpec has accepted these all
+    // along; omitting them here meant a caller could pass priority:'high' and
+    // watch it vanish with no error, because create_issue's schema allows
+    // additional properties.
+    priority: input.priority,
+    tags: input.tags,
   });
 
   log(`Sentinel: Created issue at ${created.path} (project: ${resolved.id})`);

@@ -5,6 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
+import { ISSUE_PRIORITIES } from '../../domain/issue.js';
 import { toolSuccess, toolError, requireFields, requireOneOf, withRunTracking, summaryGenerators } from '../shared/index.js';
 import {
   createIssue,
@@ -104,6 +105,16 @@ export const sentinelCreateIssueTool: ToolSpec = {
         epic_id: {
           type: 'string',
           description: 'Optional parent epic ID (e.g., "EPIC-0001")',
+        },
+        priority: {
+          type: 'string',
+          enum: [...ISSUE_PRIORITIES],
+          description: 'Optional scheduling priority. Distinct from severity: severity is how bad the problem is, priority is when it gets worked on.',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional freeform tags.',
         },
       },
       required: ['severity', 'title', 'details'],

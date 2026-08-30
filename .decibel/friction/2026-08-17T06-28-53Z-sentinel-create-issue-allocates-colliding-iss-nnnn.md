@@ -2,12 +2,13 @@
 context: sentinel issue-id allocation
 frequency: occasional
 impact: high
-status: open
+status: resolved
 source: agent
 signal_count: 3
 created_at: 2026-08-17T06:28:53.582Z
 last_reported: 2026-08-17T06:34:19.544Z
 tags: [sentinel, issue-ids, data-integrity, collision, cross-repo]
+resolved_at: 2026-08-30T22:00:43.456Z
 ---
 
 # sentinel create_issue allocates colliding ISS-NNNN ids — duplicate ids land silently and are only noticed later by a human. Reported by the machina peer; reproduced independently in decibel-tools-mcp, so it is a tool defect, not user error.
@@ -76,3 +77,15 @@ RETRACTED (do not chase): the reported close_issue "prepends a --- block" corrup
 VERIFIED BUILD FACTS (settling an earlier mix-up): src/sentinelIssues.ts is tracked and present at HEAD dbfc525 — the two-store split is live in the shipped build. Its apparent absence was an artifact of grepping src/tools/ (wrong dir) and of dist/ containing only the compiled .js/.d.ts. Likewise `getNextIssueNumber` x2 in dist/tools/sentinel.js is definition + call site, not a duplicate function; src has exactly one at line 294.
 
 RECOMMENDED FIX ORDER: (1) throw on ambiguous id in read/update/close; (2) reject duplicate ids at write time across BOTH stores — this also catches hand-stamped ids, which is how the peer produced the ISS-0112/ISS-0117 collisions; (3) make list_issues and the allocator agree on .yml; (4) separate pre-2026-04-28 legacy duplicates from live ones BEFORE any bulk repair.
+
+## Resolution
+
+Resolved 2026-08-30. Both halves — the mechanism and the data — verified independently.
+
+MECHANISM: src/lib/issueIdAllocator.ts holds a file lock across allocation THROUGH successful write, not merely across the id scan (serializing the scan alone leaves the race intact — both processes still compute the same next number before either file lands). Second, independent defence: the write is O_EXCL, so a caller that bypasses the lock entirely — an old client, a migration script, the machina peer — fails loudly with EEXIST instead of silently overwriting a real issue. Reachability checked rather than assumed: allocateAndWriteIssue() is called from src/sentinelIssues.ts:281 and src/domain/issueRepository.ts:301.
+
+DATA: the three duplicated numbers named in this report (ISS-0015, ISS-0028, ISS-0112) are gone. Counted directly over the issues directory by filename prefix and by frontmatter id: 147 records carry an ISS id, 147 distinct, 0 duplicate groups. EPIC-0038's Measured state recorded 4 groups on 2026-08-28; it is now 0.
+
+Reported by the machina peer and reproduced locally, so it was correctly filed as a tool defect rather than user error. Data repair tracked as ISS-0136, closed with the same evidence.
+
+**Resolved:** 2026-08-30T22:00:43.456Z

@@ -6,6 +6,8 @@ severity: low
 status: open
 epic_id: EPIC-0038
 created_at: 2026-08-30T17:36:55.633Z
+priority: low
+updated_at: 2026-08-30T22:04:37.082Z
 ---
 # Thin client carries ~11 MB over the bare-MCP floor — and nothing guards the import graph that got it there
 
