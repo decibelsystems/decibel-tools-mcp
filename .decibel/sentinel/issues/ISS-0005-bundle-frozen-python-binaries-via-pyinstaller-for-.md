@@ -1,0 +1,55 @@
+---
+uid: 019b0594-757c-70b2-88ed-60032f96d30d
+id: ISS-0005
+projectId: decibel-tools-mcp
+status: closed
+priority: low
+epic_id: EPIC-0008
+tags:
+  - pyinstaller
+  - binary
+  - packaging
+  - phase-3
+  - optimization
+created_at: 2025-12-10T00:06:14.140Z
+updated_at: 2026-08-29T16:18:24.764Z
+closed_at: 2026-08-29T16:18:24.764Z
+resolution: "No longer applicable: Python CLI approach was abandoned in favor of native TypeScript. No binaries to bundle."
+---
+# Bundle frozen Python binaries via PyInstaller for zero-dependency install
+
+**Status:** closed
+**Epic:** EPIC-0008
+
+## Details
+
+Bundle Decibel Python CLIs as standalone executables using PyInstaller so the Desktop Extension requires no Python installation.
+
+Approach:
+- Use PyInstaller to freeze `decibel` CLI entry point
+- Build for both darwin (macOS) and win32 (Windows)
+- Output goes in `.mcpb` bundle under `server/bin/`
+- Node shim detects platform and calls appropriate binary
+
+Build process:
+```bash
+# macOS
+pyinstaller --onefile --name decibel-darwin decibel/cli.py
+
+# Windows (cross-compile or CI)
+pyinstaller --onefile --name decibel-win32.exe decibel/cli.py
+```
+
+Considerations:
+- Binary size (PyInstaller bundles can be 50-100MB)
+- CI pipeline for multi-platform builds
+- Code signing for macOS Gatekeeper / Windows SmartScreen
+- Test on clean machines without Python
+
+This makes the Desktop Extension truly one-click with no prerequisites.
+
+Defer until beta feedback confirms this is worth the build complexity.
+
+## Resolution
+
+No longer applicable: Python CLI approach was abandoned in favor of native TypeScript. No binaries to bundle.

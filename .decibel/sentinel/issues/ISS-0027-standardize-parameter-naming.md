@@ -1,0 +1,35 @@
+---
+uid: 019b47c1-2940-7b98-8927-5ac749ec7f80
+id: ISS-0027
+status: open
+priority: medium
+tags:
+  - api-design
+  - schema
+  - dx
+  - tech-debt
+created_at: 2025-12-22T20:30:00Z
+updated_at: 2025-12-22T20:30:00Z
+---
+# Standardize parameter naming convention across all tools
+
+**Status:** open
+
+## Details
+
+Parameter naming is inconsistent across MCP tools - some use snake_case 
+(project_id), others use camelCase (projectId). This causes silent failures 
+when Claude uses the "wrong" form.
+
+**Current state**: Normalizer added as band-aid
+**Desired state**: Single enforced convention with schema validation
+
+**Action items**:
+1. Audit all tool parameter names
+2. Pick convention (recommend camelCase for JS/TS)
+3. Update all tool definitions
+4. Add schema validation at entry point
+5. Document in CLAUDE.md
+
+See: `.decibel/learnings/2025-12-22-parameter-naming-inconsistency.md`
+

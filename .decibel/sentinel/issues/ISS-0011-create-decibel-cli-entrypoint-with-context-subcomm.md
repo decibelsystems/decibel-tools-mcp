@@ -1,0 +1,37 @@
+---
+uid: 019b28c3-3ee1-70aa-bc32-030409661049
+id: ISS-0011
+projectId: decibel-tools-mcp
+status: open
+priority: high
+tags:
+  - cli
+  - context-pack
+  - phase-1
+created_at: 2025-12-16T20:04:02.913Z
+updated_at: 2025-12-16T20:04:02.913Z
+---
+# Create decibel CLI entrypoint with context subcommands
+
+**Status:** open
+
+## Details
+
+Create a Node.js CLI that can be installed globally via npm.
+
+Commands needed:
+- `decibel context list [--json]` - list pinned facts
+- `decibel context pin --title X [--body Y] [--trust high|medium|low] [--refs a,b]` - pin a fact
+- `decibel context unpin <id>` - remove a fact  
+- `decibel context refresh [--json]` - compile full context pack
+
+Implementation:
+1. Add bin field to package.json pointing to dist/cli.js
+2. Create src/cli.ts with commander.js or yargs
+3. Reuse existing logic from context.ts but without the MCP wrapper
+4. Output JSON when --json flag, human-readable otherwise
+
+Bonus commands for later:
+- `decibel dojo list`
+- `decibel sentinel scan`
+- `decibel registry list`

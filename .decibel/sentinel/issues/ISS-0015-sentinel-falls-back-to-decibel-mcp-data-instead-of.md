@@ -1,0 +1,55 @@
+---
+uid: 019b2ce2-e874-7bf5-a582-2a643cfce3c0
+id: ISS-0015
+projectId: decibel-tools-mcp
+status: closed
+priority: high
+tags:
+  - sentinel
+  - bug
+  - data-integrity
+  - decibel-mcp-data
+created_at: 2025-12-17T15:17:06.804Z
+updated_at: 2026-08-29T16:18:24.802Z
+closed_at: 2026-08-29T16:18:24.802Z
+resolution: "Duplicate: consolidated with ISS-0015-fix-sentinel-silent-fallback.yml which has the cleaner description."
+---
+# Sentinel falls back to decibel-mcp-data instead of erroring on unknown project
+
+**Status:** closed
+
+## Details
+
+## Problem
+
+When `sentinel_log_epic` (and likely other sentinel tools) can't resolve a project ID, it silently falls back to writing to `decibel-mcp-data/sentinel/unknown_project/` instead of failing with a clear error.
+
+This causes:
+- Orphaned data in the deprecated `decibel-mcp-data` repo
+- User doesn't know their data went to the wrong place
+- Data doesn't show up when querying the intended project
+
+**Evidence:** EPIC-0010 and EPIC-0011 were written to `decibel-mcp-data/sentinel/unknown_project/epics/` instead of their intended projects.
+
+## Expected Behavior
+
+If project resolution fails:
+1. Return clear error: "Project 'foo' not found in registry. Run `decibel registry list` to see available projects."
+2. Do NOT fall back to any default location
+3. Optionally: fall back to `decibel-tools-mcp/.decibel/` as last resort (not `decibel-mcp-data`)
+
+## Fix
+
+1. Remove all references to `decibel-mcp-data` path
+2. Change fallback behavior to error instead of silent write
+3. If a fallback is needed, use `decibel-tools-mcp/.decibel/` 
+
+## Files to Check
+
+- Sentinel tool implementations (log_epic, create_issue, etc.)
+- Project resolution logic
+- Any hardcoded paths to `decibel-mcp-data`
+
+## Resolution
+
+Duplicate: consolidated with ISS-0015-fix-sentinel-silent-fallback.yml which has the cleaner description.

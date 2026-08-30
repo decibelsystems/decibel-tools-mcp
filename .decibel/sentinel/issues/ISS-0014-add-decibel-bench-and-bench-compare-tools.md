@@ -1,0 +1,53 @@
+---
+uid: 019b299b-4400-76c1-9c42-0989de1c2fd4
+id: ISS-0014
+projectId: decibel-tools-mcp
+status: open
+priority: high
+tags:
+  - bench
+  - mcp
+  - tools
+  - perf
+created_at: 2025-12-17T00:00:00.000Z
+updated_at: 2025-12-17T00:00:00.000Z
+---
+# Add decibel_bench and decibel_bench_compare tools
+
+**Status:** open
+
+## Details
+
+Add general-purpose benchmarking tools to the decibel MCP toolchain.
+
+**Tools:**
+
+1. `decibel_bench` - Run benchmark suites on any project
+   - Input: project_id, suite_path, kind, iterations, warmup, threshold_p99_ns, save_baseline, check_regression, output_format
+   - Discovers benchmarks from TS/JS files exporting BENCHMARKS object or benchmarks() function
+   - Returns: BenchmarkReport with results, regressions, verdict
+
+2. `decibel_bench_compare` - Compare two benchmark runs/baselines
+   - Input: project_id, baseline_a (path or run_id), baseline_b, output_format
+   - Side-by-side delta analysis
+   - Returns: per-benchmark deltas, overall summary, winner indication
+
+**Contract (TS/JS benchmark discovery):**
+```typescript
+export const BENCHMARKS: Record<string, () => void> = {
+  'parse-config': () => parseConfig(sampleData),
+  'validate-input': () => validate(sampleInput),
+};
+
+// Or function form
+export function benchmarks() {
+  return { 'my-bench': () => doWork() };
+}
+```
+
+**Ref:** Builds on WISH-0002 / dojo_bench implementation in src/tools/dojoBench.ts and src/lib/benchmark.ts
+
+**Acceptance:**
+- decibel_bench runs TS/JS benchmark suites with kind support (micro/integration)
+- decibel_bench_compare shows side-by-side delta analysis between two baselines
+- Both tools available via MCP and HTTP endpoints
