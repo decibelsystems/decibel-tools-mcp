@@ -101,10 +101,32 @@ export function splitBareYaml(content: string): { head: string; tail: string } {
   return { head: lines.slice(0, idx).join('\n'), tail: lines.slice(idx).join('\n') };
 }
 
-/** Prose under `## Details`, which is where the markdown format keeps the body. */
+/**
+ * Prose under `## Details`, which is where the markdown format keeps the body.
+ *
+ * This used to stop at the next `##` heading of any kind, which quietly made
+ * the format unable to hold a structured issue. Authors write `## Problem`,
+ * `## Root Cause`, `## Fix` — 44 records in this store did, and every one read
+ * back truncated at the first of them, in two cases from 107 characters to 30.
+ *
+ * Only ONE trailing section is not the author's: `## Resolution`, which
+ * encodeIssue regenerates from `issue.resolution` and which decode reads from
+ * frontmatter. Including it here would duplicate it into details and then
+ * re-append it on every write. Everything else belongs to the body.
+ *
+ * The trailing occurrence is the one stripped, not the first — an issue whose
+ * prose discusses a resolution mid-body keeps it.
+ */
 function extractDetails(body: string): string | undefined {
-  const m = body.match(/^##\s+Details\s*\n([\s\S]*?)(?=\n##\s|$)/m);
-  return m ? m[1].trim() || undefined : undefined;
+  const m = body.match(/^##\s+Details\s*\n([\s\S]*)$/m);
+  if (!m) return undefined;
+
+  let rest = m[1];
+  const headings = [...rest.matchAll(/\n##\s+Resolution\s*(?:\n|$)/g)];
+  const last = headings[headings.length - 1];
+  if (last?.index !== undefined) rest = rest.slice(0, last.index);
+
+  return rest.trim() || undefined;
 }
 
 export function decodeIssue(filename: string, content: string): DecodedIssue {
