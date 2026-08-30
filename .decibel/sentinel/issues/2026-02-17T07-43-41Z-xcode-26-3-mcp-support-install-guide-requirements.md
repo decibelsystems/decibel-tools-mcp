@@ -1,10 +1,11 @@
 ---
+uid: 019c6a8e-0fcd-78d2-97b0-aacef6bcb31e
 id: ISS-0095
 projectId: decibel-tools-mcp
 severity: low
 status: open
-created_at: 2026-02-17T07:43:41.005Z
 epic_id: EPIC-0026
+created_at: 2026-02-17T07:43:41.005Z
 ---
 
 # Xcode 26.3 MCP Support — Install Guide & Requirements

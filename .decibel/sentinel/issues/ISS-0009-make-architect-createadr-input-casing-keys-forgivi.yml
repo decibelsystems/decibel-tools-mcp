@@ -1,3 +1,4 @@
+uid: 019b1fbe-cfd9-7ece-86c3-76faffd314f3
 id: ISS-0009
 title: Make architect_createAdr input casing/keys forgiving and return actionable errors
 project: decibel-tools-mcp

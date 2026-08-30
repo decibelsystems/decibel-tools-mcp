@@ -1,15 +1,17 @@
 ---
+uid: 01a04ae7-6a8d-7e96-8153-ca0cd0af9139
 id: ISS-0140
 projectId: decibel-tools-mcp
 severity: med
-status: open
+status: closed
 created_at: 2026-08-29T00:24:35.213Z
+closed_at: 2026-08-29T04:00:45.136Z
 ---
 
 # sentinel has no update_epic — epics are write-once and can only be corrected by hand-editing the file
 
 **Severity:** med
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -24,3 +26,7 @@ Asymmetry worth noting: issues have update_issue AND close_issue; epics have nei
 Proposed: add update_epic(epic_id, status?, priority?, summary?, owner?, squad?, tags[]?, note?) mirroring update_issue's shape, writing frontmatter and body atomically from one source of truth rather than two. Add a round-trip test (log_epic -> update_epic -> read_epic) alongside the one proposed for issues in EPIC-0038 phase 1c.
 
 Guard against the known array-field bug when implementing: log_epic currently renders array fields char-per-line and can corrupt the epic .md (open issue, 2026-05-25). update_epic must not inherit that. EPIC-0038 was deliberately created with scalar fields only to dodge it.
+
+## Resolution
+
+Resolved by commit b07e2d1: feat(sentinel): atomic record writes and update_epic

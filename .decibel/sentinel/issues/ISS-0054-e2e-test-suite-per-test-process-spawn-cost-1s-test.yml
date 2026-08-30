@@ -1,3 +1,4 @@
+uid: 019dd7ee-8644-7205-a461-e74994efc654
 id: ISS-0054
 title: E2E test suite per-test process spawn cost (~1s/test)
 project: decibel-tools-mcp

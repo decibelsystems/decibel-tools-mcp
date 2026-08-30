@@ -1,4 +1,6 @@
 ---
+uid: 019de0ab-1331-70ad-9a92-11dd3441e899
+id: 2026-04-30T23-13-21Z-review-security-sentinel-id-format-inconsistency-l
 projectId: decibel-tools-mcp
 severity: low
 status: open

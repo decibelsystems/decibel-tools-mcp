@@ -1,10 +1,14 @@
+uid: 019c77ea-c300-7a38-8294-16772ef714f5
 id: ISS-0050
 title: "Codex end-to-end testing: stdio and HTTP transports"
 project: decibel-tools-mcp
 status: open
 priority: high
-tags: [codex, testing, distribution]
 epic_id: EPIC-0024
+tags:
+  - codex
+  - testing
+  - distribution
 created_at: 2026-02-19T22:00:00.000Z
 updated_at: 2026-02-19T22:00:00.000Z
 description: |-

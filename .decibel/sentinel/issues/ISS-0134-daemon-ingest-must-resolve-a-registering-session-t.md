@@ -1,10 +1,11 @@
 ---
+uid: 01a01daa-81d9-7d90-93dc-1db8d291d865
 id: ISS-0134
 projectId: decibel-tools-mcp
 severity: med
 status: open
-created_at: 2026-08-20T05:35:08.761Z
 epic_id: EPIC-0037
+created_at: 2026-08-20T05:35:08.761Z
 ---
 
 # Daemon ingest must resolve a registering session to a durable hq.agents identity (agent_id seam for EPIC-0037)

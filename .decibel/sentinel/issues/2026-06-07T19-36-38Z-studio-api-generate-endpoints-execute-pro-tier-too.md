@@ -1,4 +1,6 @@
 ---
+uid: 019ea396-52e9-76ba-90b2-7ece747bee84
+id: 2026-06-07T19-36-38Z-studio-api-generate-endpoints-execute-pro-tier-too
 projectId: decibel-tools-mcp
 severity: med
 status: open

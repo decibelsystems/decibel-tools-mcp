@@ -838,6 +838,10 @@ export async function startHttpServer(
         pro: licenseTier !== 'core',
         license_tier: licenseTier,
         supabase_configured: isSupabaseConfigured(),
+        // Facades whose dependency is failing. `{}` is the healthy case — a
+        // non-empty object means calls to those facades are being refused fast
+        // rather than left to time out. See runtime/circuitBreaker.ts.
+        circuits: kernel.circuitSnapshot(),
       }));
       return;
     }

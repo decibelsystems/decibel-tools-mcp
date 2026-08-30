@@ -7,6 +7,12 @@ import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '..
 import { emitCreateProvenance } from './provenance.js';
 import { safeParseYaml } from '../sentinelIssues.js';
 import { allocateAndWriteIssue } from '../lib/issueIdAllocator.js';
+import {
+  FsIssueRepository,
+  AmbiguousIssueIdError as RepoAmbiguousIssueIdError,
+  IssueNotFoundError as RepoIssueNotFoundError,
+  StoredIssue,
+} from '../domain/issueRepository.js';
 import { writeFileAtomic } from '../lib/atomicWrite.js';
 
 /**
@@ -814,7 +820,6 @@ async function getProjectIssues(projectId?: string): Promise<Array<{ id: string;
 export async function createIssue(
   input: CreateIssueInput
 ): Promise<CreateIssueOutput | EpicNotFoundError | ProjectResolutionError> {
-  // Resolve project paths first - fail fast if no project
   let resolved: ResolvedProjectPaths;
   try {
     resolved = resolveProjectPaths(input.projectId);
@@ -822,91 +827,50 @@ export async function createIssue(
     return makeProjectResolutionError('create issue');
   }
 
-  const issuesDir = resolved.subPath('sentinel', 'issues');
-
-  // Validate epic_id if provided
+  // Epic validation stays here: it is a policy question about this project's
+  // epics, not a storage concern, so it does not belong behind the repository.
   if (input.epic_id) {
     const allEpics = await getAllEpics(input.projectId);
-    const epicExists = allEpics.some((e) => e.id === input.epic_id);
-
-    if (!epicExists) {
-      // Return structured error with suggestions
-      const suggested = allEpics
-        .slice(0, 5)
-        .map((e) => ({ id: e.id, title: e.title }));
-
+    if (!allEpics.some((e) => e.id === input.epic_id)) {
       return {
         error: 'EPIC_NOT_FOUND',
         epic_id: input.epic_id,
         message: `Unknown epic_id ${input.epic_id}.`,
-        suggested_epics: suggested,
+        suggested_epics: allEpics.slice(0, 5).map((e) => ({ id: e.id, title: e.title })),
       };
     }
   }
 
-  const now = new Date();
-  const timestamp = now.toISOString();
-  const slug = slugify(input.title);
+  const repo = new FsIssueRepository(resolved.subPath('sentinel', 'issues'));
 
-  ensureDir(issuesDir);
-
-  // Allocation and write happen under one cross-process lock. Serializing only
-  // the id scan would leave the race intact — two processes still compute the
-  // same next id before either file lands. See lib/issueIdAllocator.ts.
-  const buildIssueContent = (issueId: string): string => {
-    // Build frontmatter with optional epic_id
-    const frontmatterLines = [
-      '---',
-      `id: ${issueId}`,
-      `projectId: ${resolved.id}`,
-      `severity: ${input.severity}`,
-      `status: open`,
-      `created_at: ${timestamp}`,
-    ];
-    if (input.epic_id) {
-      frontmatterLines.push(`epic_id: ${input.epic_id}`);
-    }
-    frontmatterLines.push('---');
-    const frontmatter = frontmatterLines.join('\n');
-
-    const bodyLines = [
-      `# ${input.title}`,
-      '',
-      `**Severity:** ${input.severity}`,
-      `**Status:** open`,
-    ];
-    if (input.epic_id) {
-      bodyLines.push(`**Epic:** ${input.epic_id}`);
-    }
-    bodyLines.push('', '## Details', '', input.details);
-    const body = bodyLines.join('\n');
-
-    return `${frontmatter}\n\n${body}\n`;
-  };
-
-  const allocated = await allocateAndWriteIssue(issuesDir, 'md', slug, (issueId) => {
-    // Path validation must run against the concrete allocated path, inside the
-    // lock, so a traversal attempt cannot slip in between check and write.
-    validateWritePath(path.join(issuesDir, `${issueId}-${slug}.md`), resolved);
-    return buildIssueContent(issueId);
+  // The repository allocates and writes under one cross-process lock and stamps
+  // a uid at birth — which the previous writer did not, so every issue filed
+  // since the Phase 3 backfill was landing without a stable identity.
+  //
+  // Path traversal is not reachable here: the filename is built from an
+  // allocated ISS-NNNN plus a slug that strips everything outside [a-z0-9-],
+  // so a hostile title cannot escape the issues directory.
+  const created = await repo.create({
+    title: input.title,
+    details: input.details,
+    severity: input.severity,
+    epicId: input.epic_id,
+    project: resolved.id,
   });
 
-  const { id: issueId, filename, filePath } = allocated;
-  const content = buildIssueContent(issueId);
-  log(`Sentinel: Created issue at ${filePath} (project: ${resolved.id})`);
+  log(`Sentinel: Created issue at ${created.path} (project: ${resolved.id})`);
 
-  // Emit provenance event for this creation
   await emitCreateProvenance(
-    `sentinel:issue:${filename}`,
-    content,
+    `sentinel:issue:${created.filename}`,
+    await fs.readFile(created.path, 'utf-8'),
     `Created issue: ${input.title}`,
     input.projectId
   );
 
   return {
-    id: issueId,
-    timestamp,
-    path: filePath,
+    id: created.issue.id,
+    timestamp: created.issue.created_at ?? new Date().toISOString(),
+    path: created.path,
     status: 'open',
     epic_id: input.epic_id,
     location: 'project',
@@ -977,7 +941,6 @@ function setYamlBlockField(lines: string[], key: string, value: string): string[
 export async function closeIssue(
   input: CloseIssueInput
 ): Promise<CloseIssueOutput | CloseIssueError | AmbiguousIssueIdError | ProjectResolutionError> {
-  // Resolve project paths first
   let resolved: ResolvedProjectPaths;
   try {
     resolved = resolveProjectPaths(input.projectId);
@@ -985,122 +948,67 @@ export async function closeIssue(
     return makeProjectResolutionError('close issue');
   }
 
-  const candidates = await findIssueCandidates(input.projectId, input.issue_id);
+  const repo = new FsIssueRepository(resolved.subPath('sentinel', 'issues'));
 
-  if (candidates.length === 0) {
-    const available = await getProjectIssues(input.projectId);
-    return {
-      error: 'ISSUE_NOT_FOUND',
-      projectId: resolved.id,
-      issue_id: input.issue_id,
-      message: `Could not find issue matching "${input.issue_id}" in project "${resolved.id}".`,
-      available_issues: available.slice(0, 5),
-    };
-  }
-
-  if (candidates.length > 1) {
-    const names = candidates.map((c) => c.filename);
-    return {
-      error: 'AMBIGUOUS_ISSUE_ID',
-      projectId: resolved.id,
-      issue_id: input.issue_id,
-      message:
-        `"${input.issue_id}" matches ${names.length} records in project "${resolved.id}", ` +
-        `so the write target is undefined and nothing was changed. ` +
-        `Re-run with one of these filenames as issue_id: ${names.join(', ')}`,
-      candidates: names,
-    };
-  }
-
-  const { filePath, filename } = candidates[0];
-  const content = await fs.readFile(filePath, 'utf-8');
-  const now = new Date();
-  const closedAt = now.toISOString();
-  const newStatus: IssueStatus = input.status || 'closed';
-
-  let updatedContent: string;
-
-  if (/^---\r?\n/.test(content)) {
-    // ---- Markdown-with-frontmatter record ------------------------------------
-    updatedContent = content.replace(
-      /^(---\n[\s\S]*?)status: \w+/m,
-      `$1status: ${newStatus}`
+  try {
+    // One call replaces the format fork this function used to carry. The
+    // bare-YAML branch was where close_issue historically failed: its
+    // frontmatter-anchored regexes silently no-opped on a delimiter-less
+    // record, so status stayed `open` while the markdown resolution append
+    // still fired — corrupting the YAML and reporting success. The codec has
+    // one write path for both formats, so that divergence cannot recur.
+    const closed = await repo.close(
+      input.issue_id,
+      input.resolution ?? '',
+      input.status ?? 'closed'
     );
 
-    // Add closed_at to frontmatter if not present
-    if (!updatedContent.includes('closed_at:')) {
-      updatedContent = updatedContent.replace(
-        /^(---\n[\s\S]*?)(---)$/m,
-        `$1closed_at: ${closedAt}\n$2`
-      );
-    } else {
-      updatedContent = updatedContent.replace(
-        /closed_at: .*/,
-        `closed_at: ${closedAt}`
-      );
-    }
+    log(`Sentinel: Closed issue at ${closed.path}`);
 
-    // Update status in body
-    updatedContent = updatedContent.replace(
-      /\*\*Status:\*\* \w+/,
-      `**Status:** ${newStatus}`
-    );
-
-    // Add resolution section if provided
-    if (input.resolution) {
-      if (updatedContent.includes('## Resolution')) {
-        // Replace existing resolution
-        updatedContent = updatedContent.replace(
-          /## Resolution\n\n[\s\S]*?(?=\n## |$)/,
-          `## Resolution\n\n${input.resolution}\n`
-        );
-      } else {
-        // Add resolution section at the end
-        updatedContent = updatedContent.trimEnd() + `\n\n## Resolution\n\n${input.resolution}\n`;
-      }
+    return {
+      id: closed.issue.id,
+      path: closed.path,
+      status: closed.issue.status as IssueStatus,
+      closed_at: closed.issue.closed_at ?? new Date().toISOString(),
+      resolution: input.resolution,
+    };
+  } catch (err) {
+    if (err instanceof RepoAmbiguousIssueIdError) {
+      return {
+        error: 'AMBIGUOUS_ISSUE_ID',
+        projectId: resolved.id,
+        issue_id: input.issue_id,
+        message:
+          `"${input.issue_id}" matches ${err.candidates.length} records in project "${resolved.id}", ` +
+          `so the write target is undefined and nothing was changed. ` +
+          `Re-run with one of these filenames as issue_id: ${err.candidates.join(', ')}`,
+        candidates: err.candidates,
+      };
     }
-  } else {
-    // ---- Bare-YAML record ----------------------------------------------------
-    // The frontmatter regexes above are all anchored on a leading `---`, so on
-    // a bare-YAML record they silently no-op: status stayed `open` while the
-    // markdown resolution append (which had no such guard) still fired. That
-    // both corrupted the YAML and left the issue looking open, while
-    // close_issue returned success. Write real YAML fields instead.
-    const { yaml, tail } = splitBareYamlRecord(content);
-    let region = setYamlScalarField(yaml, 'status', newStatus);
-    region = setYamlScalarField(region, 'closed_at', closedAt);
-    if (input.resolution) {
-      region = setYamlBlockField(region, 'resolution', input.resolution);
+    if (err instanceof RepoIssueNotFoundError) {
+      const available = await getProjectIssues(input.projectId);
+      return {
+        error: 'ISSUE_NOT_FOUND',
+        projectId: resolved.id,
+        issue_id: input.issue_id,
+        message: `Could not find issue matching "${input.issue_id}" in project "${resolved.id}".`,
+        available_issues: available.slice(0, 5),
+      };
     }
-    // Preserve any pre-existing markdown tail verbatim — repairing already
-    // corrupted files is a separate, reviewed migration (see ISS-0129).
-    const parts = tail.length > 0 ? [...region, '', ...tail] : region;
-    updatedContent = parts.join('\n').replace(/\n*$/, '\n');
+    throw err;
   }
-
-  await writeFileAtomic(filePath, updatedContent);
-  log(`Sentinel: Closed issue at ${filePath}`);
-
-  // Prefer ISS-NNNN id from filename or frontmatter for the return value
-  const filenamePrefix = filename.match(/^(ISS-\d+)/i)?.[1];
-  const fmIdMatch = updatedContent.match(/^---\n([\s\S]*?)\n---/);
-  const fmId = fmIdMatch?.[1]
-    .split('\n')
-    .find((l) => l.trim().toLowerCase().startsWith('id:'))
-    ?.split(':')[1]
-    ?.trim()
-    ?.match(/^ISS-\d+$/i)?.[0];
-  const returnedId = filenamePrefix ?? fmId ?? filename;
-
-  return {
-    id: returnedId,
-    path: filePath,
-    status: newStatus,
-    closed_at: closedAt,
-    resolution: input.resolution,
-  };
 }
 
+/**
+ * Delegates to the Phase 3 repository. The output contract is unchanged — the
+ * point of the seam is that callers cannot tell which layer answered.
+ *
+ * `degraded` changes meaning slightly and for the better: it used to mean "only
+ * parsed after salvaging corrupted YAML", and now means "readable, but the
+ * codec had to interpret something" — a superset that also catches a legacy
+ * status value or a title that fell back to the filename. Both are the same
+ * repair queue.
+ */
 export async function listRepoIssues(
   input: ListRepoIssuesInput
 ): Promise<ListRepoIssuesOutput | ProjectResolutionError> {
@@ -1111,57 +1019,58 @@ export async function listRepoIssues(
     return makeProjectResolutionError('list issues');
   }
 
-  const issuesDir = resolved.subPath('sentinel', 'issues');
-  const issues: IssueSummary[] = [];
-  const malformedFiles: string[] = [];
-  const degradedFiles: string[] = [];
+  const repo = new FsIssueRepository(resolved.subPath('sentinel', 'issues'));
+  const [records, integrity] = await Promise.all([
+    repo.list(input.status ? { status: input.status } : {}),
+    repo.integrity(),
+  ]);
 
-  // id -> filenames claiming it. Built BEFORE the status filter: a closed twin
-  // still makes the id ambiguous for writers, so filtering it out of the list
-  // must not filter it out of the collision report.
-  const idClaims = new Map<string, string[]>();
-
-  try {
-    const files = await fs.readdir(issuesDir);
-    for (const file of files) {
-      if (!isRecordFile(file)) continue;
-      const filePath = path.join(issuesDir, file);
-      const issue = await parseIssueFile(filePath);
-      if (issue) {
-        if (issue.degraded) degradedFiles.push(file);
-        const key = canonicalIssueKey(file, issue.id);
-        idClaims.set(key, [...(idClaims.get(key) ?? []), file]);
-        // Apply status filter
-        if (input.status && issue.status !== input.status) continue;
-        issues.push(issue);
-      } else {
-        // Unparseable file: report it instead of silently shrinking the list
-        malformedFiles.push(file);
-      }
-    }
-  } catch {
-    // Directory doesn't exist
-  }
-
-  const duplicates = [...idClaims.entries()].filter(([, f]) => f.length > 1);
-
-  // Sort by filename (newest first based on timestamp)
+  const issues: IssueSummary[] = records.map((r) => toIssueSummary(r, integrity));
   issues.sort((a, b) => b.id.localeCompare(a.id));
 
   const out: ListRepoIssuesOutput = { issues };
-  if (malformedFiles.length > 0) {
-    out.malformed = malformedFiles.length;
-    out.malformed_files = malformedFiles;
+  if (integrity.malformed.length > 0) {
+    out.malformed = integrity.malformed.length;
+    out.malformed_files = integrity.malformed;
   }
-  if (degradedFiles.length > 0) {
-    out.degraded = degradedFiles.length;
-    out.degraded_files = degradedFiles;
+  if (integrity.degraded.length > 0) {
+    out.degraded = integrity.degraded.length;
+    out.degraded_files = integrity.degraded.map((d) => d.filename);
   }
-  if (duplicates.length > 0) {
-    out.duplicate_ids = duplicates.length;
-    out.duplicate_id_files = Object.fromEntries(duplicates);
+  const dupEntries = Object.entries(integrity.duplicateIds);
+  if (dupEntries.length > 0) {
+    out.duplicate_ids = dupEntries.length;
+    out.duplicate_id_files = Object.fromEntries(dupEntries);
   }
   return out;
+}
+
+/** Canonical record -> the wire shape this module has always returned. */
+function toIssueSummary(
+  r: StoredIssue,
+  integrity: { degraded: Array<{ filename: string }> }
+): IssueSummary {
+  // Records with no ISS-NNNN have always been identified on the wire by their
+  // filename INCLUDING the extension, and close_issue/read_issue accept that
+  // form. The canonical model drops the extension, which is tidier and which
+  // the repository resolves either way — but changing it here would be a wire
+  // contract change smuggled in on a refactor. ISS-0113 tracks the
+  // inconsistency deliberately; this migration stays behaviour-preserving.
+  const wireId = /^ISS-\d+$/i.test(r.issue.id) ? r.issue.id : r.filename;
+
+  const summary: IssueSummary = {
+    id: wireId,
+    title: r.issue.title,
+    severity: (r.issue.severity as Severity) ?? 'low',
+    status: r.issue.status as IssueStatus,
+    epic_id: r.issue.epicId,
+    priority: r.issue.priority,
+    tags: r.issue.tags,
+    created_at: r.issue.created_at,
+    updated_at: r.issue.updated_at,
+  };
+  if (integrity.degraded.some((d) => d.filename === r.filename)) summary.degraded = true;
+  return summary;
 }
 
 // ============================================================================

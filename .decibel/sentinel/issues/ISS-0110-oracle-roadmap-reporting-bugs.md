@@ -1,10 +1,16 @@
 ---
+uid: 019e4cfb-5400-76fb-9aa5-bdde1229d03d
 id: ISS-0110
 projectId: decibel-tools-mcp
 severity: high
 status: open
+tags:
+  - oracle
+  - roadmap
+  - sentinel
+  - reporting
+  - bug-cluster
 created_at: 2026-05-22T00:00:00.000Z
-tags: [oracle, roadmap, sentinel, reporting, bug-cluster]
 ---
 
 # Oracle/Roadmap reporting bugs — wired epics report wrong state

@@ -1,17 +1,18 @@
 ---
+uid: 01a01da2-b885-7463-bb84-396129457a4a
 id: ISS-0132
 projectId: decibel-tools-mcp
 severity: high
 status: in_progress
-created_at: 2026-08-20T05:26:38.469Z
 epic_id: EPIC-0037
+created_at: 2026-08-20T05:26:38.469Z
 updated_at: 2026-08-20T05:29:08.892Z
 ---
 
 # Verify ChatGPT connector auth (opaque bearer vs OAuth) before building the EPIC-0037 post office
 
 **Severity:** high
-**Status:** open
+**Status:** in_progress
 **Epic:** EPIC-0037
 
 ## Details

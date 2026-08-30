@@ -1,6 +1,7 @@
+uid: 019b47a7-0fc3-7886-8ef6-ab4494c95a98
 id: ISS-0024
 title: Implement dialect registry and render function
-project: decibel-tools
+project: decibel-tools-mcp
 status: open
 priority: high
 epic_id: EPIC-0020

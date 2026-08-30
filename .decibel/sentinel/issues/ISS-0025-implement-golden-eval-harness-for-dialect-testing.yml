@@ -1,6 +1,7 @@
+uid: 019b47a7-2920-7e87-b484-7ce7f22202ec
 id: ISS-0025
 title: Implement golden eval harness for dialect testing
-project: decibel-tools
+project: decibel-tools-mcp
 status: open
 priority: medium
 epic_id: EPIC-0020

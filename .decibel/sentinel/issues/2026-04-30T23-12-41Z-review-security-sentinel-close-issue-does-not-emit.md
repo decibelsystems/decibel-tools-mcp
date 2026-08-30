@@ -1,4 +1,6 @@
 ---
+uid: 019de0aa-79ac-7e85-98ec-0eb0ae298082
+id: 2026-04-30T23-12-41Z-review-security-sentinel-close-issue-does-not-emit
 projectId: decibel-tools-mcp
 severity: high
 status: open

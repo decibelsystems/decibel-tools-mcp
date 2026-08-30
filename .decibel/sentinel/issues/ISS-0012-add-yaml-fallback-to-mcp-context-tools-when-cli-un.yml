@@ -1,6 +1,7 @@
+uid: 019b28c3-5fdd-7910-9aa3-c379b1fd7dcd
 id: ISS-0012
 title: Add YAML fallback to MCP context tools when CLI unavailable
-project: decibel-tools
+project: decibel-tools-mcp
 status: open
 priority: medium
 tags:

@@ -1,10 +1,11 @@
 ---
+uid: 01a001bc-1ce1-7d85-9cbb-590a53865773
 id: ISS-0123
 projectId: decibel-tools-mcp
 severity: high
 status: open
-created_at: 2026-08-14T19:25:00.513Z
 epic_id: EPIC-0036
+created_at: 2026-08-14T19:25:00.513Z
 ---
 
 # Keep the zoom facade local/stdio-only until hosted MCP auth is fixed

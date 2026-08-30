@@ -1,10 +1,11 @@
 ---
+uid: 01a0024e-164b-75a2-b243-35b03d3a57f3
 id: ISS-0128
 projectId: decibel-tools-mcp
 severity: low
 status: open
-created_at: 2026-08-14T22:04:27.083Z
 epic_id: EPIC-0036
+created_at: 2026-08-14T22:04:27.083Z
 ---
 
 # Rejoined Zoom meetings produce two uuids for one session — uuid dedup cannot merge them

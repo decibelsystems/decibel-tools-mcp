@@ -1,6 +1,7 @@
+uid: 019b28c3-3ee1-70aa-bc32-030409661049
 id: ISS-0011
 title: Create decibel CLI entrypoint with context subcommands
-project: decibel-tools
+project: decibel-tools-mcp
 status: open
 priority: high
 tags:

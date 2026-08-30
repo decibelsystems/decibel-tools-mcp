@@ -1,9 +1,11 @@
 ---
+uid: 019e59ea-457d-7f92-abf2-3cd1a905d2da
+id: 2026-05-24T12-16-25Z-tenant-aware-resolver-project-id-org-scoped-rows-r
 projectId: decibel-tools-mcp
 severity: high
 status: open
-created_at: 2026-05-24T12:16:25.981Z
 epic_id: EPIC-0033
+created_at: 2026-05-24T12:16:25.981Z
 ---
 
 # Tenant-aware resolver: project_id → org-scoped rows (replace strategy 6/7 box-fs collapse)

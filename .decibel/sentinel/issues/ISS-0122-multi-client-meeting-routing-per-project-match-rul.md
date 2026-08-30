@@ -1,10 +1,11 @@
 ---
+uid: 01a001bb-f5f7-725f-b669-04f0387a3c5b
 id: ISS-0122
 projectId: decibel-tools-mcp
 severity: med
 status: open
-created_at: 2026-08-14T19:24:50.551Z
 epic_id: EPIC-0036
+created_at: 2026-08-14T19:24:50.551Z
 ---
 
 # Multi-client meeting routing: per-project match rules, sync_all fan-out, unrouted bucket

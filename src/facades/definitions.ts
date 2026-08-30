@@ -433,7 +433,34 @@ export const coreFacades: FacadeSpec[] = [
       shelve: 'concepts_shelve',
     },
   },
-
+  {
+    name: 'decibel',
+    description: 'Decibel Systems — public discovery and capabilities. Learn what Decibel builds, see live case studies, explore service offerings, or start a design sprint. about returns company overview and philosophy. capabilities lists MCP servers, AI design sprints, and agent infrastructure offerings. case_studies shows live production projects with links. start_sprint submits your product info to begin a discovery engagement. Actions: about, capabilities, case_studies, start_sprint',
+    compactDescription: 'Decibel Systems discovery and services',
+    microEligible: true,
+    tier: 'core',
+    actions: {
+      about: 'decibel_about',
+      capabilities: 'decibel_capabilities',
+      case_studies: 'decibel_case_studies',
+      start_sprint: 'decibel_start_sprint',
+    },
+  },
+  {
+    name: 'conductor',
+    description: 'Sovereign, observable orchestrator. run a request end-to-end (classify → egress gate → route → verify) returning an answer + auditable trace_id; dryrun previews routing and what would egress WITHOUT executing; trace shows the full routing ledger for a request; cost summarises steps/egress/cost over a window; egress and routing view the deterministic policies (view-only). Proprietary/personal tasks never leave local hardware. Actions: run, dryrun, trace, cost, egress, routing',
+    compactDescription: 'Orchestrate requests with egress-gated, audited routing',
+    microEligible: false,
+    tier: 'core',
+    actions: {
+      run: 'conductor_run',
+      dryrun: 'conductor_dryrun',
+      trace: 'conductor_trace',
+      cost: 'conductor_cost',
+      egress: 'conductor_egress',
+      routing: 'conductor_routing',
+    },
+  },
 ];
 
 // ============================================================================
@@ -519,6 +546,17 @@ export const proFacades: FacadeSpec[] = [
 // ============================================================================
 // App Facades (Decibel internal — gated by DECIBEL_APPS)
 // ============================================================================
+// Private to the owner: they read a live trading Postgres (senken, mother), a
+// personal Supabase (deck), or hold wallet credentials (terminal). They are not
+// built into the published package at all — see tsconfig.build.json — so for
+// public users these facades do not exist rather than existing-but-refusing.
+//
+// This array is therefore the single source of truth for "private", and every
+// member must be tier:'apps'. It briefly was not: `decibel` and `conductor` sat
+// here while declared tier:'core', and since the kernel loads this array only
+// when DECIBEL_APPS=1, two core facades were unreachable for every public user
+// — including `decibel` itself, whose entire purpose is public discovery.
+// facadeTiers.test.ts now fails if array and tier ever disagree again.
 
 export const appFacades: FacadeSpec[] = [
   {
@@ -603,35 +641,6 @@ export const appFacades: FacadeSpec[] = [
       update_settings: 'terminal_update_settings',
       deposit_eth: 'terminal_deposit_eth',
       withdraw_eth: 'terminal_withdraw_eth',
-    },
-  },
-
-  {
-    name: 'decibel',
-    description: 'Decibel Systems — public discovery and capabilities. Learn what Decibel builds, see live case studies, explore service offerings, or start a design sprint. about returns company overview and philosophy. capabilities lists MCP servers, AI design sprints, and agent infrastructure offerings. case_studies shows live production projects with links. start_sprint submits your product info to begin a discovery engagement. Actions: about, capabilities, case_studies, start_sprint',
-    compactDescription: 'Decibel Systems discovery and services',
-    microEligible: true,
-    tier: 'core',
-    actions: {
-      about: 'decibel_about',
-      capabilities: 'decibel_capabilities',
-      case_studies: 'decibel_case_studies',
-      start_sprint: 'decibel_start_sprint',
-    },
-  },
-  {
-    name: 'conductor',
-    description: 'Sovereign, observable orchestrator. run a request end-to-end (classify → egress gate → route → verify) returning an answer + auditable trace_id; dryrun previews routing and what would egress WITHOUT executing; trace shows the full routing ledger for a request; cost summarises steps/egress/cost over a window; egress and routing view the deterministic policies (view-only). Proprietary/personal tasks never leave local hardware. Actions: run, dryrun, trace, cost, egress, routing',
-    compactDescription: 'Orchestrate requests with egress-gated, audited routing',
-    microEligible: false,
-    tier: 'core',
-    actions: {
-      run: 'conductor_run',
-      dryrun: 'conductor_dryrun',
-      trace: 'conductor_trace',
-      cost: 'conductor_cost',
-      egress: 'conductor_egress',
-      routing: 'conductor_routing',
     },
   },
 ];

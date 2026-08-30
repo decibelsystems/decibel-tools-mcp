@@ -1,4 +1,5 @@
 ---
+uid: 01a01da6-ec90-70cd-9ee2-22557fe83f12
 id: ISS-0133
 projectId: decibel-tools-mcp
 severity: high
@@ -10,7 +11,7 @@ updated_at: 2026-08-20T19:03:06.100Z
 # import-store.ts skipped every .yml issue — hq.sentinel_issues undercounted for months (code fixed, re-import not run)
 
 **Severity:** high
-**Status:** open
+**Status:** in_progress
 
 ## Details
 

@@ -1,4 +1,6 @@
 ---
+uid: 019e5f8a-2ade-73bf-8816-cb82f252ad7a
+id: 2026-05-25T14-29-11Z-vendor-session-init-issue-close-hooks-into-repo-wi
 projectId: decibel-tools-mcp
 severity: med
 status: closed

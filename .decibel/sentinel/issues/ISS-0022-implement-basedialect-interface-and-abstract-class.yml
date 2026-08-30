@@ -1,6 +1,7 @@
+uid: 019b47a6-d340-78d4-a069-e9dbf60e825c
 id: ISS-0022
 title: Implement BaseDialect interface and abstract class
-project: decibel-tools
+project: decibel-tools-mcp
 status: open
 priority: high
 epic_id: EPIC-0020

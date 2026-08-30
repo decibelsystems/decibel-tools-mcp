@@ -23,6 +23,8 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:dist": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "npm run build:dist",
     "dev": "tsx src/server.ts",
     "start": "node dist/server.js",
     "start:http": "node dist/server.js --http",
@@ -57,13 +59,13 @@
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@supabase/supabase-js": "^2.89.0",
     "express": "^5.2.1",
-    "pg": "^8.16.3",
     "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/pg": "^8.16.0",
     "@vitest/coverage-v8": "^2.1.0",
+    "pg": "^8.16.3",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
     "vitest": "^2.1.0"

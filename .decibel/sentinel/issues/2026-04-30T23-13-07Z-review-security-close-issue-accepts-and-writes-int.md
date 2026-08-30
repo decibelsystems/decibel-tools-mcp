@@ -1,4 +1,6 @@
 ---
+uid: 019de0aa-dd81-71bd-a208-02408c77469c
+id: 2026-04-30T23-13-07Z-review-security-close-issue-accepts-and-writes-int
 projectId: decibel-tools-mcp
 severity: med
 status: open

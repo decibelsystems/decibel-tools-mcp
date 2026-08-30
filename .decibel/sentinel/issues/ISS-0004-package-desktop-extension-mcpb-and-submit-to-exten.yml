@@ -1,6 +1,7 @@
+uid: 019b0593-4227-7dcc-b027-0f2d9f18010e
 id: ISS-0004
 title: Package Desktop Extension (.mcpb) and submit to Extension Directory
-project: decibel-tools
+project: decibel-tools-mcp
 status: open
 priority: medium
 epic_id: EPIC-0008

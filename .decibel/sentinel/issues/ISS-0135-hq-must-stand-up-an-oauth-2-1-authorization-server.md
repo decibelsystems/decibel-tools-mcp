@@ -1,10 +1,11 @@
 ---
+uid: 01a03a84-19bc-78c0-a222-ca74c1d0289d
 id: ISS-0135
 projectId: decibel-tools-mcp
 severity: high
 status: open
-created_at: 2026-08-25T20:02:11.004Z
 epic_id: EPIC-0037
+created_at: 2026-08-25T20:02:11.004Z
 ---
 
 # HQ must stand up an OAuth 2.1 authorization server in front of agent tokens (ADR-0009 phase 4 scope increase)

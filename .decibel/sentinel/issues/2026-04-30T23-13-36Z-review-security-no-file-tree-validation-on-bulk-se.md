@@ -1,4 +1,6 @@
 ---
+uid: 019de0ab-4ddc-71be-9faf-92d823f43a5d
+id: 2026-04-30T23-13-36Z-review-security-no-file-tree-validation-on-bulk-se
 projectId: decibel-tools-mcp
 severity: low
 status: open

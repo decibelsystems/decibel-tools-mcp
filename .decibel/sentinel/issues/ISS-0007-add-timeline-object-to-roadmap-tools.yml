@@ -1,6 +1,7 @@
+uid: 019b0da0-5904-7428-82d1-91bfc7ceb8e2
 id: ISS-0007
 title: Add Timeline object to roadmap tools
-project: decibel-tools
+project: decibel-tools-mcp
 status: open
 priority: medium
 tags:

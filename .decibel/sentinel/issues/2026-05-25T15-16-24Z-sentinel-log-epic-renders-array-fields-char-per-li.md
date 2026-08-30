@@ -1,4 +1,6 @@
 ---
+uid: 019e5fb5-6684-7c08-b1c2-6e97f79b5e3a
+id: 2026-05-25T15-16-24Z-sentinel-log-epic-renders-array-fields-char-per-li
 projectId: decibel-tools-mcp
 severity: high
 status: open

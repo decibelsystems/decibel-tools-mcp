@@ -1,10 +1,11 @@
 ---
+uid: 01a001bc-5aa7-7056-a7ab-25f62594d211
 id: ISS-0125
 projectId: decibel-tools-mcp
 severity: low
 status: open
-created_at: 2026-08-14T19:25:16.327Z
 epic_id: EPIC-0036
+created_at: 2026-08-14T19:25:16.327Z
 ---
 
 # Decide the Zoom auth model before selling meeting ingestion as a pro feature

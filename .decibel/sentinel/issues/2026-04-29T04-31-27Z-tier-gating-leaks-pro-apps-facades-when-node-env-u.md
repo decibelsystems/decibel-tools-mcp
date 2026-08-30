@@ -1,4 +1,6 @@
 ---
+uid: 019dd781-96c7-734f-9f37-029f33368323
+id: 2026-04-29T04-31-27Z-tier-gating-leaks-pro-apps-facades-when-node-env-u
 projectId: decibel-tools-mcp
 severity: high
 status: open

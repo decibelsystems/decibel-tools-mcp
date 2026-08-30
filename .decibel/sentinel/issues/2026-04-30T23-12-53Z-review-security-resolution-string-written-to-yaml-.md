@@ -1,9 +1,11 @@
 ---
+uid: 019de0aa-a554-77dc-b4ee-c52b9865de71
+id: 2026-04-30T23-12-53Z-review-security-resolution-string-written-to-yaml-
 projectId: decibel-tools-mcp
 severity: med
 status: open
-created_at: 2026-04-30T23:12:53.076Z
 priority: high
+created_at: 2026-04-30T23:12:53.076Z
 updated_at: 2026-08-29T00:18:16.717Z
 ---
 

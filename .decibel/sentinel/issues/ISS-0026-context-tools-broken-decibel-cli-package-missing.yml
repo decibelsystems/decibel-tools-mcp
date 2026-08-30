@@ -1,7 +1,8 @@
+uid: 019b47b5-1f66-7a8c-a430-d7e0fa32515a
 id: ISS-0026
 title: Context tools broken - @decibel/cli package missing
-project: decibel-tools
-status: resolved
+project: decibel-tools-mcp
+status: closed
 priority: high
 tags:
   - bug

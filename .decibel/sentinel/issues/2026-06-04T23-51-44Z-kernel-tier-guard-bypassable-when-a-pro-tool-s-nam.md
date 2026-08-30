@@ -1,4 +1,6 @@
 ---
+uid: 019e950c-ca87-7f45-a834-7d302fbb5d65
+id: 2026-06-04T23-51-44Z-kernel-tier-guard-bypassable-when-a-pro-tool-s-nam
 projectId: decibel-tools-mcp
 severity: high
 status: open

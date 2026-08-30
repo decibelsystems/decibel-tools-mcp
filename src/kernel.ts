@@ -18,6 +18,7 @@ import type { FacadeSpec, DetailTier, McpToolDefinition } from './facades/types.
 import { coreFacades, proFacades, appFacades } from './facades/definitions.js';
 import { buildMcpDefinitions, validateFacades } from './facades/index.js';
 import { getEnabledFacades } from './toolConfig.js';
+import { CircuitBreakerRegistry, type CircuitSnapshot } from './runtime/circuitBreaker.js';
 
 // ============================================================================
 // Dispatch Context — agent-readiness plumbing
@@ -138,6 +139,16 @@ export interface ToolKernel {
   /** Unsubscribe from dispatch events (for SSE cleanup) */
   off(event: string, listener: (evt: DispatchEvent) => void): void;
 
+  /**
+   * Circuits that are open or accumulating faults, keyed by facade.
+   * Empty object means every facade is healthy. Surfaced on /health so a
+   * degraded dependency is visible without reading the dispatch log.
+   */
+  circuitSnapshot(): Record<string, CircuitSnapshot>;
+
+  /** Force a circuit closed (operator escape hatch, and test hygiene). */
+  resetCircuit(key?: string): void;
+
   /** Total internal tool count */
   toolCount: number;
   /** Total facade count */
@@ -192,6 +203,19 @@ export function coerceStringifiedParams(
   return out ?? params;
 }
 
+/** Best-effort one-line reason from an `isError` result, for circuit reporting. */
+function resultErrorText(result: ToolResult): string | undefined {
+  const text = result.content?.find((c) => c.type === 'text')?.text;
+  if (!text) return undefined;
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown };
+    if (typeof parsed.error === 'string') return parsed.error;
+  } catch {
+    // Not JSON — fall through to the raw text.
+  }
+  return text.slice(0, 200);
+}
+
 /**
  * Create the tool kernel. Call once at startup — both transports share it.
  */
@@ -200,10 +224,18 @@ export async function createKernel(): Promise<ToolKernel> {
   const toolMap = new Map(tools.map(t => [t.definition.name, t]));
 
   // Build facade registry (core + pro if enabled + apps if enabled)
+  // App facades are registered only when their tools actually loaded. The
+  // modules are excluded from the published build, so on a public install the
+  // flag can be set and the facades still will not appear — you cannot call
+  // what was never registered. Fail closed by absence rather than by check.
+  const appFacadesPresent = appFacades.filter((f) =>
+    Object.values(f.actions).some((toolName) => toolMap.has(toolName as string))
+  );
+
   let facades = [
     ...coreFacades,
     ...(PRO_ENABLED ? proFacades : []),
-    ...(APPS_ENABLED ? appFacades : []),
+    ...(APPS_ENABLED ? appFacadesPresent : []),
   ];
 
   // DECIBEL_FACADES env var or config: restrict to only these facades
@@ -251,6 +283,49 @@ export async function createKernel(): Promise<ToolKernel> {
   const emitter = new EventEmitter();
   emitter.on('error', () => {});
 
+  // Per-facade circuit breaker. See src/runtime/circuitBreaker.ts for what
+  // counts as a fault and why `isError` alone is neither necessary nor
+  // sufficient.
+  const circuits = new CircuitBreakerRegistry();
+
+  /**
+   * Emit without letting a subscriber take the call down with it. Listeners
+   * run synchronously on the dispatch path — an SSE writer whose socket died
+   * mid-write, or a logging hook with a bad assumption, would otherwise throw
+   * straight out of a tool call that had already succeeded.
+   */
+  function safeEmit(event: string, payload: DispatchEvent): void {
+    try {
+      emitter.emit(event, payload);
+    } catch (err) {
+      log(`Kernel: dispatch listener for "${event}" threw — ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /** The circuit a call belongs to: its facade, or the facade that owns the tool. */
+  function circuitKey(name: string): string {
+    if (facadeMap.has(name)) return name;
+    return toolToFacade.get(name)?.name ?? name;
+  }
+
+  function circuitOpenResult(
+    key: string,
+    decision: { retryAfterMs: number; lastError?: string; openedAt?: string }
+  ): ToolResult {
+    return {
+      content: [{ type: 'text', text: JSON.stringify({
+        error: `Facade "${key}" is temporarily unavailable — circuit open after repeated failures`,
+        circuit_open: true,
+        facade: key,
+        retry_after_ms: decision.retryAfterMs,
+        opened_at: decision.openedAt,
+        last_error: decision.lastError,
+        hint: 'The facade\'s dependency (database, network service, or mount) is failing. Other facades are unaffected.',
+      }) }],
+      isError: true,
+    };
+  }
+
   // Pre-build MCP definitions for each tier (cached)
   const mcpDefCache = new Map<DetailTier, McpToolDefinition[]>();
 
@@ -263,7 +338,7 @@ export async function createKernel(): Promise<ToolKernel> {
     return cached;
   }
 
-  async function dispatch(
+  async function dispatchInner(
     name: string,
     args: Record<string, unknown>,
     context?: DispatchContext
@@ -375,26 +450,46 @@ export async function createKernel(): Promise<ToolKernel> {
       log(`Kernel: facade ${name}.${action} → ${internalName} (agent=${agentId}${runId ? ` run=${runId}` : ''})`);
       trackToolUse(internalName);
 
+      const breaker = circuits.beforeCall(name);
+      if (!breaker.allowed) {
+        safeEmit('error', {
+          type: 'error', facade: name, action, tool: internalName,
+          agentId, runId, requestId, timestamp: new Date().toISOString(),
+          duration_ms: 0,
+          error: `circuit open for facade "${name}"`,
+        } satisfies DispatchEvent);
+        return circuitOpenResult(name, breaker);
+      }
+
       const startTime = Date.now();
-      emitter.emit('dispatch', {
+      safeEmit('dispatch', {
         type: 'dispatch', facade: name, action, tool: internalName,
         agentId, runId, requestId, timestamp: new Date().toISOString(),
       } satisfies DispatchEvent);
 
       try {
         const result = await tool.handler(params);
-        emitter.emit('result', {
+        const duration = Date.now() - startTime;
+        circuits.afterCall(name, {
+          threw: false,
+          isError: !!result.isError,
+          durationMs: duration,
+          error: result.isError ? resultErrorText(result) : undefined,
+        });
+        safeEmit('result', {
           type: 'result', facade: name, action, tool: internalName,
           agentId, runId, requestId, timestamp: new Date().toISOString(),
-          duration_ms: Date.now() - startTime, success: !result.isError,
+          duration_ms: duration, success: !result.isError,
         } satisfies DispatchEvent);
         return result;
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        emitter.emit('error', {
+        const duration = Date.now() - startTime;
+        circuits.afterCall(name, { threw: true, isError: true, durationMs: duration, error: errMsg });
+        safeEmit('error', {
           type: 'error', facade: name, action, tool: internalName,
           agentId, runId, requestId, timestamp: new Date().toISOString(),
-          duration_ms: Date.now() - startTime,
+          duration_ms: duration,
           error: errMsg,
         } satisfies DispatchEvent);
         return {
@@ -423,32 +518,97 @@ export async function createKernel(): Promise<ToolKernel> {
 
     const directParams = coerceStringifiedParams(args, tool.definition.inputSchema);
 
+    // Direct tool calls share the circuit of the facade that owns the tool —
+    // `senken_trade_summary` and `senken.trade_summary` reach the same pool.
+    const key = circuitKey(name);
+    const breaker = circuits.beforeCall(key);
+    if (!breaker.allowed) {
+      safeEmit('error', {
+        type: 'error', tool: name,
+        agentId, runId, requestId, timestamp: new Date().toISOString(),
+        duration_ms: 0,
+        error: `circuit open for facade "${key}"`,
+      } satisfies DispatchEvent);
+      return circuitOpenResult(key, breaker);
+    }
+
     const startTime = Date.now();
-    emitter.emit('dispatch', {
+    safeEmit('dispatch', {
       type: 'dispatch', tool: name,
       agentId, runId, requestId, timestamp: new Date().toISOString(),
     } satisfies DispatchEvent);
 
     try {
       const result = await tool.handler(directParams);
-      emitter.emit('result', {
+      const duration = Date.now() - startTime;
+      circuits.afterCall(key, {
+        threw: false,
+        isError: !!result.isError,
+        durationMs: duration,
+        error: result.isError ? resultErrorText(result) : undefined,
+      });
+      safeEmit('result', {
         type: 'result', tool: name,
         agentId, runId, requestId, timestamp: new Date().toISOString(),
-        duration_ms: Date.now() - startTime, success: !result.isError,
+        duration_ms: duration, success: !result.isError,
       } satisfies DispatchEvent);
       return result;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      emitter.emit('error', {
+      const duration = Date.now() - startTime;
+      circuits.afterCall(key, { threw: true, isError: true, durationMs: duration, error: errMsg });
+      safeEmit('error', {
         type: 'error', tool: name,
         agentId, runId, requestId, timestamp: new Date().toISOString(),
-        duration_ms: Date.now() - startTime,
+        duration_ms: duration,
         error: errMsg,
       } satisfies DispatchEvent);
       return {
         content: [{ type: 'text', text: JSON.stringify({
           error: errMsg,
           tool: name,
+        }) }],
+        isError: true,
+      };
+    }
+  }
+
+  /**
+   * The isolation boundary. Every failure a facade can produce becomes a
+   * `ToolResult`, never a rejected promise: the inner dispatch already handles
+   * a throwing *handler*, but the code around it can fail too — a malformed
+   * schema in `coerceStringifiedParams`, an unexpected shape in facade
+   * resolution, an out-of-memory string build. Whatever escapes, one facade's
+   * fault must not take down a runtime that six clients share.
+   *
+   * The transports depend on this: `server.ts` and `httpServer.ts` turn a
+   * rejected dispatch into a transport-level error, which for stdio means the
+   * MCP client sees a protocol fault rather than a tool that failed.
+   */
+  async function dispatch(
+    name: string,
+    args: Record<string, unknown>,
+    context?: DispatchContext
+  ): Promise<ToolResult> {
+    try {
+      return await dispatchInner(name, args, context);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      log(`Kernel: dispatch of "${name}" failed outside the handler — ${errMsg}`);
+      circuits.recordFault(circuitKey(name), errMsg);
+      safeEmit('error', {
+        type: 'error', tool: name,
+        agentId: context?.agentId || 'anonymous',
+        runId: context?.runId,
+        requestId: context?.requestId,
+        timestamp: new Date().toISOString(),
+        error: errMsg,
+      } satisfies DispatchEvent);
+      return {
+        content: [{ type: 'text', text: JSON.stringify({
+          error: errMsg,
+          tool: name,
+          dispatch_fault: true,
         }) }],
         isError: true,
       };
@@ -495,6 +655,8 @@ export async function createKernel(): Promise<ToolKernel> {
     on: (event: string, listener: (evt: DispatchEvent) => void) => emitter.on(event, listener),
     off: (event: string, listener: (evt: DispatchEvent) => void) => emitter.off(event, listener),
     getMcpToolDefinitions,
+    circuitSnapshot: () => circuits.snapshot(),
+    resetCircuit: (key?: string) => circuits.reset(key),
     toolCount: tools.length,
     facadeCount: facades.length,
   };

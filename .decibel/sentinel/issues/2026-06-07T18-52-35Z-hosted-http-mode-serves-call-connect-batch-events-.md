@@ -1,4 +1,6 @@
 ---
+uid: 019ea36d-fe8c-790c-871b-7a7d5f2f368d
+id: 2026-06-07T18-52-35Z-hosted-http-mode-serves-call-connect-batch-events-
 projectId: decibel-tools-mcp
 severity: high
 status: open

@@ -1,4 +1,6 @@
 ---
+uid: 019ddbd3-8d1a-7d2c-ac93-3d775b4fea2c
+id: 2026-04-30T00-39-27Z-review-security-frontmatter-keys-stored-in-plain-r
 projectId: decibel-tools-mcp
 severity: low
 status: open

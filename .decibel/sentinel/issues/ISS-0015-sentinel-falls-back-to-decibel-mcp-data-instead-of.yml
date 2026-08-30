@@ -1,7 +1,8 @@
+uid: 019b2ce2-e874-7bf5-a582-2a643cfce3c0
 id: ISS-0015
 title: Sentinel falls back to decibel-mcp-data instead of erroring on unknown project
 project: decibel-tools-mcp
-status: open
+status: closed
 priority: high
 tags:
   - sentinel
@@ -9,7 +10,8 @@ tags:
   - data-integrity
   - decibel-mcp-data
 created_at: 2025-12-17T15:17:06.804Z
-updated_at: 2025-12-17T15:17:06.804Z
+updated_at: 2026-08-29T16:18:24.802Z
+closed_at: 2026-08-29T16:18:24.802Z
 description: |-
   ## Problem
 
@@ -40,7 +42,4 @@ description: |-
   - Sentinel tool implementations (log_epic, create_issue, etc.)
   - Project resolution logic
   - Any hardcoded paths to `decibel-mcp-data`
-
-## Resolution
-
-Duplicate: consolidated with ISS-0015-fix-sentinel-silent-fallback.yml which has the cleaner description.
+resolution: "Duplicate: consolidated with ISS-0015-fix-sentinel-silent-fallback.yml which has the cleaner description."

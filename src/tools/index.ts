@@ -18,10 +18,6 @@ import { contextTools } from './context/index.js';
 import { agenticTools } from './agentic/index.js';
 import { roadmapTools } from './roadmap/index.js';
 import { architectTools } from './architect/index.js';
-import { deckTools } from './deck.js';
-import { senkenTools } from './senken.js';
-import { motherTools } from './mother.js';
-import { terminalTools } from './terminal.js';
 import { gitTools } from './git/index.js';
 import { auditorTools } from './auditor/index.js';
 import { workflowTools } from './workflow/index.js';
@@ -92,9 +88,36 @@ const coreTools: ToolSpec[] = [
 ];
 
 // App tools — Decibel internal (only when DECIBEL_APPS=1)
-function loadAppTools(): ToolSpec[] {
+//
+// Loaded by dynamic import with the failure tolerated, because these modules
+// are not built into the published package (tsconfig.build.json excludes them).
+// For a public install the import simply does not resolve and no app tools
+// register — the facades are absent rather than present-and-refusing, which is
+// both less confusing and a stronger guarantee than a runtime tier check.
+//
+// The template-literal path is deliberate: it stops TypeScript resolving these
+// at compile time, so a build that excludes the sources still typechecks.
+const APP_MODULES: ReadonlyArray<readonly [module: string, exportName: string]> = [
+  ['deck', 'deckTools'],
+  ['senken', 'senkenTools'],
+  ['mother', 'motherTools'],
+  ['terminal', 'terminalTools'],
+];
+
+async function loadAppTools(): Promise<ToolSpec[]> {
   if (!APPS_ENABLED) return [];
-  return [...deckTools, ...senkenTools, ...motherTools, ...terminalTools];
+
+  const out: ToolSpec[] = [];
+  for (const [name, exportName] of APP_MODULES) {
+    try {
+      const mod = (await import(`./${name}.js`)) as Record<string, unknown>;
+      const tools = mod[exportName];
+      if (Array.isArray(tools)) out.push(...(tools as ToolSpec[]));
+    } catch {
+      // Not in this build. Expected for every public install.
+    }
+  }
+  return out;
 }
 
 // Pro tools (only when DECIBEL_PRO=1)
@@ -148,7 +171,7 @@ function loadGraduatedToolSpecs(): ToolSpec[] {
 // Async loader for full tool set (core + pro + graduated)
 export async function getAllTools(): Promise<ToolSpec[]> {
   const proTools = await loadProTools();
-  const appTools = loadAppTools();
+  const appTools = await loadAppTools();
   const graduatedToolSpecs = loadGraduatedToolSpecs();
   return [...coreTools, ...proTools, ...appTools, ...graduatedToolSpecs];
 }

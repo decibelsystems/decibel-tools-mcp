@@ -1,14 +1,16 @@
+uid: 019b0678-4f5e-7d8f-be2a-f1faefc2bf10
 id: ISS-0006
 title: Add project registry for multi-project support
-project: /Volumes/Ashitaka/Documents/GitHub/decibel-tools-mcp
-status: open
+project: decibel-tools-mcp
+status: closed
 priority: high
 tags:
   - mcp
   - dx
   - blocking
 created_at: 2025-12-10T04:15:06.590Z
-updated_at: 2025-12-10T04:15:06.590Z
+updated_at: 2026-08-29T16:18:24.771Z
+closed_at: 2026-08-29T16:18:24.771Z
 description: |-
   Currently projectPaths.ts only supports single project via DECIBEL_PROJECT_ROOT env var or cwd discovery. Need a registry to map project IDs (like "senken") to their full paths.
 
@@ -27,7 +29,4 @@ description: |-
   ```
 
   Update resolveProjectRoot() to check registry before failing.
-
-## Resolution
-
-Completed: projects.json registry + projectRegistry.ts implemented. Multi-project support works via project IDs and aliases.
+resolution: "Completed: projects.json registry + projectRegistry.ts implemented. Multi-project support works via project IDs and aliases."

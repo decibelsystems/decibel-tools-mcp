@@ -1,10 +1,11 @@
 ---
+uid: 01a01cb7-ad0b-7fff-a7f3-671f5d825658
 id: ISS-0129
 projectId: decibel-tools-mcp
 severity: high
 status: closed
-created_at: 2026-08-20T01:09:54.571Z
 priority: high
+created_at: 2026-08-20T01:09:54.571Z
 updated_at: 2026-08-20T04:29:52.138Z
 ---
 

@@ -1,4 +1,5 @@
 ---
+uid: 01a0024d-ec80-74af-a541-627361c81b78
 id: ISS-0127
 projectId: decibel-tools-mcp
 severity: high

@@ -1,3 +1,4 @@
+uid: 019bf8cd-50f4-79c6-be93-b4cdfed2885e
 id: ISS-0045
 title: MCP server times out with SSE transport on remote connections
 project: decibel-tools-mcp

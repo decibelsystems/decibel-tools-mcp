@@ -1,6 +1,7 @@
+uid: 019b47a6-efcb-7e82-aae0-01d566fa404c
 id: ISS-0023
 title: Implement Sensor, Overmind, and Specialist dialects
-project: decibel-tools
+project: decibel-tools-mcp
 status: open
 priority: high
 epic_id: EPIC-0020

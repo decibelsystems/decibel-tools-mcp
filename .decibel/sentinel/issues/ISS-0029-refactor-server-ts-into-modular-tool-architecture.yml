@@ -1,3 +1,4 @@
+uid: 019b70ae-330d-7bc4-81a9-1cc8e1f17d6a
 id: ISS-0029
 title: Refactor server.ts into modular tool architecture
 project: decibel-tools-mcp

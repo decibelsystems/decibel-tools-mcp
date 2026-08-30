@@ -419,6 +419,14 @@ export async function updateIssue(
   if (status && status !== parsed.status) {
     changes.push(`status: ${parsed.status} → ${status}`);
     parsed.status = status;
+    // Markdown records mirror the status into the body as `**Status:** x` for
+    // human readers. close_issue rewrites that line; this path did not, so a
+    // record moved to in_progress or closed here still read `open` to anyone
+    // opening the file. Frontmatter stayed correct, which is why the tools
+    // never noticed — the drift was only ever visible to people.
+    if (body !== undefined) {
+      body = body.replace(/^\*\*Status:\*\* .*$/m, `**Status:** ${status}`);
+    }
   }
 
   if (priority && priority !== parsed.priority) {

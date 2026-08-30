@@ -1,17 +1,18 @@
 ---
+uid: 019c74ba-7e39-71a9-b9fe-8a273ab7229f
 id: ISS-0096
 projectId: decibel-tools-mcp
 severity: low
 status: closed
-closed_at: 2026-05-20T00:57:44.000Z
-closed_reason: "verified done — commit 1398b12 + requestId threading present in kernel.ts and transports/mcp.ts"
 created_at: 2026-02-19T07:08:25.017Z
+closed_at: 2026-05-20T00:57:44.000Z
+closed_reason: verified done — commit 1398b12 + requestId threading present in kernel.ts and transports/mcp.ts
 ---
 
 # FacadeClient per-call context and request correlation
 
 **Severity:** low
-**Status:** open
+**Status:** closed
 
 ## Details
 

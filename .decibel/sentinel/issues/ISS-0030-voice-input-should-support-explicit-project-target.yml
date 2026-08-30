@@ -1,6 +1,7 @@
+uid: 019b7771-8acc-7aaf-993a-657411afe6fc
 id: ISS-0030
 title: Voice input should support explicit project targeting
-project: decibel-tools
+project: decibel-tools-mcp
 status: open
 priority: medium
 tags:

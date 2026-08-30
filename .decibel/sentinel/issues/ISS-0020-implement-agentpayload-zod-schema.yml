@@ -1,6 +1,7 @@
+uid: 019b47a6-3c93-7a61-8d67-29868dbac6f9
 id: ISS-0020
 title: Implement AgentPayload Zod schema
-project: decibel-tools
+project: decibel-tools-mcp
 status: open
 priority: high
 epic_id: EPIC-0020

@@ -1,0 +1,31 @@
+// Build config for the PUBLISHED package.
+//
+// `npm run build` compiles everything, because the owner's local install needs
+// the private facades. `npm run build:dist` — which `prepack` runs — compiles
+// this instead, and it omits them.
+//
+// The four excluded modules are private: senken and mother read a live trading
+// Postgres, deck reads a personal Supabase, terminal holds wallet credentials.
+// They were shipping to npm as compiled JS *and source maps* through 2.1.4, so
+// a public install carried recoverable source for tools it could never use.
+// The visible symptom was the one that mattered: users saw facades they had no
+// way to enable.
+//
+// Excluding at build time rather than filtering at publish time is deliberate.
+// A denylist in package.json `files` is a thing someone has to remember to
+// update when a fifth private facade appears; an absent build output cannot be
+// forgotten. tools/index.ts imports these dynamically and tolerates the
+// failure, and the kernel only registers an app facade whose tools actually
+// resolved — so the public build has no path to them at all.
+{
+  "extends": "./tsconfig.json",
+  "exclude": [
+    ".decibel",
+    "node_modules",
+    "dist",
+    "src/tools/senken.ts",
+    "src/tools/deck.ts",
+    "src/tools/mother.ts",
+    "src/tools/terminal.ts"
+  ]
+}

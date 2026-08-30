@@ -1,10 +1,11 @@
 ---
+uid: 01a001bc-813f-759c-88ce-9b5517405fd4
 id: ISS-0126
 projectId: decibel-tools-mcp
 severity: low
 status: open
-created_at: 2026-08-14T19:25:26.207Z
 epic_id: EPIC-0036
+created_at: 2026-08-14T19:25:26.207Z
 ---
 
 # Pipe Zoom next_steps into sentinel issues (the half that makes this a feature)

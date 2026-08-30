@@ -1,19 +1,20 @@
 ---
+uid: 019c55e7-61d1-784f-bdfb-dcaf8fce4b7e
 id: ISS-0087
 projectId: decibel-tools-mcp
 severity: med
 status: closed
-closed_at: 2026-05-20T00:53:15.000Z
-closed_reason: "verified done by code inspection 2026-05-19"
-closure_note: "package.json: @decibelsystems/tools v2.1.2"
-created_at: 2026-02-13T07:29:13.169Z
 epic_id: EPIC-0026
+created_at: 2026-02-13T07:29:13.169Z
+closed_at: 2026-05-20T00:53:15.000Z
+closed_reason: verified done by code inspection 2026-05-19
+closure_note: "package.json: @decibelsystems/tools v2.1.2"
 ---
 
 # Phase 6a: Rename package to @decibel/tools v2.0.0
 
 **Severity:** med
-**Status:** open
+**Status:** closed
 **Epic:** EPIC-0026
 
 ## Details

@@ -1,7 +1,8 @@
+uid: 019b1fad-f55b-72e4-9980-579f550253d5
 id: ISS-0008
 title: Fix Dojo tools failing due to unsupported --json flag in decibel CLI
 project: decibel-tools-mcp
-status: open
+status: closed
 priority: high
 tags:
   - dojo
@@ -10,7 +11,8 @@ tags:
   - bug
   - compat
 created_at: 2025-12-15T01:44:12.891Z
-updated_at: 2025-12-15T01:44:12.891Z
+updated_at: 2026-08-29T16:18:24.778Z
+closed_at: 2026-08-29T16:18:24.778Z
 description: |-
   Observed: Decibel MCP Dojo tools `dojo_list` and `dojo_list_wishes` fail with `decibel: error: unrecognized arguments: --json`.
 
@@ -32,7 +34,4 @@ description: |-
   - `dojo_list(filter=all)` succeeds on a machine where `decibel list` exists but `--json` is not supported.
   - `dojo_list_wishes(unresolved_only=...)` succeeds under same conditions.
   - No regression when `--json` *is* supported.
-
-## Resolution
-
-Already fixed. dojo.ts uses native file operations (fs/promises + YAML) not CLI. Verified zero references to spawn/execSync/child_process. The --flag handling concern is moot since no CLI is invoked.
+resolution: Already fixed. dojo.ts uses native file operations (fs/promises + YAML) not CLI. Verified zero references to spawn/execSync/child_process. The --flag handling concern is moot since no CLI is invoked.

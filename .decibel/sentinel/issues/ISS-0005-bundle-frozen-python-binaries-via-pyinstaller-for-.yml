@@ -1,7 +1,8 @@
+uid: 019b0594-757c-70b2-88ed-60032f96d30d
 id: ISS-0005
 title: Bundle frozen Python binaries via PyInstaller for zero-dependency install
-project: decibel-tools
-status: open
+project: decibel-tools-mcp
+status: closed
 priority: low
 epic_id: EPIC-0008
 tags:
@@ -11,7 +12,8 @@ tags:
   - phase-3
   - optimization
 created_at: 2025-12-10T00:06:14.140Z
-updated_at: 2025-12-10T00:06:14.140Z
+updated_at: 2026-08-29T16:18:24.764Z
+closed_at: 2026-08-29T16:18:24.764Z
 description: |-
   Bundle Decibel Python CLIs as standalone executables using PyInstaller so the Desktop Extension requires no Python installation.
 
@@ -39,7 +41,4 @@ description: |-
   This makes the Desktop Extension truly one-click with no prerequisites.
 
   Defer until beta feedback confirms this is worth the build complexity.
-
-## Resolution
-
-No longer applicable: Python CLI approach was abandoned in favor of native TypeScript. No binaries to bundle.
+resolution: "No longer applicable: Python CLI approach was abandoned in favor of native TypeScript. No binaries to bundle."

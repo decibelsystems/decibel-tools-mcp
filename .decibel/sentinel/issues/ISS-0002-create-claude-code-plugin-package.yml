@@ -1,7 +1,8 @@
+uid: 019b0592-fd7f-7446-be5d-f6919e01f3eb
 id: ISS-0002
 title: Create Claude Code plugin package
-project: decibel-tools
-status: open
+project: decibel-tools-mcp
+status: closed
 priority: high
 epic_id: EPIC-0008
 tags:
@@ -9,7 +10,8 @@ tags:
   - claude-code
   - phase-2
 created_at: 2025-12-10T00:04:37.887Z
-updated_at: 2025-12-10T00:04:37.887Z
+updated_at: 2026-08-29T16:18:24.749Z
+closed_at: 2026-08-29T16:18:24.749Z
 description: |-
   Create a Claude Code plugin structure for Decibel that can be installed via `/plugin` command.
 
@@ -29,7 +31,4 @@ description: |-
   - Document installation and usage
 
   This is the "harden for own use" phase before public distribution.
-
-## Resolution
-
-Completed in commit eeb9774: feat: add Claude Code plugin structure + Figma designer tools
+resolution: "Completed in commit eeb9774: feat: add Claude Code plugin structure + Figma designer tools"

@@ -1,3 +1,4 @@
+uid: 019b1fdb-2e31-7482-88f6-c0d8a205426c
 id: ISS-0010
 title: sentinel_scanData returns empty stdout (exit 0), causing JSON parse failure
 project: decibel-tools-mcp

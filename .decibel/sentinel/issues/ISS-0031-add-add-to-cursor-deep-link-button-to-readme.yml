@@ -1,7 +1,8 @@
+uid: 019b855a-7930-7eb5-b84f-65aeec975b03
 id: ISS-0031
 title: Add "Add to Cursor" deep link button to README
 project: decibel-tools-mcp
-status: open
+status: closed
 priority: high
 epic_id: EPIC-0024
 tags:
@@ -9,7 +10,8 @@ tags:
   - docs
   - distribution
 created_at: 2026-01-03T19:34:17.648Z
-updated_at: 2026-01-03T19:34:17.648Z
+updated_at: 2026-08-29T16:18:24.823Z
+closed_at: 2026-08-29T16:18:24.823Z
 description: |-
   Create one-click install button for Cursor users.
 
@@ -25,7 +27,4 @@ description: |-
   Place in:
   - README.md (Installation section)
   - docs landing page
-
-## Resolution
-
-Shipped - Add to Cursor button live in README
+resolution: Shipped - Add to Cursor button live in README

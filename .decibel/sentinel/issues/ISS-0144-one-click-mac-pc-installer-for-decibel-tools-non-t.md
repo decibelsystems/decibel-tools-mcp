@@ -1,15 +1,19 @@
 ---
-id: ISS-0112
+uid: 019efc74-06e4-7edc-b66f-b75fb3448497
+id: ISS-0144
 projectId: decibel-tools-mcp
 severity: med
-status: open
+status: closed
 created_at: 2026-06-25T01:45:22.916Z
+updated_at: 2026-08-29T16:45:59.259Z
+closed_at: 2026-08-29T16:45:59.259Z
+resolution: "Superseded by ISS-0115, which records the provenance: this issue was filed as ISS-0112 in the /Volumes/Kiki checkout, re-filed here as ISS-0115 because ISS-0112 was independently taken, and the Kiki copy was meant to be retired but was committed instead. Not a second issue — a stray copy."
 ---
 
 # One-click Mac/PC installer for Decibel tools (non-technical onboarding)
 
 **Severity:** med
-**Status:** open
+**Status:** closed
 
 ## Details
 

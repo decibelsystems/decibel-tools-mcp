@@ -1,4 +1,6 @@
 ---
+uid: 019dd5cb-34f0-7927-975b-ca264bae03c2
+id: 2026-04-28T20-32-37Z-registry-scan-add-first-seen-timestamp-to-findings
 projectId: decibel-tools-mcp
 severity: low
 status: open

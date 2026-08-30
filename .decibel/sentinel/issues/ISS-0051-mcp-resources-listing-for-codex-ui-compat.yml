@@ -1,10 +1,14 @@
+uid: 019c77ea-c300-7760-ac2b-cec9a7d28927
 id: ISS-0051
-title: "MCP resources listing for Codex UI compatibility"
+title: MCP resources listing for Codex UI compatibility
 project: decibel-tools-mcp
 status: open
 priority: medium
-tags: [codex, mcp, ux]
 epic_id: EPIC-0024
+tags:
+  - codex
+  - mcp
+  - ux
 created_at: 2026-02-19T22:00:00.000Z
 updated_at: 2026-02-19T22:00:00.000Z
 description: |-

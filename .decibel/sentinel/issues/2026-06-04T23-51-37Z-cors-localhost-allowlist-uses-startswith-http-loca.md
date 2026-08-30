@@ -1,4 +1,6 @@
 ---
+uid: 019e950c-b2c4-7b50-bbdc-5182fc5f17ac
+id: 2026-06-04T23-51-37Z-cors-localhost-allowlist-uses-startswith-http-loca
 projectId: decibel-tools-mcp
 severity: high
 status: open

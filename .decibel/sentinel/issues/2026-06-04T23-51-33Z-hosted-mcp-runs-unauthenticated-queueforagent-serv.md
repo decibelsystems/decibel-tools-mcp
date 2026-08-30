@@ -1,4 +1,6 @@
 ---
+uid: 019e950c-9fcc-7f54-9d1b-b9d72e295ebc
+id: 2026-06-04T23-51-33Z-hosted-mcp-runs-unauthenticated-queueforagent-serv
 projectId: decibel-tools-mcp
 severity: critical
 status: open

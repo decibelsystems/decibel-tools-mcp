@@ -1,3 +1,4 @@
+uid: 019b47c1-2940-7b98-8927-5ac749ec7f80
 id: ISS-0027
 title: Standardize parameter naming convention across all tools
 status: open
@@ -9,7 +10,6 @@ tags:
   - tech-debt
 created_at: 2025-12-22T20:30:00Z
 updated_at: 2025-12-22T20:30:00Z
-
 description: |
   Parameter naming is inconsistent across MCP tools - some use snake_case 
   (project_id), others use camelCase (projectId). This causes silent failures 

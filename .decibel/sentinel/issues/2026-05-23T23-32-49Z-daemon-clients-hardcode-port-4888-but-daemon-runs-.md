@@ -1,4 +1,6 @@
 ---
+uid: 019e572f-29c9-7b23-90c1-2c6235124b8d
+id: 2026-05-23T23-32-49Z-daemon-clients-hardcode-port-4888-but-daemon-runs-
 projectId: decibel-tools-mcp
 severity: med
 status: closed

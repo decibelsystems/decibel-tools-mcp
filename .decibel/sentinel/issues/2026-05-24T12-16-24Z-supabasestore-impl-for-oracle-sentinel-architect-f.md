@@ -1,9 +1,11 @@
 ---
+uid: 019e59ea-3e3b-797f-b1ee-da16646184a1
+id: 2026-05-24T12-16-24Z-supabasestore-impl-for-oracle-sentinel-architect-f
 projectId: decibel-tools-mcp
 severity: high
 status: open
-created_at: 2026-05-24T12:16:24.123Z
 epic_id: EPIC-0033
+created_at: 2026-05-24T12:16:24.123Z
 ---
 
 # SupabaseStore impl for oracle/sentinel/architect/friction (org-scoped)

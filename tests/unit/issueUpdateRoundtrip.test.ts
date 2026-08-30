@@ -53,6 +53,41 @@ describe('issue update roundtrip (markdown format preservation)', () => {
     expect(listed.malformed).toBeUndefined();
   });
 
+  // The markdown format keeps a `**Status:** x` line in the body as a
+  // human-readable mirror of frontmatter. close_issue rewrote it; updateIssue
+  // did not, so a record moved to in_progress or closed through this path read
+  // `open` to anyone opening the file while the tools reported it correctly.
+  // Sixteen records had drifted this way before it was caught, and none of the
+  // existing tests noticed because every one of them asserts through the
+  // frontmatter — which was never wrong.
+  it('update syncs the **Status:** body mirror to the new frontmatter status', async () => {
+    const created = await createMarkdownIssue();
+    expect(await fs.readFile(created.path, 'utf-8')).toContain('**Status:** open');
+
+    await updateIssue({
+      projectId: 'test-project',
+      issueId: created.id,
+      status: 'in_progress',
+    });
+
+    const content = await fs.readFile(created.path, 'utf-8');
+    expect(content).toContain('**Status:** in_progress');
+    expect(content).not.toContain('**Status:** open');
+    // Frontmatter stays authoritative and agrees with the mirror.
+    expect(content.match(/^---\n([\s\S]*?)\n---/)![1]).toContain('status: in_progress');
+  });
+
+  it('update leaves bare-YAML records alone — they have no body to mirror into', async () => {
+    const created = await createMarkdownIssue();
+    await updateIssue({
+      projectId: 'test-project',
+      issueId: created.id,
+      priority: 'high',
+    });
+    // A priority-only update must not touch the status mirror.
+    expect(await fs.readFile(created.path, 'utf-8')).toContain('**Status:** open');
+  });
+
   it('update preserves ---, the # Title heading, and the body on disk', async () => {
     const created = await createMarkdownIssue();
 

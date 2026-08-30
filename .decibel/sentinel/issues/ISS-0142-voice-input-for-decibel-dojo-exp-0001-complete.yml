@@ -1,16 +1,16 @@
-id: ISS-0028
+uid: 019b6df6-5442-7eaa-aa9f-366bd9d3cf94
+id: ISS-0142
 title: Voice Input for Decibel - DOJO-EXP-0001 complete
 project: decibel-tools-mcp
 status: closed
-closed_at: 2026-05-20T00:55:20.000Z
-closed_reason: "shipped — src/tools/voice.ts present, 18/18 tests pass per body"
 priority: medium
 tags:
   - voice
   - dojo
   - shipped
 created_at: 2025-12-30T06:33:38.626Z
-updated_at: 2025-12-30T06:33:38.626Z
+updated_at: 2026-08-29T16:45:59.244Z
+closed_at: 2026-05-20T00:55:20.000Z
 description: |-
   Implemented voice input system for Decibel commands.
 
@@ -38,3 +38,5 @@ description: |-
   - AI as leverage
 
   **Test results:** 18/18 intent parsing tests pass (100%)
+resolution: Genuinely distinct from ISS-0028 (package health scanning) but collided with it before ISS-NNNN allocation existed. Already closed as shipped; renumbered so both records stay addressable. Pre-allocator (2025-12-30).
+closed_reason: shipped — src/tools/voice.ts present, 18/18 tests pass per body

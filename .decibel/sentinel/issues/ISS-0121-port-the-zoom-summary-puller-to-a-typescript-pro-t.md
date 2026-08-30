@@ -1,10 +1,11 @@
 ---
+uid: 01a001bb-acb6-79a3-9789-5ce4d45e2eba
 id: ISS-0121
 projectId: decibel-tools-mcp
 severity: med
 status: open
-created_at: 2026-08-14T19:24:31.798Z
 epic_id: EPIC-0036
+created_at: 2026-08-14T19:24:31.798Z
 ---
 
 # Port the Zoom summary puller to a TypeScript pro-tier `zoom` facade

@@ -49,7 +49,7 @@ tags: []
 owner: ""
 squad: ""
 created_at: 2026-08-29T00:18:38.007Z
-updated_at: 2026-08-29T03:59:41.367Z
+updated_at: 2026-08-30T02:25:02.915Z
 ---
 
 # Decibel Runtime — repair, consolidation, and extensibility
@@ -100,3 +100,33 @@ Private facades (senken, deck) load for owner use only and leave the public pack
 ## Note (2026-08-29T03:59:41.367Z)
 
 Phases 0 and 1 shipped: ensureRuntime lifecycle (#50), serialized id allocation and round-trip tests (#51), CI build-before-test fix (#52), atomic writes and update_epic (this change). Phase 2 repair migration is next.
+
+## Note (2026-08-29T16:50:14.538Z)
+
+Phase 2 COMPLETE (0ad8141, d5004ec). degraded -> 0, duplicate_ids -> 0, project values normalized, and a fourth defect found and fixed along the way.
+
+WHAT THE PLAN GOT RIGHT: "most of the 10 carry a completed resolution and are open only because the old status write failed, so the correct repair is to CLOSE them, not reformat them." That was exactly right, and the scope was larger than the plan's count — 16 records, not 10, because `degraded` only flags records broken badly enough to need salvage. Six more parsed fine while carrying a stranded resolution and a stale `open`. On disk: 113 -> 97 open across an unchanged 169 records.
+
+WHAT THE PLAN GOT WRONG: it treated the 4 duplicate groups as one problem wanting one renumbering policy (ISS-0136 is even titled "renumber the existing duplicate ISS-NNNN ids"). They are four unrelated accidents. Reading them individually, not one needed a live issue renumbered — every loser was already-closed legacy, a 2025-12-14 test fixture, or a stray copy from the /Volumes/Kiki checkout that ISS-0115 had already documented as retired. The repair is a RETIRE manifest with per-group evidence, not a rule. Three of the four predate the allocator (2026-04-28), so Phase 1's lock is not what prevents them and their absence is not evidence it works. ISS-0136 closed.
+
+NEW: markdown records mirror status into the body as `**Status:** x`, and 16 had drifted from frontmatter — the file read `open` to a person while every tool reported it correctly. Root cause: close_issue rewrites the mirror, updateIssue never did (src/sentinelIssues.ts). No test caught it because every existing test asserts through frontmatter, which was never wrong. Both the 16 records and the writer are fixed, with regression tests.
+
+CARRY INTO PHASE 3/5: the mirror is derived state duplicated into the body, and it will drift again through any writer that forgets it. The canonical model should own status once and render the body, rather than keeping two copies in sync by hand. This is a concrete argument for the IssueRepository/IssueCodec split, not just a tidiness one.
+
+PHASE 2 INVARIANTS NOW AVAILABLE TO CI: degraded == 0, duplicate_ids == 0, and frontmatter status == body mirror. The repair script re-runs clean and reports 0 actions, so it doubles as the checker.
+
+NEXT: Phase 3 (canonical model + boundaries). Note the epic's own CAUTION still stands — src/store/ is reachable via scripts/import-store.ts, and ISS-0130 rests on the wrong premise.
+
+## Note (2026-08-30T02:25:02.915Z)
+
+Phase 3 error isolation + per-facade circuit breaker shipped (bb17353). 586 tests green.
+
+WHAT THE PLAN UNDERSTATED: "no facade fault escapes dispatch()" read as a one-line try/catch, but the inner handler call was already wrapped — the real holes were everywhere else. Two of them: (1) anything thrown OUTSIDE the handler (param coercion, facade resolution) escaped as a rejected promise, which the transports turn into an MCP protocol fault rather than a failed tool call; (2) dispatch event listeners run synchronously on the call path, so an SSE writer whose socket died mid-write threw out of a call that had already succeeded. Fixed with an outer dispatch() wrapper and safeEmit().
+
+THE BREAKER'S REAL DESIGN QUESTION was not state machine mechanics — it was which failures count, and the plan's framing ("a wedged Postgres pool degrades one facade") would have produced a breaker that never fires. Decibel tools catch their own errors: senken_trade_summary returns {isError:true} for an unreachable Postgres (src/tools/senken.ts:117), identically to how it reports a bad strategy name. Count only throws → never trips on the motivating case. Count every isError → five malformed create_issue calls from one confused agent take sentinel offline for every client.
+
+Resolution: the signal is UNRESPONSIVENESS, not unhappiness. A throw always counts; an isError slower than 2s counts; a fast isError is neither a fault nor proof of health, so it leaves the counters untouched. Five consecutive faults open the facade for 30s, then exactly one probe at a time — a recovering database gets one connection attempt, not six. In half-open, any answer (even a domain error) closes the circuit, because answering is what is being measured.
+
+Facade and direct-tool calls share one circuit via toolToFacade, so senken.trade_summary and senken_trade_summary cannot each burn their own budget against the same pool. Open circuits surface on /health as `circuits`; `{}` is the healthy case.
+
+STILL OPEN IN PHASE 3: the ProjectResolver / RuntimeService / RuntimeClient / DaemonController separation (only IssueRepository/IssueCodec are extracted so far), and the extension registry seam Phase 7 depends on. sentinelIssues.ts still carries its own updateIssue — the second writer Phase 5 removes.

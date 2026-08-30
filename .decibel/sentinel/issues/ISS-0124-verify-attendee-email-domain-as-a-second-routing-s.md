@@ -1,10 +1,11 @@
 ---
+uid: 01a001bc-3ab3-7af1-800b-32e91580cb9d
 id: ISS-0124
 projectId: decibel-tools-mcp
 severity: low
 status: open
-created_at: 2026-08-14T19:25:08.147Z
 epic_id: EPIC-0036
+created_at: 2026-08-14T19:25:08.147Z
 ---
 
 # Verify attendee-email-domain as a second routing signal against the Zoom API
