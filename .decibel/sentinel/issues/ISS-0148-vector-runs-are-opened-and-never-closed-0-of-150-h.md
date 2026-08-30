@@ -5,8 +5,8 @@ projectId: decibel-tools-mcp
 severity: med
 status: open
 created_at: 2026-08-30T03:41:35.515Z
-priority: high
-updated_at: 2026-08-30T03:52:31.109Z
+priority: low
+updated_at: 2026-08-30T04:20:53.983Z
 linked_commits:
   - sha: 2fc205a3553d9cc80eba336995449b360c41eb5f
     shortSha: 2fc205a
@@ -26,6 +26,19 @@ linked_commits:
     message: "chore(sentinel): auto-linked commit metadata for ISS-0148"
     relationship: related
     linked_at: 2026-08-30T03:52:31.109Z
+    linked_by: ai:claude
+  - sha: 1672339e0f3a324a3426bac5e29ac8505044f56b
+    shortSha: "1672339"
+    message: "docs(ISS-0148): record the intent behind vector runs, drop to low
+      priority"
+    relationship: related
+    linked_at: 2026-08-30T04:17:58.873Z
+    linked_by: ai:claude
+  - sha: b3ab630461fe9144d0868ef010285fb7840d7b70
+    shortSha: b3ab630
+    message: "docs(ISS-0148): consumers cannot see which verbs produce runs"
+    relationship: related
+    linked_at: 2026-08-30T04:20:53.983Z
     linked_by: ai:claude
 
 ---
@@ -87,3 +100,25 @@ This is not a variant of options 2 and 4. Those both make the recency JUDGEMENT 
 The principle it follows, which is the thread running through the whole day: a field named for what it IS beats a field named for a conclusion nobody can verify. A `status: 'completed'` computed from "no events for 30 minutes" would be an inference wearing the costume of a fact — the exact defect class of the four bugs fixed on 2026-08-30, and unrecoverable once downstream consumers inherit it as truth.
 
 Note the interaction with what already shipped: `RunInfo.status` currently reports 'completed' | 'incomplete' from the presence of a terminal event, which is an observation and not an inference, so it stays honest under option 5. `last_event_at` would sit beside it rather than replace it.
+
+[2026-08-30] PRIORITY DROPPED high → low, and the reason is intent rather than evidence.
+
+Ben, 2026-08-30: vector runs are an EXPERIMENTAL feature and a nice-to-have. The idea they came from was measuring the efficiency and effectiveness of prompt flows — LLM→LLM, prompt→LLM, human→LLM→human — not general work tracking. He wants them working, but they are not load-bearing for anything shipping.
+
+I raised this to high on the "three degraded consumers" argument. That argument was sound about the mechanism and wrong about the stakes: I was counting consumers without asking what the feature was for. decibel-hq then established that the one confidently-wrong consumer (oracle-hygiene) had no downstream UI, and its fabricated success number is already fixed in #57 — that was the sharp edge, and it is gone. What remains is a design question about an experimental feature.
+
+RESOLVED IN PASSING — the decibel-hq 24-hour gap. decibel-hq recorded no runs for a full day despite continuous activity, while decibel-tools-mcp, machina and senken-trading-agent all recorded current activity. decibel-hq's hypothesis was that runs never RE-open once a recording process exits, i.e. the other face of this issue. It is not that.
+
+`withRunTracking` wraps roughly 32 tools across 9 modules, and they are the WRITE paths: sentinel create_issue/close_issue, architect create_adr, dojo, friction, learnings, coordinator, designer, agentic. Reads are not wrapped — no list_issues, no read_issue, no oracle, provenance, vector, registry, git, context or roadmap. HQ sends read traffic to decibel-hq (provenance.list, oracle.next_actions, sentinel.list_issues) and the last WRITE to that project really was 24 hours ago.
+
+So runs record work that changes something, not queries. That is consistent with the stated intent — a prompt flow is interesting when it produces a change — and it is not a bug. It does mean an "agentic inbox" keyed on runs is structurally empty for any project someone is only reading, which is a product fact worth knowing before building on it.
+
+WHAT "WORKING" WOULD ACTUALLY MEAN, given the intent. The lifecycle question in this issue (how does a run end) is necessary but nowhere near sufficient for measuring prompt-flow efficiency. That needs the flow TYPE recorded (llm→llm, prompt→llm, human→llm→human), which nothing captures today, and an outcome signal richer than a success boolean. Closing the lifecycle gap alone would produce complete runs that still cannot answer the question the feature exists to answer. Worth scoping that properly before spending on the lifecycle — the lifecycle may not even be the first thing needed.
+
+[2026-08-30] API PROPERTY WORTH FIXING IF RUNS EVER STOP BEING EXPERIMENTAL. Observed by decibel-hq, 2026-08-30:
+
+A consumer cannot tell which verbs produce runs. Nothing in the API exposes that `withRunTracking` wraps the write paths and not the read paths, so an empty run list is ambiguous in a way the consumer cannot resolve: it may be a quiet project, or it may be a project whose traffic happens to hit unwrapped code paths. HQ could see its 24-hour gap and could not see why; the answer required reading our source.
+
+That is the same family as everything else fixed today — a fact the system holds and does not surface — but it is a design property rather than a defect, and it only becomes worth fixing if something depends on runs. Exposing "this verb is tracked" (a flag on the tool definition, or a list on /health) would let consumers reason about their own gaps.
+
+It already caused one shipped bug downstream: HQ's inbox row read "last active 4m ago", which reports a project under continuous human attention as idle whenever nobody changed anything. Corrected to "last change" on their side. Note the direction of the error — the wrong label was the reassuring one, again.

@@ -19,7 +19,19 @@
  * field). Clients require an exact MAJOR match and tolerate any MINOR at or
  * above their own.
  */
-export const RUNTIME_PROTOCOL_VERSION = '1.0';
+export const RUNTIME_PROTOCOL_VERSION = '1.1';
+
+/**
+ * 1.1 — adds `GET /mcp/tools?tier=`, serving MCP tool definitions verbatim.
+ *       Additive, so an older client is unaffected. A 1.1 CLIENT against a 1.0
+ *       runtime is not: the thin stdio adapter has no local kernel and cannot
+ *       answer tools/list without that endpoint. The minor-version rule
+ *       (server.minor >= client.minor) turns that into an actionable
+ *       "restart the runtime" at handshake time rather than a bare 404 on the
+ *       first request — which is exactly the confusion this file exists to
+ *       prevent, and which it caught the first time it was exercised for real.
+ * 1.0 — initial contract: /call, /batch, /health, dispatch envelope.
+ */
 
 export interface ParsedProtocolVersion {
   major: number;

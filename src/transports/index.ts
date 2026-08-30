@@ -7,3 +7,4 @@ export { createMcpServer } from './mcp.js';
 export { StdioAdapter } from './stdio.js';
 export { HttpAdapter } from './http.js';
 export { BridgeAdapter } from './bridge.js';
+export { ThinStdioAdapter } from './thinStdio.js';

@@ -52,6 +52,7 @@ import type { AgentRegistry } from './daemon.js';
 import { setDaemonPort } from './daemon.js';
 import type { DaemonConfig } from './daemonConfig.js';
 import { RUNTIME_PROTOCOL_VERSION } from './runtime/protocol.js';
+import type { DetailTier } from './facades/types.js';
 import {
   wrapSuccess,
   wrapError,
@@ -960,6 +961,24 @@ export async function startHttpServer(
     // ========================================================================
 
     // GET /tools - List available tools
+    // MCP tool definitions, verbatim — the shape a `tools/list` response needs.
+    //
+    // This is what lets a stdio client stop building its own kernel. /tools
+    // above is a human/OpenAI-shaped summary; this one is the exact array the
+    // MCP handler returns, so a thin adapter can serve tools/list by forwarding
+    // it rather than loading 195 tool modules to produce the same bytes.
+    if (path === '/mcp/tools' && req.method === 'GET') {
+      const tierParam = url.searchParams.get('tier');
+      const tier = (tierParam === 'compact' || tierParam === 'micro' ? tierParam : 'full') as DetailTier;
+      sendJson(res, 200, wrapSuccess({
+        version: PKG.version,
+        protocol_version: RUNTIME_PROTOCOL_VERSION,
+        tier,
+        tools: kernel.getMcpToolDefinitions(tier),
+      }));
+      return;
+    }
+
     if (path === '/tools' && req.method === 'GET') {
       sendJson(res, 200, wrapSuccess({
         version: PKG.version,

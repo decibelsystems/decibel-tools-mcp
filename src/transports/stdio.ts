@@ -16,7 +16,8 @@ export class StdioAdapter implements TransportAdapter {
   readonly name = 'stdio';
   private server: Server | null = null;
 
-  async start(kernel: ToolKernel, _config: TransportConfig): Promise<void> {
+  async start(kernel: ToolKernel | null, _config: TransportConfig): Promise<void> {
+    if (!kernel) throw new Error(`${this.name} adapter requires a local kernel`);
     this.server = createMcpServer(kernel);
     const transport = new StdioServerTransport();
     await this.server.connect(transport);

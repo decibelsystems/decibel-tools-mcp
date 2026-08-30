@@ -21,7 +21,7 @@ import path from 'path';
 import { getConfig, log } from './config.js';
 import { createKernel } from './kernel.js';
 import type { DispatchEvent } from './kernel.js';
-import { StdioAdapter, HttpAdapter, BridgeAdapter } from './transports/index.js';
+import { StdioAdapter, HttpAdapter, BridgeAdapter, ThinStdioAdapter } from './transports/index.js';
 import type { TransportAdapter, TransportConfig } from './transports/index.js';
 import { parseHttpArgs } from './httpServer.js';
 import {
@@ -122,12 +122,24 @@ async function main() {
     }
   }
 
-  // Create kernel
-  const kernel = await createKernel();
+  // THIN MODE: this process owns no runtime and proxies to the shared daemon.
+  //
+  // The kernel must not be built here. `--bridge` already proxies tool CALLS,
+  // but building the kernel first means a bridge client still loads all 195
+  // tool modules, its own registry and its own caches — the memory is spent
+  // before the transport choice is made. Six clients at ~110 MB each, five of
+  // them paying for a runtime they immediately forward past. That single
+  // unconditional line is the whole of the 663 MB measured on 2026-08-30.
+  const thinMode = args.includes('--thin');
+
+  const kernel = thinMode ? null : await createKernel();
   const adapters: TransportAdapter[] = [];
 
   // In daemon mode, log all dispatches to dispatch.jsonl (async buffered writes + rotation)
   if (daemonMode) {
+    // Structural, not defensive: --thin and --daemon are contradictory. The
+    // daemon IS the runtime everything else proxies to.
+    if (!kernel) throw new Error('Daemon mode requires a local kernel — --thin and --daemon cannot be combined');
     const logsDir = path.join(process.env.HOME || '~', '.decibel', 'logs');
     fs.mkdirSync(logsDir, { recursive: true });
     const dispatchLogPath = path.join(logsDir, 'dispatch.jsonl');
@@ -252,6 +264,18 @@ async function main() {
     const http = new HttpAdapter();
     await http.start(kernel, transportConfig);
     adapters.push(http);
+  } else if (thinMode) {
+    // A thin client never executes a tool locally, so a missing runtime is a
+    // startup failure rather than something to paper over. ensureRuntime will
+    // start one if none is serving; if it cannot, the error says why and what
+    // to run.
+    const thinIdx = args.indexOf('--thin');
+    const nextThinArg = args[thinIdx + 1];
+    const explicitUrl = nextThinArg && nextThinArg.startsWith('http') ? nextThinArg : undefined;
+
+    const thin = new ThinStdioAdapter(explicitUrl);
+    await thin.start(null, transportConfig);
+    adapters.push(thin);
   } else if (args.includes('--bridge')) {
     // Bridge mode: stdio with daemon proxy
     const bridgeIdx = args.indexOf('--bridge');
