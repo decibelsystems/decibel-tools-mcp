@@ -175,7 +175,9 @@ epic_id: EPIC-0001
       expect(result.project).toBe('test-project');
       expect(result.status).toBe('open');
       expect(result.priority).toBe('medium');
-      expect(result.filePath).toContain('ISS-0001-new-bug-fix.yml');
+      // Canonical format since EPIC-0038 Phase 5 — this path used to emit .yml
+      // as a second writer into the same directory.
+      expect(result.filePath).toContain('ISS-0001-new-bug-fix.md');
     });
 
     it('should increment ID based on existing issues', async () => {
@@ -208,19 +210,22 @@ epic_id: EPIC-0001
       expect(result.description).toBe('Detailed description here');
     });
 
-    it('should write valid YAML file', async () => {
+    it('should write a canonical record with YAML frontmatter', async () => {
       const result = await createIssue({
         projectId: 'test-project',
-        title: 'YAML Test',
+        title: 'Canonical Test',
         priority: 'low',
       });
 
       const content = await fs.readFile(result.filePath, 'utf-8');
 
+      expect(content.startsWith('---\n')).toBe(true);
       expect(content).toContain('id: ISS-0001');
-      expect(content).toContain('title: YAML Test');
       expect(content).toContain('status: open');
       expect(content).toContain('priority: low');
+      // Title is the document heading in the canonical format, not a
+      // frontmatter key — the reader decodes it from there.
+      expect(content).toContain('# Canonical Test');
     });
 
     it('should include timestamps', async () => {
@@ -243,7 +248,7 @@ epic_id: EPIC-0001
         title: 'Fix: User Authentication Bug!!!',
       });
 
-      expect(result.filePath).toContain('ISS-0001-fix-user-authentication-bug.yml');
+      expect(result.filePath).toContain('ISS-0001-fix-user-authentication-bug.md');
     });
 
     it('should truncate long slugs', async () => {
@@ -254,7 +259,7 @@ epic_id: EPIC-0001
 
       // Slug should be max 50 chars
       const filename = path.basename(result.filePath);
-      const slug = filename.replace(/^ISS-\d+-/, '').replace('.yml', '');
+      const slug = filename.replace(/^ISS-\d+-/, '').replace(/\.(md|yml)$/, '');
       expect(slug.length).toBeLessThanOrEqual(50);
     });
   });

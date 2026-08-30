@@ -3,15 +3,26 @@ import path from 'path';
 import { parse as parseYaml, parseAllDocuments, stringify as stringifyYaml } from 'yaml';
 import { log } from './config.js';
 import { getWritePath, readFilesFromBothPaths } from './decibelPaths.js';
-import { allocateAndWriteIssue } from './lib/issueIdAllocator.js';
+import { FsIssueRepository } from './domain/issueRepository.js';
+import type {
+  IssueSeverity,
+  IssueStatus as CanonicalIssueStatus,
+  IssuePriority as CanonicalIssuePriority,
+} from './domain/issue.js';
 import { writeFileAtomic } from './lib/atomicWrite.js';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type IssueStatus = 'open' | 'in_progress' | 'done' | 'blocked';
-export type IssuePriority = 'low' | 'medium' | 'high';
+// Aliases, not definitions. domain/issue.ts documents why: there were three
+// disagreeing status unions, and this file held one of them — it could write
+// `done`, which no other reader's type contained, and it lacked `closed` and
+// `wontfix`, which close_issue writes. The vocabulary is closed and lives in
+// one place now. Re-exported under these names so existing importers keep
+// compiling.
+export type IssueStatus = CanonicalIssueStatus;
+export type IssuePriority = CanonicalIssuePriority;
 
 export interface SentinelIssue {
   id: string;
@@ -35,6 +46,8 @@ export interface CreateIssueInput {
   epicId?: string;
   priority?: IssuePriority;
   tags?: string[];
+  /** Optional. Defaults to 'med'. Distinct from priority — see createIssue. */
+  severity?: IssueSeverity;
 }
 
 export interface CreateIssueOutput extends SentinelIssue {
@@ -228,66 +241,68 @@ export async function listIssuesForProject(
 /**
  * Create a new issue for a project
  */
+/**
+ * Create an issue.
+ *
+ * EPIC-0038 Phase 5: this used to be the second writer. It emitted `.yml` while
+ * the facade path (src/tools/sentinel.ts -> FsIssueRepository) emitted `.md`,
+ * into the same directory, from the same ISS-NNNN space. Converging the files
+ * while both writers ran would have left this one re-emitting `.yml` behind the
+ * migration — which is why the epic sequences behaviour before representation.
+ *
+ * So it now delegates. The name, the input contract and the return shape are
+ * all preserved; only the bytes on disk change. `SentinelIssue` is a subset of
+ * the canonical `Issue`, so the mapping back is total rather than lossy:
+ * `details` carries what this API calls `description`, and everything else is
+ * the same field under the same name.
+ *
+ * One field needs a decision rather than a mapping. This API has no `severity`
+ * and the canonical model wants one, so callers may now pass it and it defaults
+ * to 'med' — the neutral middle of ['low','med','high','critical'] — rather
+ * than inventing a severity from `priority`, which answers a different question
+ * (how bad it is, versus when it gets worked on).
+ */
 export async function createIssue(
   input: CreateIssueInput
 ): Promise<CreateIssueOutput> {
-  const { projectId, title, description, epicId, priority, tags } = input;
+  const { projectId, title, description, epicId, priority, tags, severity } = input;
 
-  // Always write to .decibel/ (primary path)
   const issuesDir = await getWritePath(projectId, ISSUES_SUBPATH);
   await ensureDir(issuesDir);
 
-  // Id allocation and the write are held under one cross-process lock, shared
-  // with src/tools/sentinel.ts. Both implementations allocate from a single
-  // ISS-NNNN space into the same directory, so they must serialize against each
-  // other — not just against other instances of themselves.
-  const slug = slugify(title);
-  const now = new Date().toISOString();
+  const repo = new FsIssueRepository(issuesDir);
+  const stored = await repo.create({
+    title,
+    details: description ?? '',
+    severity: severity ?? 'med',
+    priority: priority || 'medium',
+    tags: tags || [],
+    epicId,
+    project: projectId,
+  });
 
-  const buildIssue = (newId: string): SentinelIssue => {
-    const issue: SentinelIssue = {
-      id: newId,
-      title,
-      project: projectId,
-      status: 'open',
-      priority: priority || 'medium',
-      tags: tags || [],
-      created_at: now,
-      updated_at: now,
-    };
-    if (epicId) issue.epicId = epicId;
-    if (description) issue.description = description;
-    return issue;
+  const issue = stored.issue;
+  log(`sentinelIssues: Created issue at ${stored.path}`);
+
+  // Rebuilt in this API's shape, not returned raw, so existing callers keep the
+  // response they were written against.
+  const out: CreateIssueOutput = {
+    id: issue.id,
+    title: issue.title,
+    project: issue.project ?? projectId,
+    status: issue.status,
+    priority: issue.priority,
+    tags: issue.tags,
+    created_at: issue.created_at,
+    // The canonical record omits updated_at until something updates it, but
+    // this API has always returned both on create. Echoing created_at keeps
+    // that contract without writing a redundant field to disk.
+    updated_at: issue.updated_at ?? issue.created_at,
+    filePath: stored.path,
   };
-
-  // Serialize with an explicit field order for stable, reviewable diffs.
-  const buildIssueYaml = (newId: string): string => {
-    const built = buildIssue(newId);
-    const yamlObj: Record<string, unknown> = {
-      id: built.id,
-      title: built.title,
-      project: built.project,
-      status: built.status,
-      priority: built.priority,
-    };
-    if (epicId) yamlObj.epic_id = epicId;
-    yamlObj.tags = built.tags;
-    yamlObj.created_at = built.created_at;
-    yamlObj.updated_at = built.updated_at;
-    if (description) yamlObj.description = description;
-    return stringifyYaml(yamlObj, { lineWidth: 0 }); // Don't wrap lines
-  };
-
-  const allocated = await allocateAndWriteIssue(issuesDir, 'yml', slug, buildIssueYaml);
-  const { id: newId, filename, filePath } = allocated;
-  const issue = buildIssue(newId);
-
-  log(`sentinelIssues: Created issue at ${filePath}`);
-
-  return {
-    ...issue,
-    filePath,
-  };
+  if (issue.epicId) out.epicId = issue.epicId;
+  if (issue.details) out.description = issue.details;
+  return out;
 }
 
 /**

@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
-import { ISSUE_PRIORITIES } from '../../domain/issue.js';
+import { ISSUE_PRIORITIES, ISSUE_STATUSES } from '../../domain/issue.js';
 import { toolSuccess, toolError, requireFields, requireOneOf, withRunTracking, summaryGenerators } from '../shared/index.js';
 import {
   createIssue,
@@ -779,7 +779,9 @@ export const sentinelListIssuesTool: ToolSpec = {
       const projectId = resolved.id;
 
       if (args.status) {
-        const validStatuses: SentinelIssueStatus[] = ['open', 'in_progress', 'done', 'blocked'];
+        // 'done' is gone: it was never in the canonical vocabulary, so filtering
+        // by it could only ever return nothing. See domain/issue.ts.
+        const validStatuses: SentinelIssueStatus[] = [...ISSUE_STATUSES];
         requireOneOf(args.status, 'status', validStatuses);
       }
 
@@ -865,7 +867,7 @@ export const sentinelCreateIssueTool2: ToolSpec = {
         const resolved = resolveProjectPaths(args.projectId as string | undefined);
 
         if (args.priority) {
-          const validPriorities: SentinelIssuePriority[] = ['low', 'medium', 'high'];
+          const validPriorities: SentinelIssuePriority[] = [...ISSUE_PRIORITIES];
           requireOneOf(args.priority, 'priority', validPriorities);
         }
 
