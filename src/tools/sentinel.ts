@@ -435,6 +435,102 @@ async function getNextIssueNumber(issuesDir: string): Promise<number> {
   return max + 1;
 }
 
+/**
+ * Coerce a parsed YAML mapping into the flat shape the epic reader expects.
+ * Scalars become strings, sequences become string arrays, absent stays absent.
+ */
+function normalizeFrontmatter(parsed: Record<string, unknown>): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (value === null || value === undefined) {
+      out[key] = '';
+    } else if (Array.isArray(value)) {
+      out[key] = value.map((v) => (typeof v === 'string' ? v : String(v)));
+    } else if (typeof value === 'string') {
+      out[key] = value;
+    } else if (value instanceof Date) {
+      out[key] = value.toISOString();
+    } else if (typeof value === 'object') {
+      // A nested mapping has no representation in the flat epic model. Keep it
+      // legible rather than emitting "[object Object]".
+      out[key] = JSON.stringify(value);
+    } else {
+      out[key] = String(value);
+    }
+  }
+  return out;
+}
+
+/**
+ * The pre-YAML reader: split each line on its first colon. Retained ONLY as a
+ * fallback for records YAML rejects — see parseEpicFrontmatter.
+ */
+function parseLooseFrontmatter(raw: string): Record<string, string | string[]> {
+  const frontmatter: Record<string, string | string[]> = {};
+  for (const line of raw.split('\n')) {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex > 0) {
+      const key = line.slice(0, colonIndex).trim();
+      let value = line.slice(colonIndex + 1).trim();
+
+      // Handle arrays (simple format: [item1, item2])
+      if (value.startsWith('[') && value.endsWith(']')) {
+        frontmatter[key] = value
+          .slice(1, -1)
+          .split(',')
+          .map((s) => s.trim().replace(/^"(.*)"$/s, '$1'))
+          .filter((s) => s.length > 0);
+      } else {
+        // Strip YAML-style outer quoting. yamlScalar writes values containing
+        // '#', ':' etc. as JSON-style double-quoted strings; without this,
+        // the naive parser returns the literal "..."-wrapped string.
+        if (value.length >= 2) {
+          if (value.startsWith('"') && value.endsWith('"')) {
+            try { value = JSON.parse(value); } catch { /* keep as-is on bad escape */ }
+          } else if (value.startsWith("'") && value.endsWith("'")) {
+            value = value.slice(1, -1).replace(/''/g, "'");
+          }
+        }
+        frontmatter[key] = value;
+      }
+    }
+  }
+  return frontmatter;
+}
+
+/**
+ * Parse epic frontmatter, YAML first.
+ *
+ * The fenced (`.md`) branch used to hand-roll `key: value` splitting while the
+ * bare-YAML branch six lines above used a real parser. Splitting on the first
+ * colon reports a block-scalar INDICATOR as the value — `summary: |-` read back
+ * as the literal string "|-", losing the whole summary — and then treats every
+ * indented prose line containing a colon as its own key. On EPIC-0038 that
+ * produced 11 invented keys with names like "STILL LIVE" and "degraded".
+ *
+ * YAML cannot simply replace it. 7 of 38 epic records on disk have frontmatter
+ * a real parser rejects: unquoted values containing ": ", emitted by a write
+ * path that does not quote (`title: Epic: Special Characters!`). Parsing those
+ * strictly would return null and drop them from list_epics entirely — a worse
+ * defect than the one being fixed. So YAML when the record is valid, the loose
+ * reader when it is not.
+ *
+ * The loose path is a compatibility shim for existing damage, not a supported
+ * format. It is removable once the write side stops emitting unquoted scalars
+ * (EPIC-0038 Phase 1e) and the affected records are repaired.
+ */
+function parseEpicFrontmatter(raw: string): Record<string, string | string[]> {
+  try {
+    const parsed = safeParseYaml(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return normalizeFrontmatter(parsed as Record<string, unknown>);
+    }
+  } catch {
+    // Not valid YAML — fall through rather than dropping the record.
+  }
+  return parseLooseFrontmatter(raw);
+}
+
 async function parseEpicFile(filePath: string): Promise<Epic | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
@@ -470,38 +566,10 @@ async function parseEpicFile(filePath: string): Promise<Epic | null> {
       };
     }
 
-    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (!frontmatterMatch) return null;
 
-    const frontmatter: Record<string, string | string[]> = {};
-    for (const line of frontmatterMatch[1].split('\n')) {
-      const colonIndex = line.indexOf(':');
-      if (colonIndex > 0) {
-        const key = line.slice(0, colonIndex).trim();
-        let value = line.slice(colonIndex + 1).trim();
-
-        // Handle arrays (simple format: [item1, item2])
-        if (value.startsWith('[') && value.endsWith(']')) {
-          frontmatter[key] = value
-            .slice(1, -1)
-            .split(',')
-            .map((s) => s.trim().replace(/^"(.*)"$/s, '$1'))
-            .filter((s) => s.length > 0);
-        } else {
-          // Strip YAML-style outer quoting. yamlScalar writes values containing
-          // '#', ':' etc. as JSON-style double-quoted strings; without this,
-          // the naive parser returns the literal "..."-wrapped string.
-          if (value.length >= 2) {
-            if (value.startsWith('"') && value.endsWith('"')) {
-              try { value = JSON.parse(value); } catch { /* keep as-is on bad escape */ }
-            } else if (value.startsWith("'") && value.endsWith("'")) {
-              value = value.slice(1, -1).replace(/''/g, "'");
-            }
-          }
-          frontmatter[key] = value;
-        }
-      }
-    }
+    const frontmatter = parseEpicFrontmatter(frontmatterMatch[1]);
 
     // Extract sections from body
     const bodyMatch = content.match(/---\n\n([\s\S]*)/);

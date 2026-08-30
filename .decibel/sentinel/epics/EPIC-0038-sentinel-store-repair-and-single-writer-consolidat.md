@@ -49,7 +49,7 @@ tags: []
 owner: ""
 squad: ""
 created_at: 2026-08-29T00:18:38.007Z
-updated_at: 2026-08-30T02:25:02.915Z
+updated_at: 2026-08-30T17:36:15.427Z
 ---
 
 # Decibel Runtime — repair, consolidation, and extensibility
@@ -130,3 +130,27 @@ Resolution: the signal is UNRESPONSIVENESS, not unhappiness. A throw always coun
 Facade and direct-tool calls share one circuit via toolToFacade, so senken.trade_summary and senken_trade_summary cannot each burn their own budget against the same pool. Open circuits surface on /health as `circuits`; `{}` is the healthy case.
 
 STILL OPEN IN PHASE 3: the ProjectResolver / RuntimeService / RuntimeClient / DaemonController separation (only IssueRepository/IssueCodec are extracted so far), and the extension registry seam Phase 7 depends on. sentinelIssues.ts still carries its own updateIssue — the second writer Phase 5 removes.
+
+## Note (2026-08-30T17:36:15.427Z)
+
+Phase 4 target correction (rev 3, 2026-08-30) — "under 200 MB total RSS with 6 clients" is arithmetically unreachable and is withdrawn as an acceptance criterion.
+
+Six MCP stdio processes cannot cost less than ~371 MB. The SDK floor is per-process (61.8 MB for a bare stdio MCP server that serves an empty tool list), and each MCP client spawns its own process. Going below that needs FEWER PROCESSES, which stdio does not permit. No amount of thinning the adapter reaches 200.
+
+More importantly, the byte count was the wrong criterion. Rev 2's own review outcomes already said this: "Justification isn't RAM or the ID race — it's one lifecycle, one resolver, one store impl, one behavioral model across every surface." The Phase 4 target contradicted the rev-2 reasoning by reintroducing RSS as the goal. Confirmed by Ben 2026-08-30: efficient OPERATION is the goal, not memory size.
+
+Phase 4 should be judged on the operating model, and by that measure it is met:
+  - no in-process mutation fallback (thin adapter fails with an actionable error rather than silently becoming a second writer — BridgeAdapter still has this defect)
+  - one kernel, one registry, one resolver, one write path
+  - protocol negotiation refuses a skewed runtime at handshake, not per-call
+
+Memory now serves as evidence that running thin is not penalised, not as the objective. Measured 2026-08-30 via scripts/measure-memory.mjs (external ps, not self-report):
+
+  daemon + 6 full stdio (today's default)   665.9 MB     <- reproduces the 883/663 MB figure in Measured state
+  daemon + 6 thin, as PR #58 merged it      791.3 MB     <- opting into the correct model COST 19%
+  daemon + 6 thin, after PR #59             548.9 MB     -18%
+  achievable floor (daemon + 6 bare MCP)    482.9 MB     -27%
+
+PR #58 shipped the adapter; the saving was not real because server.ts statically imported kernel.js, and an ESM static import is evaluated at module load before main() picks a mode. Skipping the createKernel() call freed the registry and nothing else. PR #59 breaks that import graph, moves argv parsing out of httpServer.ts, makes yaml lazy, and takes the thin client off undici. A thin client is now 72.8 MB against the 61.8 MB floor.
+
+Revised Phase 4 acceptance: zero duplicate ids under concurrent creates; no mutation fallback in any adapter; --thin costs no more than a full stdio client. Follow-up on the residual 11 MB per client is tracked separately and is explicitly low priority.
