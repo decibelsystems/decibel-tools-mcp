@@ -165,3 +165,48 @@ describe('per-facade circuit breaker', () => {
     });
   });
 });
+
+describe('project resolution annotation', () => {
+  // A tool that resolves a project and returns a normal payload. The kernel
+  // should leave it untouched on a real match and annotate it when the
+  // resolver substituted a different project.
+  function stubResolvingTool(): void {
+    stub(async (args) => {
+      const { resolveProjectPaths } = await import('../../src/projectRegistry.js');
+      const resolved = resolveProjectPaths((args as { project_id?: string }).project_id);
+      return { content: [{ type: 'text', text: JSON.stringify({ items: [], project: resolved.id }) }] };
+    });
+  }
+
+  it('adds nothing when the project resolved exactly', async () => {
+    stubResolvingTool();
+
+    const result = await kernel.dispatch(FACADE, { action: ACTION, project_id: process.cwd() });
+
+    expect(textOf(result).project_resolution).toBeUndefined();
+  });
+
+  it('warns the caller when a different project was served', async () => {
+    const prev = process.env.DECIBEL_PROJECT_ROOT;
+    process.env.DECIBEL_PROJECT_ROOT = process.cwd();
+    stubResolvingTool();
+
+    try {
+      const result = await kernel.dispatch(FACADE, {
+        action: ACTION,
+        project_id: 'a-project-that-does-not-exist-anywhere',
+      });
+
+      const annotation = textOf(result).project_resolution as Record<string, unknown>;
+      expect(annotation).toBeDefined();
+      expect(annotation.matched).toBe(false);
+      expect(annotation.requested).toBe('a-project-that-does-not-exist-anywhere');
+      expect(annotation.strategy).toBe('env_root_fallback');
+      // The payload itself survives — the annotation is additive.
+      expect(textOf(result).items).toEqual([]);
+    } finally {
+      if (prev === undefined) delete process.env.DECIBEL_PROJECT_ROOT;
+      else process.env.DECIBEL_PROJECT_ROOT = prev;
+    }
+  });
+});

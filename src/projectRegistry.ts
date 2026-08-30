@@ -10,6 +10,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { recordResolution } from './runtime/projectResolution.js';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -341,6 +342,7 @@ export function resolveProject(projectId: string): ProjectEntry {
       throw new Error(unavailableMessage(exactMatch, projectId));
     }
     log(`ProjectRegistry: Resolved "${projectId}" via exact ID match (${eff.source} path)`);
+    recordResolution(projectId, exactMatch.id, eff.path, 'exact_id');
     return { ...exactMatch, path: eff.path };
   }
 
@@ -352,6 +354,7 @@ export function resolveProject(projectId: string): ProjectEntry {
       throw new Error(unavailableMessage(aliasMatch, `${projectId}" (alias for "${aliasMatch.id}`));
     }
     log(`ProjectRegistry: Resolved "${projectId}" via alias -> "${aliasMatch.id}" (${eff.source} path)`);
+    recordResolution(projectId, aliasMatch.id, eff.path, 'alias');
     return { ...aliasMatch, path: eff.path };
   }
 
@@ -360,6 +363,7 @@ export function resolveProject(projectId: string): ProjectEntry {
   if (envRoot && path.basename(envRoot) === projectId) {
     if (hasDecibelFolder(envRoot)) {
       log(`ProjectRegistry: Resolved "${projectId}" via DECIBEL_PROJECT_ROOT`);
+      recordResolution(projectId, projectId, envRoot, 'env_root_exact');
       return { id: projectId, path: envRoot };
     }
   }
@@ -367,6 +371,7 @@ export function resolveProject(projectId: string): ProjectEntry {
   // Strategy 4: Absolute path with .decibel
   if (path.isAbsolute(projectId) && hasDecibelFolder(projectId)) {
     log(`ProjectRegistry: Resolved "${projectId}" as absolute path`);
+    recordResolution(projectId, path.basename(projectId), projectId, 'absolute_path');
     return { id: path.basename(projectId), path: projectId };
   }
 
@@ -374,6 +379,7 @@ export function resolveProject(projectId: string): ProjectEntry {
   const discoveredRoot = findDecibelDir(process.cwd());
   if (discoveredRoot && path.basename(discoveredRoot) === projectId) {
     log(`ProjectRegistry: Resolved "${projectId}" via cwd discovery`);
+    recordResolution(projectId, projectId, discoveredRoot, 'cwd_exact');
     return { id: projectId, path: discoveredRoot };
   }
 
@@ -381,6 +387,7 @@ export function resolveProject(projectId: string): ProjectEntry {
   // This allows tests and scripts to set a project root and use any projectId as a label
   if (envRoot && hasDecibelFolder(envRoot)) {
     log(`ProjectRegistry: Resolved "${projectId}" via DECIBEL_PROJECT_ROOT fallback (treating as label)`);
+    recordResolution(projectId, projectId, envRoot, 'env_root_fallback');
     return { id: projectId, path: envRoot };
   }
 
@@ -389,6 +396,7 @@ export function resolveProject(projectId: string): ProjectEntry {
   if (discoveredRoot) {
     const discoveredId = path.basename(discoveredRoot);
     log(`ProjectRegistry: Resolved "${projectId}" via cwd fallback (actual project: "${discoveredId}")`);
+    recordResolution(projectId, discoveredId, discoveredRoot, 'cwd_fallback');
     return { id: discoveredId, path: discoveredRoot };
   }
 
@@ -849,6 +857,9 @@ export function resolveProjectPaths(projectId?: string): ResolvedProjectPaths {
       throw new Error(msg);
     }
     project = defaultProject;
+    // No id was requested, so nothing was substituted — this is a match by
+    // definition, and the caller still learns which project it got.
+    recordResolution(undefined, project.id, project.path, 'default_project');
   }
 
   const decibelPath = path.join(project.path, '.decibel');

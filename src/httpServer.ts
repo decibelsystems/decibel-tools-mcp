@@ -53,6 +53,13 @@ import { setDaemonPort } from './daemon.js';
 import type { DaemonConfig } from './daemonConfig.js';
 import { RUNTIME_PROTOCOL_VERSION } from './runtime/protocol.js';
 import {
+  wrapSuccess,
+  wrapError,
+  envelopeHttpStatus,
+  type StatusEnvelope,
+  type ErrorEnvelope,
+} from './lib/envelope.js';
+import {
   listEpics,
   listRepoIssues,
   isProjectResolutionError,
@@ -250,21 +257,6 @@ function buildLandingPageHtml(_facades: { name: string; description: string; act
 }
 
 // ============================================================================
-// Status Envelope Types
-// ============================================================================
-
-interface StatusEnvelope {
-  status: 'executed' | 'error' | 'unavailable' | 'queued';
-  [key: string]: unknown;
-}
-
-interface ErrorEnvelope extends StatusEnvelope {
-  status: 'error';
-  error: string;
-  code?: string;
-}
-
-// ============================================================================
 // Response Helpers
 // ============================================================================
 
@@ -281,54 +273,6 @@ function formatUptime(ms: number): string {
   if (hours > 0) return `${hours}h ${minutes % 60}m`;
   if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
   return `${seconds}s`;
-}
-
-/**
- * Wrap a successful result in status envelope
- */
-function wrapSuccess(data: Record<string, unknown>): StatusEnvelope {
-  return { status: 'executed', ...data };
-}
-
-/**
- * Wrap an error in status envelope
- */
-/**
- * Sanitize error messages to prevent information disclosure.
- * Removes absolute file paths and replaces with generic placeholders.
- * Preserves URLs and relative paths.
- */
-function sanitizeErrorMessage(message: string): string {
-  let sanitized = message;
-
-  // Step 1: Preserve paths containing .decibel (keep the .decibel part, strip prefix)
-  // /home/user/project/.decibel/foo -> .decibel/foo
-  sanitized = sanitized.replace(/(?:\/[^\s:'"]+)?\/\.decibel\//g, '.decibel/');
-  sanitized = sanitized.replace(/(?:[A-Z]:\\[^\s:'"]+)?\\\.decibel\\/gi, '.decibel\\');
-
-  // Step 2: Remove absolute Unix paths (must start with / and have at least one more /)
-  // But exclude URLs (http://, https://, file://)
-  // Match: /home/user/file.txt, /var/log/app.log
-  // Don't match: http://example.com, ./relative/path
-  sanitized = sanitized.replace(
-    /(?<!:)\/(?:home|Users|var|tmp|opt|usr|etc|media|mnt)\/[^\s:'"]+/g,
-    '[path]'
-  );
-
-  // Step 3: Remove Windows absolute paths (C:\, D:\, etc.)
-  sanitized = sanitized.replace(/[A-Z]:\\[^\s:'"]+/gi, '[path]');
-
-  // Step 4: Sanitize any remaining usernames in paths that weren't caught
-  sanitized = sanitized.replace(/\/home\/[^\/\s]+\//g, '/home/[user]/');
-  sanitized = sanitized.replace(/\/Users\/[^\/\s]+\//g, '/Users/[user]/');
-  sanitized = sanitized.replace(/C:\\Users\\[^\\]+\\/gi, 'C:\\Users\\[user]\\');
-
-  return sanitized;
-}
-
-function wrapError(error: string, code?: string): ErrorEnvelope {
-  const sanitized = sanitizeErrorMessage(error);
-  return { status: 'error', error: sanitized, ...(code && { code }) };
 }
 
 /**
@@ -451,13 +395,22 @@ async function executeTool(
       return wrapError(text || 'Tool execution failed', 'TOOL_ERROR');
     }
 
-    // Parse JSON result or wrap as message
+    // Parse the tool's payload, or carry it as prose when it isn't JSON.
+    //
+    // The prose branch is legitimate — some tools return markdown — but it used
+    // to be indistinguishable from a data response that failed to parse. A
+    // caller expecting `events` got an object with no `events` key, `ok: true`,
+    // and no indication that anything unusual happened. That is how a
+    // concatenated feedback prompt (fixed in tools/shared/response.ts) turned
+    // one call in fifteen into a silent empty result for every HTTP consumer.
+    // `payload_format` makes the two cases tellable apart.
     let result: Record<string, unknown>;
     if (text) {
       try {
         result = JSON.parse(text);
       } catch {
-        result = { message: text };
+        log(`HTTP: tool ${tool} returned non-JSON text (${text.length} bytes) — carrying it as prose`);
+        result = { message: text, payload_format: 'text' };
       }
     } else {
       result = { success: true };
@@ -516,6 +469,7 @@ async function queueForAgent(
 
   return {
     status: 'queued',
+    ok: true,
     queue_id: data.id,
     message: 'Queued for local sync. Use agentic queue_status to check result.',
   };
@@ -1372,7 +1326,7 @@ export async function startHttpServer(
         const tier = await resolveTier(req, configLicenseKey);
         log(`HTTP: /call tool=${tool} tier=${tier}`);
         const result = await executeTool(tool, args, req, tier);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (message.includes('too large')) {
@@ -1419,7 +1373,7 @@ export async function startHttpServer(
 
         log(`HTTP: /batch — ${calls.length} calls (agent=${context.agentId || 'anonymous'}, tier=${tier})`);
         const results = await kernel.batch(calls, context);
-        sendJson(res, 200, { status: 'executed', results });
+        sendJson(res, 200, { status: 'executed', ok: true, results });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'BATCH_ERROR'));
@@ -1452,7 +1406,7 @@ export async function startHttpServer(
         log(`HTTP: /api/tools/${toolName}`);
 
         const result = await executeTool(toolName, body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'EXECUTION_ERROR'));
@@ -1470,7 +1424,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/wish');
         const result = await executeTool('dojo_add_wish', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1484,7 +1438,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/propose');
         const result = await executeTool('dojo_create_proposal', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1498,7 +1452,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/scaffold');
         const result = await executeTool('dojo_scaffold_experiment', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1512,7 +1466,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/run');
         const result = await executeTool('dojo_run_experiment', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1526,7 +1480,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/results');
         const result = await executeTool('dojo_read_results', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1547,7 +1501,7 @@ export async function startHttpServer(
         }
         log('HTTP: /dojo/list');
         const result = await executeTool('dojo_list', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1567,7 +1521,7 @@ export async function startHttpServer(
         }
         log('HTTP: /dojo/wishes');
         const result = await executeTool('dojo_list_wishes', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1581,7 +1535,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/can-graduate');
         const result = await executeTool('dojo_can_graduate', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1595,7 +1549,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/artifact');
         const result = await executeTool('dojo_read_artifact', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1609,7 +1563,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/bench');
         const result = await executeTool('dojo_bench', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1627,7 +1581,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /bench/run');
         const result = await executeTool('decibel_bench', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1641,7 +1595,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /bench/compare');
         const result = await executeTool('decibel_bench_compare', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1659,7 +1613,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /context/refresh');
         const result = await executeTool('decibel_context_refresh', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1673,7 +1627,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /context/pin');
         const result = await executeTool('decibel_context_pin', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1687,7 +1641,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /context/unpin');
         const result = await executeTool('decibel_context_unpin', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1707,7 +1661,7 @@ export async function startHttpServer(
         }
         log('HTTP: /context/list');
         const result = await executeTool('decibel_context_list', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1721,7 +1675,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /event/append');
         const result = await executeTool('decibel_event_append', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1749,7 +1703,7 @@ export async function startHttpServer(
         }
         log('HTTP: /event/search');
         const result = await executeTool('decibel_event_search', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1763,7 +1717,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /artifact/list');
         const result = await executeTool('decibel_artifact_list', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1777,7 +1731,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /artifact/read');
         const result = await executeTool('decibel_artifact_read', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));

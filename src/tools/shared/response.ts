@@ -54,19 +54,39 @@ export function trackToolUse(toolName: string): void {
  * Create a successful tool response
  */
 export function toolSuccess(data: unknown): ToolResult {
-  let text = JSON.stringify(data, null, 2);
+  // THE FIRST CONTENT BLOCK IS DATA AND ONLY DATA.
+  //
+  // The feedback prompt used to be concatenated onto this string:
+  //
+  //     text += '\n\n---\n' + getFeedbackPrompt();
+  //
+  // which made the block invalid JSON on every fifteenth call, and on the
+  // first call after thirty idle minutes. An agent reading the text tolerates
+  // the trailing prose, so it looked harmless for a long time. Every
+  // programmatic consumer broke instead, intermittently and at a rate nobody
+  // could tie to a cause:
+  //
+  //   - HTTP /call parses this text and falls back to `{message: <raw text>}`
+  //     when the parse fails, so one call in fifteen returned the entire
+  //     payload stringified into `message` with no `events` / `issues` key at
+  //     all. HQ read that as zero results and spent two rounds diagnosing it
+  //     as a rate limiter, then as fd exhaustion (2026-08-30).
+  //   - FacadeClient's stdio transport calls JSON.parse on it directly and
+  //     would simply throw.
+  //
+  // MCP content is a LIST of blocks for exactly this reason. The prompt is
+  // prose for a human, so it goes in its own block, where a JSON reader taking
+  // content[0] never sees it and a chat client still renders it.
+  const content: ToolResult['content'] = [{
+    type: 'text',
+    text: JSON.stringify(data, null, 2),
+  }];
 
-  // Periodically append feedback prompt
   if (shouldShowFeedbackPrompt()) {
-    text += '\n\n---\n' + getFeedbackPrompt();
+    content.push({ type: 'text', text: getFeedbackPrompt() });
   }
 
-  return {
-    content: [{
-      type: 'text',
-      text,
-    }],
-  };
+  return { content };
 }
 
 /**

@@ -19,6 +19,7 @@ import { coreFacades, proFacades, appFacades } from './facades/definitions.js';
 import { buildMcpDefinitions, validateFacades } from './facades/index.js';
 import { getEnabledFacades } from './toolConfig.js';
 import { CircuitBreakerRegistry, type CircuitSnapshot } from './runtime/circuitBreaker.js';
+import { withResolutionTracking, currentResolution } from './runtime/projectResolution.js';
 
 // ============================================================================
 // Dispatch Context — agent-readiness plumbing
@@ -201,6 +202,70 @@ export function coerceStringifiedParams(
     }
   }
   return out ?? params;
+}
+
+/**
+ * Tell the caller when the project it was served is not the project it asked
+ * for. Only fires when the resolver SUBSTITUTED one — a normal call is byte
+ * for byte unchanged, so this adds no noise to the ninety-nine percent case.
+ *
+ * The substitution is silent today by construction: strategy 7 returns a
+ * different id, and strategy 6 returns the requested id attached to a
+ * different path, so a caller comparing what it asked for against what it got
+ * cannot even detect the second one. HQ fans out across 34 projects; without
+ * this, a mistyped or unregistered id renders another project's issues under
+ * the requested project's name and nothing anywhere looks wrong.
+ *
+ * This does not change resolution — whether the forgiving strategies should
+ * apply to programmatic callers at all is a separate decision. It makes the
+ * outcome legible either way.
+ */
+function annotateResolution(result: ToolResult): ToolResult {
+  const record = currentResolution();
+  if (!record || record.matched) return result;
+
+  const text = result.content?.find((c) => c.type === 'text')?.text;
+  if (!text) return result;
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    return result; // Not JSON — leave it alone rather than mangling it.
+  }
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    return result;
+  }
+
+  const annotated = {
+    ...(payload as Record<string, unknown>),
+    project_resolution: {
+      requested: record.requested,
+      resolved: record.resolvedId,
+      strategy: record.strategy,
+      matched: false,
+      warning:
+        `This result is for project "${record.resolvedId}", not "${record.requested}". ` +
+        'The requested project could not be resolved, so the runtime substituted one ' +
+        'discovered from its own environment. Treat this data as belonging to the ' +
+        'resolved project.',
+    },
+  };
+
+  return {
+    ...result,
+    content: [{ type: 'text', text: JSON.stringify(annotated, null, 2) }],
+  };
+}
+
+/**
+ * Invoke a handler with project-resolution tracking, and annotate its result
+ * before the tracking scope closes. Annotating outside the scope reads an
+ * empty store — AsyncLocalStorage ends `run` when the callback settles, so the
+ * record is gone by the time the caller has the value in hand.
+ */
+function runTracked(tool: ToolSpec, params: Record<string, unknown>): Promise<ToolResult> {
+  return withResolutionTracking(async () => annotateResolution(await tool.handler(params)));
 }
 
 /** Best-effort one-line reason from an `isError` result, for circuit reporting. */
@@ -468,7 +533,7 @@ export async function createKernel(): Promise<ToolKernel> {
       } satisfies DispatchEvent);
 
       try {
-        const result = await tool.handler(params);
+        const result = await runTracked(tool, params);
         const duration = Date.now() - startTime;
         circuits.afterCall(name, {
           threw: false,
@@ -539,7 +604,7 @@ export async function createKernel(): Promise<ToolKernel> {
     } satisfies DispatchEvent);
 
     try {
-      const result = await tool.handler(directParams);
+      const result = await runTracked(tool, directParams);
       const duration = Date.now() - startTime;
       circuits.afterCall(key, {
         threw: false,

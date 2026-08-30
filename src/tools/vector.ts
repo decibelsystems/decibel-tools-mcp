@@ -531,10 +531,19 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
   const projectId = input.projectId || input.project_id;
   const runsDir = getRunsDir(projectId);
 
-  // Ensure runs dir exists
-  await ensureDir(runsDir);
+  // Do NOT create the directory here. This tool is annotated readOnlyHint:true
+  // and callers treat it as a read: creating `.decibel/runs/` as a side effect
+  // of listing meant a mistyped project_id got a directory made for it and an
+  // empty list back, so "wrong project" and "no runs" were indistinguishable
+  // and the mistake left a trace on disk. A missing directory is simply no runs.
+  let entries;
+  try {
+    entries = await fs.readdir(runsDir, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { runs: [] };
+    throw err;
+  }
 
-  const entries = await fs.readdir(runsDir, { withFileTypes: true });
   const runDirs = entries
     .filter(e => e.isDirectory() && e.name.startsWith('RUN-'))
     .map(e => e.name);
