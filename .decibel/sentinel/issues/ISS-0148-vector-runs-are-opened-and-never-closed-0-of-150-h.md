@@ -6,7 +6,7 @@ severity: med
 status: open
 created_at: 2026-08-30T03:41:35.515Z
 priority: high
-updated_at: 2026-08-30T03:44:59.987Z
+updated_at: 2026-08-30T03:45:29.248Z
 linked_commits:
   - sha: 2fc205a3553d9cc80eba336995449b360c41eb5f
     shortSha: 2fc205a
@@ -14,6 +14,14 @@ linked_commits:
     relationship: related
     linked_at: 2026-08-30T03:43:54.023Z
     linked_by: ai:claude
+  - sha: 105e7b89eaaaea2dea9457a96d503b3449b518e8
+    shortSha: 105e7b8
+    message: "docs(ISS-0148): last_event_at as a fifth option — expose the fact, not
+      the conclusion"
+    relationship: related
+    linked_at: 2026-08-30T03:45:29.247Z
+    linked_by: ai:claude
+
 ---
 # Vector runs are opened and never closed — 0 of 150 have ever completed
 
