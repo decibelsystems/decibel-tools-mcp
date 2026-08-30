@@ -26,6 +26,7 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { RUNTIME_PROTOCOL_VERSION, isProtocolCompatible } from './protocol.js';
+import { localJson } from './localHttp.js';
 
 const DECIBEL_HOME = join(homedir(), '.decibel');
 const META_PATH = join(DECIBEL_HOME, 'daemon.meta');
@@ -158,20 +159,15 @@ export function resolveRuntimePort(explicit?: number): number {
  * error worth surfacing.
  */
 export async function probeRuntime(port: number): Promise<RuntimeHealth | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/health`, {
-      signal: controller.signal,
+    const res = await localJson<RuntimeHealth>(`http://127.0.0.1:${port}/health`, {
+      timeoutMs: PROBE_TIMEOUT_MS,
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as RuntimeHealth;
-    if (typeof body?.status !== 'string') return null;
-    return body;
+    if (typeof res.body?.status !== 'string') return null;
+    return res.body;
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 

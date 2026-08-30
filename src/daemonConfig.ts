@@ -8,8 +8,24 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
-import YAML from 'yaml';
+import { createRequire } from 'module';
+import type * as YAMLNs from 'yaml';
 import { log } from './config.js';
+
+// `yaml` costs ~12 MB resident to import, and this module is loaded by every
+// process that reads a port number — including the thin stdio client, which
+// owns no runtime. loadConfig() returns defaults without parsing anything when
+// ~/.decibel/config.yaml is absent, which is the common case, so the parser is
+// pulled in on first actual parse rather than at module load. Kept sync via
+// createRequire because both callers are sync and making them async would
+// ripple into daemon startup ordering.
+let yamlModule: typeof YAMLNs | null = null;
+function yaml(): typeof YAMLNs {
+  if (!yamlModule) {
+    yamlModule = createRequire(import.meta.url)('yaml') as typeof YAMLNs;
+  }
+  return yamlModule;
+}
 
 // ============================================================================
 // Config Schema
@@ -69,7 +85,7 @@ export function loadConfig(): DaemonConfig {
 
   try {
     const raw = readFileSync(CONFIG_PATH, 'utf-8');
-    const parsed = YAML.parse(raw) as Partial<DaemonConfig> | null;
+    const parsed = yaml().parse(raw) as Partial<DaemonConfig> | null;
 
     if (!parsed) return { ...DEFAULT_CONFIG };
 
@@ -110,8 +126,8 @@ export function writeLicenseKey(key: string): void {
   mkdirSync(dirname(CONFIG_PATH), { recursive: true });
 
   const doc = existsSync(CONFIG_PATH)
-    ? YAML.parseDocument(readFileSync(CONFIG_PATH, 'utf-8'))
-    : new YAML.Document({});
+    ? yaml().parseDocument(readFileSync(CONFIG_PATH, 'utf-8'))
+    : new (yaml().Document)({});
 
   doc.setIn(['license', 'key'], key);
   writeFileSync(CONFIG_PATH, doc.toString(), 'utf-8');

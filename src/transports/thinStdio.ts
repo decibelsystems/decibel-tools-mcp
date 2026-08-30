@@ -41,6 +41,7 @@ import type { ToolKernel, DispatchContext } from '../kernel.js';
 import type { McpToolDefinition, DetailTier } from '../facades/types.js';
 import type { TransportAdapter, TransportConfig } from './types.js';
 import { ensureRuntime, type RuntimeHandle } from '../runtime/ensureRuntime.js';
+import { localJson, localRequest } from '../runtime/localHttp.js';
 import { envelopeFailed } from '../lib/envelope.js';
 
 const CALL_TIMEOUT_MS = 30_000;
@@ -133,30 +134,39 @@ export class ThinStdioAdapter implements TransportAdapter {
     const runtime = this.runtime;
     if (!runtime) throw new Error('Thin stdio: no runtime acquired');
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), DEFINITIONS_TIMEOUT_MS);
-    try {
-      const res = await fetch(`${runtime.url}/mcp/tools?tier=${tier}`, { signal: controller.signal });
-      const body = await res.json() as Record<string, unknown>;
-      if (res.status === 404) {
-        // Belt and braces: the protocol handshake should already have refused
-        // a runtime too old to serve this. If we get here, a runtime reported
-        // a protocol it does not actually implement.
-        throw new Error(
-          `runtime at ${runtime.url} has no /mcp/tools endpoint despite reporting protocol ` +
-          `${runtime.protocolVersion} — restart it with \`decibel-tools --daemon\` so it matches this client`
-        );
-      }
-      if (envelopeFailed(body) || !Array.isArray(body.tools)) {
-        throw new Error(`runtime returned no tool definitions (${res.status})`);
-      }
-      const tools = body.tools as McpToolDefinition[];
-      this.definitions.set(tier, tools);
-      log(`Thin stdio: loaded ${tools.length} tool definitions (tier=${tier}) from the runtime`);
-      return tools;
-    } finally {
-      clearTimeout(timer);
+    // Status before body. A runtime too old to serve this endpoint answers 404,
+    // possibly with an HTML error page; parsing first turned that into a JSON
+    // parse error instead of the actionable message below.
+    const res = await localRequest(`${runtime.url}/mcp/tools?tier=${tier}`, {
+      timeoutMs: DEFINITIONS_TIMEOUT_MS,
+    });
+
+    if (res.status === 404) {
+      // Belt and braces: the protocol handshake should already have refused a
+      // runtime too old to serve this. Reaching here means a runtime reported a
+      // protocol it does not actually implement.
+      throw new Error(
+        `runtime at ${runtime.url} has no /mcp/tools endpoint despite reporting protocol ` +
+        `${runtime.protocolVersion} — restart it with \`decibel-tools --daemon\` so it matches this client`
+      );
     }
+
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(res.text) as Record<string, unknown>;
+    } catch {
+      throw new Error(
+        `runtime returned no tool definitions (${res.status}): ${res.text.slice(0, 200)}`
+      );
+    }
+
+    if (envelopeFailed(body) || !Array.isArray(body.tools)) {
+      throw new Error(`runtime returned no tool definitions (${res.status})`);
+    }
+    const tools = body.tools as McpToolDefinition[];
+    this.definitions.set(tier, tools);
+    log(`Thin stdio: loaded ${tools.length} tool definitions (tier=${tier}) from the runtime`);
+    return tools;
   }
 
   private async call(
@@ -217,38 +227,31 @@ export class ThinStdioAdapter implements TransportAdapter {
     if (context?.scope) headers['X-Scope'] = context.scope;
     if (context?.requestId) headers['X-Request-Id'] = context.requestId;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), CALL_TIMEOUT_MS);
-    try {
-      const res = await fetch(`${runtime.url}/call`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ tool: name, arguments: args }),
-        signal: controller.signal,
-      });
+    const res = await localJson<Record<string, unknown>>(`${runtime.url}/call`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ tool: name, arguments: args }),
+      timeoutMs: CALL_TIMEOUT_MS,
+    });
+    const data = res.body;
 
-      const data = await res.json() as Record<string, unknown>;
-
-      if (envelopeFailed(data)) {
-        return {
-          content: [{ type: 'text', text: JSON.stringify({
-            error: data.error || 'Runtime returned an error',
-            code: data.code,
-          }) }],
-          isError: true,
-        };
-      }
-
-      // Strip the envelope, keep the payload. `status` needs care: dropping it
-      // unconditionally deletes the domain value from every record that has one
-      // — the same bug fixed in the client SDK's HTTP transport in #55, still
-      // present in BridgeAdapter. Only the literal envelope marker is envelope.
-      const { ok: _ok, ...result } = data;
-      if (result.status === 'executed') delete result.status;
-
-      return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-    } finally {
-      clearTimeout(timer);
+    if (envelopeFailed(data)) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({
+          error: data.error || 'Runtime returned an error',
+          code: data.code,
+        }) }],
+        isError: true,
+      };
     }
+
+    // Strip the envelope, keep the payload. `status` needs care: dropping it
+    // unconditionally deletes the domain value from every record that has one
+    // — the same bug fixed in the client SDK's HTTP transport in #55, still
+    // present in BridgeAdapter. Only the literal envelope marker is envelope.
+    const { ok: _ok, ...result } = data;
+    if (result.status === 'executed') delete result.status;
+
+    return { content: [{ type: 'text', text: JSON.stringify(result) }] };
   }
 }

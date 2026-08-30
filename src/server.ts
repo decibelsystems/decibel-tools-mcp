@@ -16,14 +16,27 @@
 //   node dist/server.js setup        → multi-client install wizard
 // ============================================================================
 
+// ---------------------------------------------------------------------------
+// Static imports are deliberately confined to modules that pull in nothing
+// heavy: node builtins, argv parsing, config files, daemon lifecycle.
+//
+// Everything that reaches the tool graph — the kernel, the HTTP server, the
+// Supabase clients, the transports that embed them — is imported dynamically
+// inside the branch that needs it. This is not stylistic. An ESM static import
+// is evaluated at module load, before main() picks a mode, so a plain
+// `import { createKernel } from './kernel.js'` loaded all 220 tool modules for
+// every client including the ones that only proxy. Skipping the createKernel()
+// CALL freed the registry and nothing else; the memory was in the import graph,
+// which is why --thin measured WORSE than full stdio (113 MB vs 97 MB) when it
+// first landed. Adding a static import of any tool-reaching module here
+// silently undoes that. See scripts/measure-memory.mjs.
+// ---------------------------------------------------------------------------
 import fs from 'fs';
 import path from 'path';
 import { getConfig, log } from './config.js';
-import { createKernel } from './kernel.js';
 import type { DispatchEvent } from './kernel.js';
-import { StdioAdapter, HttpAdapter, BridgeAdapter, ThinStdioAdapter } from './transports/index.js';
-import type { TransportAdapter, TransportConfig } from './transports/index.js';
-import { parseHttpArgs } from './httpServer.js';
+import type { TransportAdapter, TransportConfig } from './transports/types.js';
+import { parseHttpArgs } from './httpArgs.js';
 import {
   checkRunning,
   writePid,
@@ -38,11 +51,6 @@ import {
   AgentRegistry,
 } from './daemon.js';
 import { loadConfig } from './daemonConfig.js';
-import { getLicenseValidator } from './license.js';
-import { coordGarbageCollect } from './tools/coordinator/index.js';
-import { listProjects } from './projectRegistry.js';
-import { startPresenceWriter } from './agentPresence.js';
-import { startCommandDispatcher } from './agentCommands.js';
 
 const config = getConfig();
 
@@ -118,6 +126,7 @@ async function main() {
 
     // Pre-validate license key from config (fire and forget)
     if (daemonConfig.license?.key) {
+      const { getLicenseValidator } = await import('./license.js');
       getLicenseValidator().prevalidate(daemonConfig.license.key);
     }
   }
@@ -132,7 +141,10 @@ async function main() {
   // unconditional line is the whole of the 663 MB measured on 2026-08-30.
   const thinMode = args.includes('--thin');
 
-  const kernel = thinMode ? null : await createKernel();
+  // Dynamic on purpose — see the import-block note above. The `await import`
+  // is what keeps kernel.js and its 220 tool modules out of a thin client's
+  // heap, not the null assignment.
+  const kernel = thinMode ? null : await (await import('./kernel.js')).createKernel();
   const adapters: TransportAdapter[] = [];
 
   // In daemon mode, log all dispatches to dispatch.jsonl (async buffered writes + rotation)
@@ -217,6 +229,8 @@ async function main() {
         agentRegistry.sweepStale();
 
         // GC coordinator state across all registered projects
+        const { listProjects } = await import('./projectRegistry.js');
+        const { coordGarbageCollect } = await import('./tools/coordinator/index.js');
         const projects = listProjects();
         if (projects.length > 0) {
           const projectIds = projects.map(p => p.id);
@@ -234,6 +248,8 @@ async function main() {
   let stopPresence: () => void = () => {};
   let stopCommands: () => void = () => {};
   if (daemonMode) {
+    const { startPresenceWriter } = await import('./agentPresence.js');
+    const { startCommandDispatcher } = await import('./agentCommands.js');
     stopPresence = startPresenceWriter();
     stopCommands = startCommandDispatcher();
   }
@@ -241,12 +257,14 @@ async function main() {
   // Start transport(s)
   if (daemonMode) {
     // Daemon always starts HTTP
+    const { HttpAdapter } = await import('./transports/http.js');
     const http = new HttpAdapter();
     await http.start(kernel, transportConfig);
     adapters.push(http);
 
     // Optionally also start stdio (for dual-mode)
     if (args.includes('--stdio')) {
+      const { StdioAdapter } = await import('./transports/stdio.js');
       const stdio = new StdioAdapter();
       await stdio.start(kernel, transportConfig);
       adapters.push(stdio);
@@ -261,6 +279,7 @@ async function main() {
       await Promise.all(adapters.map(a => a.stop()));
     });
   } else if (httpMode) {
+    const { HttpAdapter } = await import('./transports/http.js');
     const http = new HttpAdapter();
     await http.start(kernel, transportConfig);
     adapters.push(http);
@@ -273,6 +292,7 @@ async function main() {
     const nextThinArg = args[thinIdx + 1];
     const explicitUrl = nextThinArg && nextThinArg.startsWith('http') ? nextThinArg : undefined;
 
+    const { ThinStdioAdapter } = await import('./transports/thinStdio.js');
     const thin = new ThinStdioAdapter(explicitUrl);
     await thin.start(null, transportConfig);
     adapters.push(thin);
@@ -284,10 +304,12 @@ async function main() {
     const explicitUrl = nextArg && nextArg.startsWith('http') ? nextArg : null;
     const daemonUrl = explicitUrl || `http://127.0.0.1:${transportConfig.port || 4888}`;
 
+    const { BridgeAdapter } = await import('./transports/bridge.js');
     const bridge = new BridgeAdapter(daemonUrl);
     await bridge.start(kernel, transportConfig);
     adapters.push(bridge);
   } else {
+    const { StdioAdapter } = await import('./transports/stdio.js');
     const stdio = new StdioAdapter();
     await stdio.start(kernel, transportConfig);
     adapters.push(stdio);
