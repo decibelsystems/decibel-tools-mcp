@@ -92,6 +92,22 @@ export interface RunInfo {
   run_id: string;
   agent: AgentInfo;
   created_at: string;
+  /**
+   * Always present, so a caller always has something to render.
+   *
+   * This used to be implied by the ABSENCE of `completed_at` / `success` /
+   * `summary` — those are undefined for a run with no terminal event, and
+   * JSON.stringify drops undefined keys, so the row simply arrived without
+   * them. A consumer could not tell "this run never finished" from "these
+   * fields were lost in transit", which is the same absent-versus-empty
+   * ambiguity as ISS-0146 one layer up.
+   *
+   * Deliberately NOT 'running'. Liveness cannot be known from disk — a run
+   * with no terminal event may be in progress or may belong to a process that
+   * exited an hour ago, and today every run on disk is in that state (see
+   * ISS-0148). 'incomplete' claims only what the files actually show.
+   */
+  status: 'completed' | 'incomplete';
   completed_at?: string;
   event_count: number;
   success?: boolean;
@@ -598,6 +614,7 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
         created_at: promptSpec.created_at,
         completed_at,
         event_count: eventCount,
+        status: completed_at ? 'completed' : 'incomplete',
         success,
         summary,
       });

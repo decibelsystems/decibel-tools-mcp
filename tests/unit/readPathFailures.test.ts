@@ -112,3 +112,52 @@ describe('listRuns — a read must not write', () => {
     await expect(fs.access(runsDir)).rejects.toThrow();
   });
 });
+
+describe('listRuns — state is stated, not implied by absence', () => {
+  async function writeRun(runId: string, lastEvent?: Record<string, unknown>): Promise<void> {
+    const dir = path.join(projectRoot, '.decibel', 'runs', runId);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(
+      path.join(dir, 'prompt.json'),
+      JSON.stringify({ agent: { type: 'claude-code', version: 'test' }, created_at: '2026-08-30T00:00:00.000Z' }),
+      'utf-8',
+    );
+    const events = [{ ts: '2026-08-30T00:00:01.000Z', type: 'command_ran' }];
+    if (lastEvent) events.push(lastEvent as { ts: string; type: string });
+    await fs.writeFile(
+      path.join(dir, 'events.jsonl'),
+      events.map((e) => JSON.stringify(e)).join('\n'),
+      'utf-8',
+    );
+  }
+
+  it('marks a run with no terminal event incomplete rather than omitting the field', async () => {
+    // Every run on disk is in this state today — 0 of 150 have ever been
+    // completed (ISS-0148). Before, the row simply arrived with no status at
+    // all and a caller could not tell that from a serialization loss.
+    await writeRun('RUN-2026-08-30T00-00-00-000Z');
+
+    const out = await listRuns({ projectId: projectRoot });
+
+    expect(out.runs).toHaveLength(1);
+    expect(out.runs[0].status).toBe('incomplete');
+    expect(out.runs[0].completed_at).toBeUndefined();
+  });
+
+  it('marks a run with a terminal event completed, carrying its outcome', async () => {
+    await writeRun('RUN-2026-08-30T01-00-00-000Z', {
+      ts: '2026-08-30T01:00:05.000Z',
+      type: 'run_completed',
+      payload: { success: true, summary: 'did the thing' },
+    });
+
+    const out = await listRuns({ projectId: projectRoot });
+
+    expect(out.runs[0]).toMatchObject({
+      status: 'completed',
+      completed_at: '2026-08-30T01:00:05.000Z',
+      success: true,
+      summary: 'did the thing',
+    });
+  });
+});
