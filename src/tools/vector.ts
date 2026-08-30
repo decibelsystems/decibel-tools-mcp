@@ -108,6 +108,21 @@ export interface RunInfo {
    * ISS-0148). 'incomplete' claims only what the files actually show.
    */
   status: 'completed' | 'incomplete';
+  /**
+   * Timestamp of the most recent event. A FACT read off disk, not a judgement.
+   *
+   * This is deliberately not a `completed` flag derived from silence. Nothing
+   * can observe an agent's session ending — the process just exits — so any
+   * "this run finished" computed from a quiet period is an inference wearing
+   * the costume of a fact, and once a consumer inherits it as truth there is
+   * no way back. Different consumers also want different thresholds: an inbox
+   * cares about minutes, a hygiene report about days. Handing over the input
+   * lets each decide, and commits us to nothing.
+   *
+   * Absent only when the run has no events at all, which `event_count: 0`
+   * already states unambiguously.
+   */
+  last_event_at?: string;
   completed_at?: string;
   event_count: number;
   success?: boolean;
@@ -588,6 +603,7 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
 
       // Count events and check for completion
       let eventCount = 0;
+      let last_event_at: string | undefined;
       let completed_at: string | undefined;
       let success: boolean | undefined;
       let summary: string | undefined;
@@ -600,6 +616,7 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
         // Check last event for completion
         if (lines.length > 0) {
           const lastEvent = JSON.parse(lines[lines.length - 1]) as VectorEvent;
+          last_event_at = lastEvent.ts;
           if (lastEvent.type === 'run_completed') {
             completed_at = lastEvent.ts;
             success = lastEvent.payload?.success;
@@ -612,6 +629,7 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
         run_id,
         agent: promptSpec.agent,
         created_at: promptSpec.created_at,
+        last_event_at,
         completed_at,
         event_count: eventCount,
         status: completed_at ? 'completed' : 'incomplete',

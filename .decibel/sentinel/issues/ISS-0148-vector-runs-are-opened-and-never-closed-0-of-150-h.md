@@ -6,7 +6,7 @@ severity: med
 status: open
 created_at: 2026-08-30T03:41:35.515Z
 priority: high
-updated_at: 2026-08-30T03:45:29.248Z
+updated_at: 2026-08-30T03:52:31.109Z
 linked_commits:
   - sha: 2fc205a3553d9cc80eba336995449b360c41eb5f
     shortSha: 2fc205a
@@ -20,6 +20,12 @@ linked_commits:
       the conclusion"
     relationship: related
     linked_at: 2026-08-30T03:45:29.247Z
+    linked_by: ai:claude
+  - sha: b44b62a40d8ce35f0012abf5040fbc70987a0cff
+    shortSha: b44b62a
+    message: "chore(sentinel): auto-linked commit metadata for ISS-0148"
+    relationship: related
+    linked_at: 2026-08-30T03:52:31.109Z
     linked_by: ai:claude
 
 ---

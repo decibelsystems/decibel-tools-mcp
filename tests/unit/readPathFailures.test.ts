@@ -144,6 +144,33 @@ describe('listRuns — state is stated, not implied by absence', () => {
     expect(out.runs[0].completed_at).toBeUndefined();
   });
 
+  it('reports last_event_at as a fact, leaving the judgement to the caller', async () => {
+    // Option 5 (ISS-0148): expose when the run was last active and let each
+    // consumer decide what counts as attention-worthy, rather than deriving a
+    // `completed` flag from silence that nobody can verify.
+    await writeRun('RUN-2026-08-30T02-00-00-000Z');
+
+    const out = await listRuns({ projectId: projectRoot });
+
+    expect(out.runs[0].last_event_at).toBe('2026-08-30T00:00:01.000Z');
+    expect(out.runs[0].status).toBe('incomplete');
+  });
+
+  it('omits last_event_at only when there are no events, which event_count already states', async () => {
+    const dir = path.join(projectRoot, '.decibel', 'runs', 'RUN-2026-08-30T03-00-00-000Z');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(
+      path.join(dir, 'prompt.json'),
+      JSON.stringify({ agent: { type: 'claude-code', version: 'test' }, created_at: '2026-08-30T00:00:00.000Z' }),
+      'utf-8',
+    );
+
+    const out = await listRuns({ projectId: projectRoot });
+
+    expect(out.runs[0].event_count).toBe(0);
+    expect(out.runs[0].last_event_at).toBeUndefined();
+  });
+
   it('marks a run with a terminal event completed, carrying its outcome', async () => {
     await writeRun('RUN-2026-08-30T01-00-00-000Z', {
       ts: '2026-08-30T01:00:05.000Z',
