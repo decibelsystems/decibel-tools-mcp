@@ -1,15 +1,8 @@
 ---
 id: EPIC-0037
 projectId: decibel-tools-mcp
-title: "AgentHQ as post office: model-agnostic agent-to-agent messaging over
-  remote MCP"
-summary: Make the Decibel/HQ daemon the single integration surface through which
-  heterogeneous agents (Claude Code, ChatGPT/OpenAI Responses API, local models)
-  exchange work objects — not prompts. Both vendors now speak remote MCP over
-  Streamable HTTP, so no OpenAI-specific bridge is needed. Agents talk to HQ; HQ
-  never becomes a peer of either. The shared vocabulary is a small
-  message/handoff envelope carrying references, while each agent performs work
-  through its own tools.
+title: "AgentHQ as post office: model-agnostic agent-to-agent messaging over remote MCP"
+summary: Make the Decibel/HQ daemon the single integration surface through which heterogeneous agents (Claude Code, ChatGPT/OpenAI Responses API, local models) exchange work objects — not prompts. Both vendors now speak remote MCP over Streamable HTTP, so no OpenAI-specific bridge is needed. Agents talk to HQ; HQ never becomes a peer of either. The shared vocabulary is a small message/handoff envelope carrying references, while each agent performs work through its own tools.
 status: in_progress
 priority: high
 tags:
@@ -22,7 +15,7 @@ tags:
 owner: ""
 squad: ""
 created_at: 2026-08-20T05:22:19.829Z
-updated_at: 2026-08-31T02:48:37.827Z
+updated_at: 2026-08-31T03:19:18.341Z
 linked_commits:
   - sha: c7b0e381bb0e3b71c8032a54116d2753eb18184a
     shortSha: c7b0e38
@@ -42,7 +35,12 @@ linked_commits:
     relationship: related
     linked_at: 2026-08-31T02:48:37.827Z
     linked_by: ai:claude
-
+  - sha: c1a6aee690774ba8d58c4882e5550754aeb98275
+    shortSha: c1a6aee
+    message: "chore(sentinel): auto-linked commit metadata for EPIC-0037 / ISS-0151"
+    relationship: related
+    linked_at: 2026-08-31T02:49:15.578Z
+    linked_by: ai:claude
 ---
 
 # AgentHQ as post office: model-agnostic agent-to-agent messaging over remote MCP
@@ -162,3 +160,20 @@ Second ack returns 200 rather than 404, which is what we wanted, but rewrites ac
 Two client fixes fell out of the first attempt (#69): the client was DROPPING HQ's `detail` field on rejections, which cost a round trip to diagnose; and threads.open's `project` is an HQ project UUID, not a Decibel slug — passing the slug fails a uuid cast and surfaces as a 500. HQ is taking a 400 with a clear message rather than resolving slugs, so threads.open keeps one identifier namespace.
 
 NEW: ISS-0151 — the credential is machine-global while identity is per-agent, so every session on this box authors as decibel-tools-mcp/claude-code. EPIC-0007 issue B, accepted by Ben 2026-08-25, now no longer theoretical.
+
+## Note (2026-08-31T03:19:18.341Z)
+
+2026-08-31 — ChatGPT CANNOT YET CONNECT, and the reason is protocol, not auth.
+
+hq's agent-post-office is a verb API behind OAuth, not an MCP server (verified in their source: zero hits for jsonrpc / initialize / tools/list / tools/call / protocolVersion / serverInfo / text/event-stream). ChatGPT would authenticate fine and then fail on its first initialize. HQ is building the adapter; see ISS-0132's scope warning for why this was missed.
+
+OUR CONSTRAINT ON THEIR ADAPTER, and it is load-bearing — ADR-0001 (decibel-tools-mcp): MCP tool names must match ^[a-zA-Z0-9_-]{1,64}$. NO DOTS. This repo already paid for it: when tool names were dotted for ChatGPT compatibility, Claude's MCP loader failed with 'String should match pattern' and THE ENTIRE SERVER FAILED TO LOAD — every tool gone, not one tool rejected. ChatGPT permits dots; Claude does not.
+
+HQ proposed advertising the dotted wire verbs (messages.send) in tools/list because that is what the contract froze. What froze is body.verb, which is not a tool name — MCP's tools/call carries `name` plus `arguments`, so the adapter maps name -> verb and dots stay internal:
+
+    tools/list advertises   postoffice_messages_send        (underscore, MCP-legal)
+    adapter maps to         { verb: 'messages.send', ... }  (wire contract unchanged)
+
+Those are this repo's exact registered tool names, so deriving their tools/list from ours gives one spelling on both sides rather than a third to drift. Source of truth is src/tools/postoffice/index.ts, or the daemon at /mcp/tools?tier=pro — told them to read the file rather than take a paste, since a paste is a copy that drifts.
+
+Their endpoint is a REMOTE MCP server, so a Claude client can point at it directly. Dotted names would work in ChatGPT and fail the whole server load for Claude — invisible to the consumer they would be testing with.

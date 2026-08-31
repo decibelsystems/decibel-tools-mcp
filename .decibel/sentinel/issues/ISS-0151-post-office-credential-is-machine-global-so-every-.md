@@ -20,7 +20,13 @@ linked_commits:
     relationship: related
     linked_at: 2026-08-31T02:48:37.855Z
     linked_by: ai:claude
-updated_at: 2026-08-31T02:48:37.855Z
+  - sha: c1a6aee690774ba8d58c4882e5550754aeb98275
+    shortSha: c1a6aee
+    message: "chore(sentinel): auto-linked commit metadata for EPIC-0037 / ISS-0151"
+    relationship: related
+    linked_at: 2026-08-31T02:49:15.605Z
+    linked_by: ai:claude
+updated_at: 2026-08-31T02:49:15.606Z
 
 ---
 # Post-office credential is machine-global, so every session on this box authors as one agent

@@ -6,7 +6,7 @@ severity: high
 status: in_progress
 epic_id: EPIC-0037
 created_at: 2026-08-20T05:26:38.469Z
-updated_at: 2026-08-20T05:29:08.892Z
+updated_at: 2026-08-31T03:19:18.208Z
 ---
 
 # Verify ChatGPT connector auth (opaque bearer vs OAuth) before building the EPIC-0037 post office
@@ -56,3 +56,15 @@ Sources:
 https://developers.openai.com/plugins/build/auth
 https://developers.openai.com/api/docs/mcp
 https://developers.openai.com/api/docs/guides/tools-connectors-mcp
+
+[2026-08-31] 2026-08-31 — SCOPE WARNING. This issue answered AUTH and only auth. Do not read it as clearing the ChatGPT connector generally.
+
+Verified by re-reading it: the title is 'Verify ChatGPT connector auth (opaque bearer vs OAuth)', the body covers bearer-vs-OAuth and mentions SSE and Developer Mode in passing, and it never mentions initialize, tools/list, tools/call, Streamable HTTP, or protocol at all.
+
+THE GAP THAT LEAVES, found by the decibel-hq peer 2026-08-31 when Ben asked how to point ChatGPT at the post office: hq's agent-post-office edge function IS NOT AN MCP SERVER. Confirmed in their source — zero occurrences of jsonrpc, initialize, tools/list, tools/call, protocolVersion, serverInfo or text/event-stream. It dispatches on body.verb. A ChatGPT connector is an MCP client; it would complete the OAuth handshake and then fall through to unknown_verb on its first initialize.
+
+Why it looked finished: the path is named /agents/mcp, RFC 9728 discovery in front of it is correct, and this issue verified the auth requirements first-hand. Transport was treated as auth-only — nobody asked what the connector would SAY once authenticated. Same shape as the four parser/constraint misses of 2026-08-30: the layer under examination was correct and the adjacent one was never looked at.
+
+The asymmetry that hid it: Claude Code works BECAUSE this repo is a real MCP server (stdio) wrapping HQ's HTTP API as a client. The protocol layer exists — on our side. ChatGPT talks to the URL directly, so it needs that layer on theirs.
+
+HQ owns the adapter. What we own is one constraint they were about to violate — see the note on EPIC-0037 and ADR-0001 (decibel-tools-mcp).
