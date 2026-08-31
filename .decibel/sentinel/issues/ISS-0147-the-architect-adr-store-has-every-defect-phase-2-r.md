@@ -6,7 +6,7 @@ severity: med
 status: open
 epic_id: EPIC-0038
 created_at: 2026-08-30T03:16:01.381Z
-updated_at: 2026-08-31T00:12:40.862Z
+updated_at: 2026-08-31T00:16:19.820Z
 linked_commits:
   - sha: 3ecc81b4045dcc542c096f0a65f0f4548c450909
     shortSha: 3ecc81b
@@ -14,6 +14,12 @@ linked_commits:
       collision"
     relationship: related
     linked_at: 2026-08-31T00:12:40.862Z
+    linked_by: ai:claude
+  - sha: 2eb1f931247a74e6c4141d5e27d92cabc05c2937
+    shortSha: 2eb1f93
+    message: "chore(sentinel): auto-linked commit metadata for ISS-0147"
+    relationship: related
+    linked_at: 2026-08-31T00:16:19.820Z
     linked_by: ai:claude
 
 ---

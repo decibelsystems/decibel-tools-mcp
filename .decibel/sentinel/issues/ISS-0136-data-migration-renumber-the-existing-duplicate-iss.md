@@ -3,9 +3,9 @@ uid: 01a03a87-109d-78a4-bcf6-b194cb836f3b
 id: ISS-0136
 projectId: decibel-tools-mcp
 severity: med
-status: closed
+status: open
 created_at: 2026-08-25T20:05:25.277Z
-updated_at: 2026-08-30T22:00:15.111Z
+updated_at: 2026-08-31T00:23:21.549Z
 closed_at: 2026-08-30T22:00:15.046Z
 resolution: |-
   Verified resolved 2026-08-30, two independent checks.
@@ -15,12 +15,20 @@ resolution: |-
   DATA: 0 duplicate id groups on disk, down from the 4 recorded in EPIC-0038's Measured state (ISS-0015, ISS-0028, ISS-0054, ISS-0112). Counted directly over .decibel/sentinel/issues by filename prefix AND frontmatter id: 147 records carry an ISS id, 147 distinct. list_issues independently reports no duplicate_ids key, which its contract emits only when the count is non-zero.
 
   NOTE for whoever touches this next: src/tools/sentinel.ts:9 imports allocateAndWriteIssue but never calls it, and getNextIssueNumber() at src/tools/sentinel.ts:408 — the original racy scan-then-write allocator — is still defined and also never called. Both are dead but look live. Removing them is Phase 6 backlog hygiene; leaving them invites a future misdiagnosis.
+priority: high
+linked_commits:
+  - sha: 50a42b08cde1b9b6497b9c59795ece998b7d9049
+    shortSha: 50a42b0
+    message: Reopen ISS-0136 — I closed it on a single-project scan and it says "across projects"
+    relationship: related
+    linked_at: 2026-08-31T00:19:14.445Z
+    linked_by: ai:claude
 ---
 
 # Data migration: renumber the existing duplicate ISS-NNNN ids across projects
 
 **Severity:** med
-**Status:** closed
+**Status:** open
 
 ## Details
 
@@ -60,3 +68,32 @@ MECHANISM: src/lib/issueIdAllocator.ts takes a file lock spanning allocation THR
 DATA: 0 duplicate id groups on disk, down from the 4 recorded in EPIC-0038's Measured state (ISS-0015, ISS-0028, ISS-0054, ISS-0112). Counted directly over .decibel/sentinel/issues by filename prefix AND frontmatter id: 147 records carry an ISS id, 147 distinct. list_issues independently reports no duplicate_ids key, which its contract emits only when the count is non-zero.
 
 NOTE for whoever touches this next: src/tools/sentinel.ts:9 imports allocateAndWriteIssue but never calls it, and getNextIssueNumber() at src/tools/sentinel.ts:408 — the original racy scan-then-write allocator — is still defined and also never called. Both are dead but look live. Removing them is Phase 6 backlog hygiene; leaving them invites a future misdiagnosis.
+
+[2026-08-31] REOPENED 2026-08-30. I closed this earlier today on incomplete evidence and the closure was wrong.
+
+My scan covered decibel-tools-mcp only, found 0 duplicate id groups, and I closed it. This issue's title says 'across projects'. Rescanned portfolio-wide over ~/.decibel/projects.json:
+
+  61 duplicate ISS-NNNN id groups across 5 projects
+    frontend_v0.2         34
+    senken-trading-agent  16
+    machina                8
+    decibel-studio         2
+    decibel-tools-mobile   1
+
+These are genuinely different issues sharing an id, not one record seen twice:
+  frontend_v0.2 ISS-0015 = 'Assets page: Add global delete for selected assets'
+                         + 'Auth: Configure Google OAuth in GCloud Console'
+  machina       ISS-0001 = 'Character Creation Wizard - Step-by-step UI'
+                         + 'Time Dilator Component'
+
+What IS fixed, and what my closure correctly established: the allocator (src/lib/issueIdAllocator.ts) holds a lock across allocation THROUGH write plus O_EXCL, so no NEW collisions can form; and decibel-tools-mcp itself is clean at 0 groups. The mechanism is fixed. The historical data in five other projects is not, which is exactly what this issue was filed for.
+
+WHY THIS IS NOW URGENT RATHER THAN COSMETIC — raised by the decibel-hq peer for ADRs, and it generalises. hq.sentinel_issues has UNIQUE(org_id, project_id, source_key), and source_key is the FILENAME STEM. All 61 groups have DISTINCT stems, so the constraint is fully satisfied by two rows claiming the same issue id. The uniqueness that matters is on a field the constraint never sees. The pending re-import (ISS-0133) will therefore land 61+ pairs of rows with colliding ids and no error, and HQ will render them as one id with two records — which the peer has already confirmed is happening today for ADR-0004.
+
+So this is a precondition of the re-import, not a follow-up. Repairing it is gated on the same provenance check as ADR-0010: grep .decibel/provenance in EACH affected project before renumbering, because renumbering an id that an immutable audit record references either dangles it or falsifies it.
+
+[2026-08-31] 2026-08-30 — scope clarification. This is a tracker-correctness issue on its own clock, NOT a blocker on the ISS-0133 re-import. I briefly escalated it to a precondition and the decibel-hq peer correctly pushed back; see the retraction on ISS-0133.
+
+Short version: HQ keys hq.sentinel_issues on source_key (the filename stem), which IS unique across all 61 groups, and its issues surface never renders the ISS label. So the import is unaffected. ISS-NNNN is a non-unique LABEL upstream, not the identity.
+
+Still worth repairing, and sooner rather than later: every new cross-reference to an ambiguous id adds another provenance edge, so the renumber gets more expensive the longer it waits. Gated on grepping .decibel/provenance in EACH affected project first — renumbering an id an immutable audit record references either dangles it or falsifies it (the ADR-0010 constraint, applied per-project).

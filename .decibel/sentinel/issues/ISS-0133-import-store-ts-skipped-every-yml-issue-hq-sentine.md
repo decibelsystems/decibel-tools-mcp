@@ -5,7 +5,7 @@ projectId: decibel-tools-mcp
 severity: high
 status: in_progress
 created_at: 2026-08-20T05:31:13.936Z
-updated_at: 2026-08-30T23:19:28.993Z
+updated_at: 2026-08-31T00:23:21.418Z
 ---
 
 # import-store.ts skipped every .yml issue — hq.sentinel_issues undercounted for months (code fixed, re-import not run)
@@ -59,3 +59,33 @@ One real consequence of #63 the peer got right for a different reason: daemon-ba
 WHAT ACTUALLY CHANGED FOR THIS ISSUE TODAY: PR #64 migrated all 58 bare-YAML records in decibel-tools-mcp to markdown, so the .md-only skip has nothing left to skip HERE. The undercount for this project is moot. It is not moot elsewhere — 473 .yml issue records remain across 14 other registered projects (senken-trading-agent 172, frontend_v0.2 124, deck 55, machina 43, decibel-studio 24, and nine more). The exts fix at import-store.ts:41 is what those depend on, and the re-import is still unrun.
 
 So the sequencing constraint is real but it is not the one reported: the re-import needs the exts fix (landed), not #63.
+
+[2026-08-31] 2026-08-30 — the re-import now has THREE preconditions, not one. Recording so it is not run on the assumption that 'unrun' is the only blocker.
+
+  1. Five projects holding .yml records have no hq.projects row, so 29 records have nowhere to land and will      silently not import: decibel-tools 12, habit-tracker 11, beacon 3, studio-ios 2, fuligin 1. All five are      100%-.yml stores with zero .md, which is why they never appeared — the .md-only filter meant they never      produced a row, so nothing ever created the project. HQ-side, owned by the decibel-hq peer.
+
+  2. 61 duplicate ISS-NNNN id groups across 5 projects (frontend_v0.2 34, senken-trading-agent 16, machina 8,      decibel-studio 2, decibel-tools-mobile 1). See ISS-0136, which I reopened after wrongly closing it on a      single-project scan.
+
+     THE MECHANISM, and it is the important part: hq.sentinel_issues has UNIQUE(org_id, project_id, source_key),      and source_key is the FILENAME STEM. Every one of the 61 groups has DISTINCT stems, so the constraint is      fully satisfied by two rows claiming the same issue id. The uniqueness that matters is on a field the      constraint never sees. The re-import will land 61+ colliding pairs with no error. This is not theoretical:      the decibel-hq peer confirmed the identical mechanism is already live for ADR-0004, which HQ's      /architecture route renders today as one id with two records.
+
+  3. Still unrun.
+
+Option worth considering instead of blocking on (2): import with a composite key that includes the record id, so a collision surfaces as a constraint violation rather than two silent rows. HQ's table, HQ's call — but 'silently two rows' is the current default and is the worst of the available outcomes.
+
+[2026-08-31] 2026-08-30 — RETRACTING precondition (2) from the note above. I over-escalated it; the decibel-hq peer pushed back and was right. Verified in their source before conceding.
+
+The re-import has TWO preconditions, not three:
+  1. the five missing hq.projects rows (HQ-side)
+  2. still unrun (Ben's sequencing)
+
+The 61 duplicate ISS-NNNN groups are NOT a precondition. Three reasons, the second decisive:
+
+  a. HQ's issues surface never renders the id. src/routes/Issues.tsx:143 uses source_key as a React key and as      the update handle only; the visible columns are Title, Severity, Status, Epic. 61 groups import as 122      rows with distinct titles and distinct source_keys and nothing collides visually. Confirmed by reading the      component. The ADR case is NOT analogous — Architecture.tsx:152 actually renders {adr.source_key}, which      is why that one is visible.
+
+  b. THE COMPOSITE KEY I SUGGESTED WOULD CAUSE THE HARM THIS ISSUE EXISTS TO FIX. A UNIQUE on the extracted      ISS-NNNN rejects one record from each of the 61 pairs — 61 legitimate, distinct issues silently absent.      That is under-counting, which is the entire complaint. It would also assert an invariant the source data      demonstrably does not satisfy, encoding a falsehood in a constraint. Withdrawn.
+
+  c. The ambiguity already exists on disk and the import neither creates nor worsens it. `read_issue ISS-0015`      in frontend_v0.2 is ambiguous today with no import involved. A precondition has to be something the import      would BREAK; this is orthogonal.
+
+The identity story is intact: source_key IS the identity and it is unique. ISS-NNNN is a LABEL that is non-unique upstream. My generalisation of the peer's source_key point was right in mechanism and wrong in consequence — the constraint guards identity correctly; it is the label that is broken, and the label is not what the table is keyed on.
+
+ISS-0136 stays open at high priority, on its own clock, provenance-gated per project. Worth doing and worth doing sooner — every new cross-reference to an ambiguous id is another provenance edge, so it gets harder the longer it waits. It just does not hold 473 records hostage.
