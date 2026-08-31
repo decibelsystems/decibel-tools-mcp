@@ -1,15 +1,8 @@
 ---
 id: EPIC-0037
 projectId: decibel-tools-mcp
-title: "AgentHQ as post office: model-agnostic agent-to-agent messaging over
-  remote MCP"
-summary: Make the Decibel/HQ daemon the single integration surface through which
-  heterogeneous agents (Claude Code, ChatGPT/OpenAI Responses API, local models)
-  exchange work objects — not prompts. Both vendors now speak remote MCP over
-  Streamable HTTP, so no OpenAI-specific bridge is needed. Agents talk to HQ; HQ
-  never becomes a peer of either. The shared vocabulary is a small
-  message/handoff envelope carrying references, while each agent performs work
-  through its own tools.
+title: "AgentHQ as post office: model-agnostic agent-to-agent messaging over remote MCP"
+summary: Make the Decibel/HQ daemon the single integration surface through which heterogeneous agents (Claude Code, ChatGPT/OpenAI Responses API, local models) exchange work objects — not prompts. Both vendors now speak remote MCP over Streamable HTTP, so no OpenAI-specific bridge is needed. Agents talk to HQ; HQ never becomes a peer of either. The shared vocabulary is a small message/handoff envelope carrying references, while each agent performs work through its own tools.
 status: in_progress
 priority: high
 tags:
@@ -22,7 +15,7 @@ tags:
 owner: ""
 squad: ""
 created_at: 2026-08-20T05:22:19.829Z
-updated_at: 2026-08-31T02:37:14.927Z
+updated_at: 2026-08-31T02:48:35.995Z
 linked_commits:
   - sha: c7b0e381bb0e3b71c8032a54116d2753eb18184a
     shortSha: c7b0e38
@@ -36,7 +29,6 @@ linked_commits:
     relationship: related
     linked_at: 2026-08-31T02:37:14.927Z
     linked_by: ai:claude
-
 ---
 
 # AgentHQ as post office: model-agnostic agent-to-agent messaging over remote MCP
@@ -131,3 +123,28 @@ corrections to this epic as originally filed:
 ## Note (2026-08-30T23:16:20.240Z)
 
 2026-08-30: HQ side is LIVE, not planned. Tables + RLS + OAuth 2.1 + both edge functions deployed; discovery answering at https://home.theagenthq.app with a correct RFC 9728 challenge. ISS-0134 and ISS-0135 closed against verified evidence. The client half is barely started: 1 of 7 verbs exists (agents.list, via listAgentRoster). The six unbuilt verbs were untracked until now — see the new issue. ChatGPT can write into a thread today; Claude Code cannot read or ack, and that is the only gap left before a real round trip.
+
+## Note (2026-08-31T02:48:35.994Z)
+
+2026-08-31 — FIRST LIVE ROUND TRIP COMPLETE. Two-way, threaded, with correct delivery resolution.
+
+  decibel-tools-mcp -> decibel-hq   msg 2b9f093b, delivered_session_key 'decibel-hq-hdie'
+  decibel-hq -> decibel-tools-mcp   msg eb404b76, delivered_session_key 'decibel-tools-mcp-gu3c'
+  thread 381a11fa-deca-4bd1-9a95-b8ac101d29ac, 2 messages
+
+Delivery resolved to a LIVE SESSION in both directions rather than returning null, so the presence chain (agentPresence.ts -> hq.agent_sessions -> hq.resolve_agent_session) holds end to end.
+
+READ/ACK SEPARATION VERIFIED AGAINST THE LIVE SERVICE, not a stand-in:
+  read #1 -> status 'sent' (pre-mutation state as returned)
+  read #2 -> status 'read', NOT 'acked'
+  ack     -> status 'acked'
+Reading twice never acked. A reader that died between reading and acting would have seen it again — the at-least-once property the design exists for, working.
+
+ACK IS IDEMPOTENT IN STATUS, NOT IN TIMESTAMP (HQ-side bug, observed not inferred):
+  ack #1 -> 200, acked_at 2026-08-31T02:47:09.280Z
+  ack #2 -> 200, acked_at 2026-08-31T02:47:10.239Z   (+0.959s)
+Second ack returns 200 rather than 404, which is what we wanted, but rewrites acked_at. The drift makes an ack look MORE recent, so ack-latency reads better than reality — and since a retry-on-timeout is exactly when the original ack probably did land, the drift correlates with slow calls and flatters them specifically. HQ owns the fix (coalesce(acked_at, now()) in a SECURITY DEFINER function; filtering on acked_at IS NULL would 404 the second call, which we already rejected). Until it lands, do not treat acked_at as reliable on any message that may have been acked twice.
+
+Two client fixes fell out of the first attempt (#69): the client was DROPPING HQ's `detail` field on rejections, which cost a round trip to diagnose; and threads.open's `project` is an HQ project UUID, not a Decibel slug — passing the slug fails a uuid cast and surfaces as a 500. HQ is taking a 400 with a clear message rather than resolving slugs, so threads.open keeps one identifier namespace.
+
+NEW: ISS-0151 — the credential is machine-global while identity is per-agent, so every session on this box authors as decibel-tools-mcp/claude-code. EPIC-0007 issue B, accepted by Ben 2026-08-25, now no longer theoretical.
