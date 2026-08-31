@@ -3,15 +3,30 @@ uid: 01a03a84-19bc-78c0-a222-ca74c1d0289d
 id: ISS-0135
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: closed
 epic_id: EPIC-0037
 created_at: 2026-08-25T20:02:11.004Z
+updated_at: 2026-08-30T23:15:54.291Z
+closed_at: 2026-08-30T23:15:53.936Z
+resolution: |-
+  Closed 2026-08-30. HQ-side dependency, landed by the decibel-hq peer and verified here over the wire rather than taken on report.
+
+    POST https://home.theagenthq.app/agents/mcp (unauthenticated) -> HTTP 401 with
+    www-authenticate: Bearer realm="decibel-hq", error="invalid_token",
+      error_description="a valid bearer credential is required",
+      resource_metadata="https://home.theagenthq.app/.well-known/oauth-protected-resource/agents/mcp"
+
+  That is a well-formed RFC 9728 protected-resource challenge, which is what the ChatGPT connector needs.
+
+  Applied on Core: 20260825000001 (agent_tokens, the four oauth_* tables, hq.resolve_bearer, hq.issue_agent_token). Edge functions agent-oauth and agent-post-office deployed with verify_jwt=false.
+
+  NOTE ON THE ORIGIN: discovery is https://home.theagenthq.app, NOT hq.decibelsystems.com. That domain has no DNS at all — confirmed unresolvable from here. Anything in this repo or its docs that points at hq.decibelsystems.com is wrong and will fail closed.
 ---
 
 # HQ must stand up an OAuth 2.1 authorization server in front of agent tokens (ADR-0009 phase 4 scope increase)
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 **Epic:** EPIC-0037
 
 ## Details
@@ -38,3 +53,18 @@ OWNERSHIP: this is decibel-hq's build, not decibel-tools-mcp's — the local dae
 CALIBRATION: OpenAI's docs do not formally PROHIBIT a static bearer in the connector UI; they document no path for one. Treat "OAuth required" as strongly evidenced rather than formally stated. If a static-bearer path is later confirmed, this collapses back to the token class alone — but do not plan on it.
 
 Related: ISS-0132 (the verification), ISS-0134 (durable agent identity seam), decibel-hq ADR-0009 phase 4, EPIC-0037 acceptance criteria 4 and 5.
+
+## Resolution
+
+Closed 2026-08-30. HQ-side dependency, landed by the decibel-hq peer and verified here over the wire rather than taken on report.
+
+  POST https://home.theagenthq.app/agents/mcp (unauthenticated) -> HTTP 401 with
+  www-authenticate: Bearer realm="decibel-hq", error="invalid_token",
+    error_description="a valid bearer credential is required",
+    resource_metadata="https://home.theagenthq.app/.well-known/oauth-protected-resource/agents/mcp"
+
+That is a well-formed RFC 9728 protected-resource challenge, which is what the ChatGPT connector needs.
+
+Applied on Core: 20260825000001 (agent_tokens, the four oauth_* tables, hq.resolve_bearer, hq.issue_agent_token). Edge functions agent-oauth and agent-post-office deployed with verify_jwt=false.
+
+NOTE ON THE ORIGIN: discovery is https://home.theagenthq.app, NOT hq.decibelsystems.com. That domain has no DNS at all — confirmed unresolvable from here. Anything in this repo or its docs that points at hq.decibelsystems.com is wrong and will fail closed.

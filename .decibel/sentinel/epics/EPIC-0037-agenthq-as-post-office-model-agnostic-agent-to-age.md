@@ -2,13 +2,20 @@
 id: EPIC-0037
 projectId: decibel-tools-mcp
 title: "AgentHQ as post office: model-agnostic agent-to-agent messaging over remote MCP"
-summary: "Make the Decibel/HQ daemon the single integration surface through which heterogeneous agents (Claude Code, ChatGPT/OpenAI Responses API, local models) exchange work objects — not prompts. Both vendors now speak remote MCP over Streamable HTTP, so no OpenAI-specific bridge is needed. Agents talk to HQ; HQ never becomes a peer of either. The shared vocabulary is a small message/handoff envelope carrying references, while each agent performs work through its own tools."
-status: planned
+summary: Make the Decibel/HQ daemon the single integration surface through which heterogeneous agents (Claude Code, ChatGPT/OpenAI Responses API, local models) exchange work objects — not prompts. Both vendors now speak remote MCP over Streamable HTTP, so no OpenAI-specific bridge is needed. Agents talk to HQ; HQ never becomes a peer of either. The shared vocabulary is a small message/handoff envelope carrying references, while each agent performs work through its own tools.
+status: in_progress
 priority: high
-tags: [hq, mcp, interop, agent-to-agent, openai, architecture]
+tags:
+  - hq
+  - mcp
+  - interop
+  - agent-to-agent
+  - openai
+  - architecture
 owner: ""
 squad: ""
 created_at: 2026-08-20T05:22:19.829Z
+updated_at: 2026-08-30T23:16:20.240Z
 ---
 
 # AgentHQ as post office: model-agnostic agent-to-agent messaging over remote MCP
@@ -99,3 +106,7 @@ corrections to this epic as originally filed:
 - **decibel-hq**: storage schema (`hq.agent_threads`, `hq.agent_messages`), the
   edge endpoint, and the agent-token model.
 - **decibel-tools-mcp**: the seven-verb facade and the daemon-side client.
+
+## Note (2026-08-30T23:16:20.240Z)
+
+2026-08-30: HQ side is LIVE, not planned. Tables + RLS + OAuth 2.1 + both edge functions deployed; discovery answering at https://home.theagenthq.app with a correct RFC 9728 challenge. ISS-0134 and ISS-0135 closed against verified evidence. The client half is barely started: 1 of 7 verbs exists (agents.list, via listAgentRoster). The six unbuilt verbs were untracked until now — see the new issue. ChatGPT can write into a thread today; Claude Code cannot read or ack, and that is the only gap left before a real round trip.

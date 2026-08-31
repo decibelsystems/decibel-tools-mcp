@@ -3,15 +3,25 @@ uid: 01a01daa-81d9-7d90-93dc-1db8d291d865
 id: ISS-0134
 projectId: decibel-tools-mcp
 severity: med
-status: open
+status: closed
 epic_id: EPIC-0037
 created_at: 2026-08-20T05:35:08.761Z
+updated_at: 2026-08-30T23:15:53.767Z
+closed_at: 2026-08-30T23:15:53.686Z
+resolution: |-
+  Closed 2026-08-30. Verified from this repo's own daemon, not from the HQ peer's assertion.
+
+  Every daemon start earlier today logged, once per project: 'Presence: agent identity unavailable for "<project>/claude-code" (Could not find the table hq.agents in the schema cache) — agent_id left null.' After HQ applied migrations 20260820000001 and 20260825000002, a restart of the same binary logs only 'Presence: writer started (30s heartbeat -> hq.agent_sessions, org 1cb79e24...)' with no identity warnings.
+
+  The seam was already correct: agentPresence.ts resolves a registering session to a durable hq.agents row and stamps agent_id, degrading to a null agent_id rather than failing when the table is absent. That degradation is why nothing needed redeploying when the tables appeared — the code self-healed. HQ reports 8 rows in hq.agents, all with agent_id stamped and inside the 60s liveness window, which stays pinned to LIVENESS_WINDOW_MS (c84022b).
+
+  The issue was open only because nothing re-checked it after the dependency landed.
 ---
 
 # Daemon ingest must resolve a registering session to a durable hq.agents identity (agent_id seam for EPIC-0037)
 
 **Severity:** med
-**Status:** open
+**Status:** closed
 **Epic:** EPIC-0037
 
 ## Details
@@ -37,3 +47,13 @@ ALSO REVISED — agents.list shape. decibel-hq initially specified it as a live 
 Liveness comes from hq.resolve_agent_session(agent_id), matching the Roster presence convention (status='active' AND last_seen_at within 60s), returning the live session_key or NULL. The facade must surface a NULL delivery outcome to the caller rather than swallowing it.
 
 Blocked on: the migration landing (decibel-hq, after its own POL-0001 security review), and the ADR-0009 phase 4 sequencing decision.
+
+## Resolution
+
+Closed 2026-08-30. Verified from this repo's own daemon, not from the HQ peer's assertion.
+
+Every daemon start earlier today logged, once per project: 'Presence: agent identity unavailable for "<project>/claude-code" (Could not find the table hq.agents in the schema cache) — agent_id left null.' After HQ applied migrations 20260820000001 and 20260825000002, a restart of the same binary logs only 'Presence: writer started (30s heartbeat -> hq.agent_sessions, org 1cb79e24...)' with no identity warnings.
+
+The seam was already correct: agentPresence.ts resolves a registering session to a durable hq.agents row and stamps agent_id, degrading to a null agent_id rather than failing when the table is absent. That degradation is why nothing needed redeploying when the tables appeared — the code self-healed. HQ reports 8 rows in hq.agents, all with agent_id stamped and inside the 60s liveness window, which stays pinned to LIVENESS_WINDOW_MS (c84022b).
+
+The issue was open only because nothing re-checked it after the dependency landed.

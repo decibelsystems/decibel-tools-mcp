@@ -5,7 +5,7 @@ projectId: decibel-tools-mcp
 severity: high
 status: in_progress
 created_at: 2026-08-20T05:31:13.936Z
-updated_at: 2026-08-20T19:03:06.100Z
+updated_at: 2026-08-30T23:19:28.993Z
 ---
 
 # import-store.ts skipped every .yml issue — hq.sentinel_issues undercounted for months (code fixed, re-import not run)
@@ -44,3 +44,18 @@ So the real question is not "re-run the importer" but "does the importer become 
 Related: ISS-0130 (src/store is dead code — import-store.ts turns out to be its only consumer, so it is not deletable as filed), ISS-0129, ISS-0131.
 
 [2026-08-20] Code half shipped in 4ecad91 / 2.2.0-beta.0 (npm tag `beta`): import-store.ts exts widened to .md/.yml/.yaml, source_key strips /\.(md|ya?ml)$/i, parseIssueMarkdown parses bare YAML with the column-0 salvage boundary. Staying OPEN deliberately — the re-import against Supabase (SERVICE_ROLE, 15 projects) has NOT been run and is Ben's decision, and it should not run in isolation given the stale-since-2026-05-25 finding. Real question remains "does the importer become a projector" (decibel-hq ADR-0008 conversation, their ISS-0001). Note: commit 4ecad91 carries a `Closes: ISS-0133` trailer that overstates this — the trailer is wrong, the remaining work is the re-import decision.
+
+[2026-08-30] 2026-08-30 — a correction, because the re-import was about to be sequenced on a wrong premise.
+
+The decibel-hq peer reported that the markdown truncation bug (extractDetails stopping at the first '## ', fixed in #63) made this re-import dangerous, and that #63 landing first is what makes it safe. That is NOT correct, and the reason matters: THE IMPORTER DOES NOT USE THAT PARSER.
+
+  scripts/import-store.ts:20  imports parseIssueMarkdown from src/store/markdown.js
+  src/store/markdown.ts:90    details: body.trim() || asString(fm.description) || undefined
+
+It takes the WHOLE body, never a '## Details' section, so it never had the truncation bug and #63 does not change its behaviour. The re-import was already safe from that specific failure. Two parsers for one concept again — the same shape as the epic reader (#60) and the two issue writers (#62). Check which parser a path actually reaches before reasoning about its bugs.
+
+One real consequence of #63 the peer got right for a different reason: daemon-backed HQ routes read .decibel THROUGH this repo's codec rather than parsing files, so those DID show truncated bodies and now show whole ones, with no change needed on the HQ side.
+
+WHAT ACTUALLY CHANGED FOR THIS ISSUE TODAY: PR #64 migrated all 58 bare-YAML records in decibel-tools-mcp to markdown, so the .md-only skip has nothing left to skip HERE. The undercount for this project is moot. It is not moot elsewhere — 473 .yml issue records remain across 14 other registered projects (senken-trading-agent 172, frontend_v0.2 124, deck 55, machina 43, decibel-studio 24, and nine more). The exts fix at import-store.ts:41 is what those depend on, and the re-import is still unrun.
+
+So the sequencing constraint is real but it is not the one reported: the re-import needs the exts fix (landed), not #63.

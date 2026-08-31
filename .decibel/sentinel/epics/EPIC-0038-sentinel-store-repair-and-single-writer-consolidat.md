@@ -49,7 +49,7 @@ tags: []
 owner: ""
 squad: ""
 created_at: 2026-08-29T00:18:38.007Z
-updated_at: 2026-08-30T17:36:15.427Z
+updated_at: 2026-08-31T00:05:28.738Z
 ---
 
 # Decibel Runtime — repair, consolidation, and extensibility
@@ -154,3 +154,11 @@ Memory now serves as evidence that running thin is not penalised, not as the obj
 PR #58 shipped the adapter; the saving was not real because server.ts statically imported kernel.js, and an ESM static import is evaluated at module load before main() picks a mode. Skipping the createKernel() call freed the registry and nothing else. PR #59 breaks that import graph, moves argv parsing out of httpServer.ts, makes yaml lazy, and takes the thin client off undici. A thin client is now 72.8 MB against the 61.8 MB floor.
 
 Revised Phase 4 acceptance: zero duplicate ids under concurrent creates; no mutation fallback in any adapter; --thin costs no more than a full stdio client. Follow-up on the residual 11 MB per client is tracked separately and is explicitly low priority.
+
+## Note (2026-08-31T00:05:28.738Z)
+
+2026-08-30: PHASE 5 COMPLETE. Behaviour converged first (#62: sentinelIssues.createIssue delegates to FsIssueRepository, so one writer instead of two emitting different formats into one directory), then representation (#64: all 58 bare-YAML records converted to canonical markdown; store is 174 .md, 0 .yml). Phase 5 also surfaced two defects that had nothing to do with format: #61, create_issue silently dropped priority and tags because the schema allows additional properties while the forwarding call site listed five fields; and #63, extractDetails truncated every issue body at its first author heading, which the migration caught by round-trip verification when 49 of 58 records failed it.
+
+The remaining item — renaming 79 timestamp-slug filenames — is DELIBERATELY NOT DONE and will not be done. See ADR-0010. 49 of 194 provenance events plus 2 ADRs reference those filenames, and provenance events are immutable audit records carrying content fingerprints; renaming dangles them and rewriting them falsifies the log. Identity is the id: field, which is already correct and already how records resolve. Do not reopen without building resolver aliasing first.
+
+Also closed against verified evidence this session: the ISS-NNNN collision friction (signal 3) and ISS-0136 — allocator holds a lock across allocation THROUGH write plus O_EXCL, and 0 duplicate id groups remain on disk, down from 4. Phase 2 fully done: degraded 10 to 0, wrong project values 18 to 0.
