@@ -6,7 +6,6 @@ import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
 import { emitCreateProvenance } from './provenance.js';
 import { safeParseYaml } from '../sentinelIssues.js';
-import { allocateAndWriteIssue } from '../lib/issueIdAllocator.js';
 import {
   FsIssueRepository,
   AmbiguousIssueIdError as RepoAmbiguousIssueIdError,
@@ -410,35 +409,6 @@ function canonicalIssueKey(filename: string, summaryId: string): string {
   return filename;
 }
 
-async function getNextIssueNumber(issuesDir: string): Promise<number> {
-  let max = 0;
-  try {
-    const files = await fs.readdir(issuesDir);
-    for (const file of files) {
-      const prefixMatch = file.match(/^ISS-(\d+)/i);
-      if (prefixMatch) {
-        max = Math.max(max, parseInt(prefixMatch[1], 10));
-        continue;
-      }
-      if (!isRecordFile(file)) continue;
-      try {
-        const content = await fs.readFile(path.join(issuesDir, file), 'utf-8');
-        const region = frontmatterRegion(content);
-        if (!region) continue;
-        const idLine = region.split('\n').find((l) => l.trim().toLowerCase().startsWith('id:'));
-        if (!idLine) continue;
-        const idVal = idLine.slice(idLine.indexOf(':') + 1).trim();
-        const idMatch = idVal.match(/^ISS-(\d+)$/i);
-        if (idMatch) max = Math.max(max, parseInt(idMatch[1], 10));
-      } catch {
-        // skip unreadable files
-      }
-    }
-  } catch {
-    // dir doesn't exist yet
-  }
-  return max + 1;
-}
 
 /**
  * Coerce a parsed YAML mapping into the flat shape the epic reader expects.
