@@ -73,7 +73,15 @@ const DEFAULT_CONFIG: DaemonConfig = {
 // Config Path
 // ============================================================================
 
-const CONFIG_PATH = join(homedir(), '.decibel', 'config.yaml');
+/**
+ * Resolved per call rather than captured at import. os.homedir() tracks $HOME,
+ * and a module-level constant freezes whatever HOME was when the module first
+ * loaded — which is wrong for a daemon that reloads config on SIGHUP, and
+ * untestable for anything that needs to point at a different home.
+ */
+function configPath(): string {
+  return join(homedir(), '.decibel', 'config.yaml');
+}
 
 // ============================================================================
 // Load & Parse
@@ -84,12 +92,12 @@ const CONFIG_PATH = join(homedir(), '.decibel', 'config.yaml');
  * Returns defaults if file doesn't exist or is invalid.
  */
 export function loadConfig(): DaemonConfig {
-  if (!existsSync(CONFIG_PATH)) {
+  if (!existsSync(configPath())) {
     return { ...DEFAULT_CONFIG };
   }
 
   try {
-    const raw = readFileSync(CONFIG_PATH, 'utf-8');
+    const raw = readFileSync(configPath(), 'utf-8');
     const parsed = yaml().parse(raw) as Partial<DaemonConfig> | null;
 
     if (!parsed) return { ...DEFAULT_CONFIG };
@@ -114,7 +122,7 @@ export function loadConfig(): DaemonConfig {
       agents: (parsed as Record<string, unknown>).agents as Record<string, AgentConfig> | undefined,
     };
   } catch (err) {
-    log(`Config: Failed to parse ${CONFIG_PATH}: ${err}`);
+    log(`Config: Failed to parse ${configPath()}: ${err}`);
     return { ...DEFAULT_CONFIG };
   }
 }
@@ -123,7 +131,7 @@ export function loadConfig(): DaemonConfig {
  * Get the config file path (for display purposes).
  */
 export function getConfigPath(): string {
-  return CONFIG_PATH;
+  return configPath();
 }
 
 /**
@@ -132,14 +140,14 @@ export function getConfigPath(): string {
  * this file is hand-edited by users.
  */
 export function writeLicenseKey(key: string): void {
-  mkdirSync(dirname(CONFIG_PATH), { recursive: true });
+  mkdirSync(dirname(configPath()), { recursive: true });
 
-  const doc = existsSync(CONFIG_PATH)
-    ? yaml().parseDocument(readFileSync(CONFIG_PATH, 'utf-8'))
+  const doc = existsSync(configPath())
+    ? yaml().parseDocument(readFileSync(configPath(), 'utf-8'))
     : new (yaml().Document)({});
 
   doc.setIn(['license', 'key'], key);
-  writeFileSync(CONFIG_PATH, doc.toString(), 'utf-8');
+  writeFileSync(configPath(), doc.toString(), 'utf-8');
 }
 
 /**

@@ -22,13 +22,19 @@ tags:
 owner: ""
 squad: ""
 created_at: 2026-08-20T05:22:19.829Z
-updated_at: 2026-08-31T02:32:40.263Z
+updated_at: 2026-08-31T02:37:14.927Z
 linked_commits:
   - sha: c7b0e381bb0e3b71c8032a54116d2753eb18184a
     shortSha: c7b0e38
     message: "EPIC-0037: the post office client — all seven verbs"
     relationship: related
     linked_at: 2026-08-31T02:32:40.263Z
+    linked_by: ai:claude
+  - sha: 2b77052d615842d438504192295183722010651e
+    shortSha: 2b77052
+    message: "chore(sentinel): close ISS-0150, note the client shipped on EPIC-0037"
+    relationship: related
+    linked_at: 2026-08-31T02:37:14.927Z
     linked_by: ai:claude
 
 ---

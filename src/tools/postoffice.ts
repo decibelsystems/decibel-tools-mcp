@@ -146,7 +146,15 @@ export async function postOfficeCall(
     return body;
   }
 
-  const message = typeof body.error === 'string' ? body.error : `HTTP ${res.status}`;
+  // The far side attaches `detail` to rejections that came from Postgres —
+  // a CHECK bound, a type mismatch, a missing FK. That detail IS the
+  // actionable half: "thread_rejected" says nothing, while
+  // 'invalid input syntax for type uuid: "decibel-tools-mcp"' says exactly
+  // what to pass instead. Dropping it was the first thing that cost a
+  // round-trip attempt to diagnose.
+  const base = typeof body.error === 'string' ? body.error : `HTTP ${res.status}`;
+  const detail = typeof body.detail === 'string' ? body.detail : undefined;
+  const message = detail ? `${base}: ${detail}` : base;
   if (res.status === 401) {
     return {
       error: `The post office rejected this agent's credential: ${message}`,
@@ -184,7 +192,17 @@ export function agentsList() {
   return postOfficeCall('agents.list');
 }
 
-export interface ThreadsOpenInput { subject: string; project?: string; intent?: string; }
+export interface ThreadsOpenInput {
+  subject: string;
+  /**
+   * HQ project UUID, NOT a Decibel project slug. hq.agent_threads.project_id is
+   * a uuid referencing hq.projects, so passing 'decibel-tools-mcp' is rejected
+   * by Postgres rather than resolved. There is no lookup verb in the seven, so
+   * a caller that does not already hold the uuid should omit this.
+   */
+  project?: string;
+  intent?: string;
+}
 export function threadsOpen(input: ThreadsOpenInput) {
   return postOfficeCall('threads.open', {
     subject: input.subject,

@@ -12,9 +12,18 @@ tags:
   - agent-hq
   - facade
 created_at: 2026-08-30T23:16:20.071Z
-updated_at: 2026-08-31T02:32:39.740Z
+updated_at: 2026-08-31T02:37:14.897Z
 closed_at: 2026-08-31T02:32:39.618Z
-resolution: "Resolved by commit c7b0e38: EPIC-0037: the post office client — all seven verbs"
+resolution: "Resolved by commit c7b0e38: EPIC-0037: the post office client — all
+  seven verbs"
+linked_commits:
+  - sha: 2b77052d615842d438504192295183722010651e
+    shortSha: 2b77052
+    message: "chore(sentinel): close ISS-0150, note the client shipped on EPIC-0037"
+    relationship: closes
+    linked_at: 2026-08-31T02:37:14.897Z
+    linked_by: ai:claude
+
 ---
 # Six of the seven post-office verbs do not exist — Claude Code cannot read or ack a thread
 

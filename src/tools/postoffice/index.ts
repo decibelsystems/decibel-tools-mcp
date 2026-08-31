@@ -65,7 +65,7 @@ export const postOfficeThreadsOpenTool: ToolSpec = {
       type: 'object',
       properties: {
         subject: { type: 'string', description: 'What the thread is about. Required.' },
-        project: { type: 'string', description: 'Optional project this thread concerns.' },
+        project: { type: 'string', description: 'Optional HQ project UUID (not a Decibel project slug — hq.agent_threads.project_id is a uuid). Omit unless you hold the uuid.' },
         intent: { type: 'string', description: 'Optional free-text intent for the thread as a whole.' },
       },
       required: ['subject'],

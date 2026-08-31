@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { createServer, Server, IncomingMessage } from 'http';
 import { AddressInfo } from 'net';
+import { mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import {
   agentsList, threadsOpen, messagesSend, messagesRead, messagesAck,
   handoffRequest, handoffRespond, isPostOfficeError,
@@ -75,6 +78,11 @@ describe('post office transport', () => {
   });
 
   it('reports an unconfigured credential as instructions, not a failure', async () => {
+    // HOME is redirected so this does not depend on whether the developer
+    // running the suite happens to have a real ~/.decibel/config.yaml. It
+    // started failing the moment a credential was configured on this machine.
+    const realHome = process.env.HOME;
+    process.env.HOME = mkdtempSync(join(tmpdir(), 'po-nohome-'));
     delete process.env.DECIBEL_HQ_TOKEN;
     const res = await agentsList();
     expect(isPostOfficeError(res)).toBe(true);
@@ -83,6 +91,7 @@ describe('post office transport', () => {
       expect(res.hint).toContain('issue_agent_token');
     }
     expect(seen).toHaveLength(0); // never attempted
+    if (realHome) process.env.HOME = realHome;
   });
 
   it('distinguishes 401 from 403 and names the missing scope', async () => {
@@ -94,6 +103,28 @@ describe('post office transport', () => {
     const forbidden = await messagesAck({ message: 'm1' });
     expect(isPostOfficeError(forbidden) && forbidden.code).toBe('HQ_FORBIDDEN');
     if (isPostOfficeError(forbidden)) expect(forbidden.error).toContain('postoffice.write');
+  });
+
+  it('surfaces the detail field, which carries the actionable half', async () => {
+    // "thread_rejected" says nothing; the detail names what to pass instead.
+    // Dropping it cost a round-trip attempt to diagnose.
+    respond = () => ({
+      status: 500,
+      body: { error: 'thread_rejected', detail: 'invalid input syntax for type uuid: "decibel-tools-mcp"' },
+    });
+    const res = await threadsOpen({ subject: 's', project: 'decibel-tools-mcp' });
+    expect(isPostOfficeError(res)).toBe(true);
+    if (isPostOfficeError(res)) {
+      expect(res.error).toContain('thread_rejected');
+      expect(res.error).toContain('invalid input syntax for type uuid');
+    }
+  });
+
+  it('still reads cleanly when there is no detail', async () => {
+    respond = () => ({ status: 500, body: { error: 'read_failed' } });
+    const res = await messagesRead();
+    expect(isPostOfficeError(res) && res.error).toContain('read_failed');
+    expect(isPostOfficeError(res) && res.error).not.toContain('undefined');
   });
 
   it('surfaces an unknown verb with the supported list', async () => {
