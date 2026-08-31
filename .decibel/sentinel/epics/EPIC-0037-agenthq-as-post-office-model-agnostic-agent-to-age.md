@@ -1,8 +1,15 @@
 ---
 id: EPIC-0037
 projectId: decibel-tools-mcp
-title: "AgentHQ as post office: model-agnostic agent-to-agent messaging over remote MCP"
-summary: Make the Decibel/HQ daemon the single integration surface through which heterogeneous agents (Claude Code, ChatGPT/OpenAI Responses API, local models) exchange work objects — not prompts. Both vendors now speak remote MCP over Streamable HTTP, so no OpenAI-specific bridge is needed. Agents talk to HQ; HQ never becomes a peer of either. The shared vocabulary is a small message/handoff envelope carrying references, while each agent performs work through its own tools.
+title: "AgentHQ as post office: model-agnostic agent-to-agent messaging over
+  remote MCP"
+summary: Make the Decibel/HQ daemon the single integration surface through which
+  heterogeneous agents (Claude Code, ChatGPT/OpenAI Responses API, local models)
+  exchange work objects — not prompts. Both vendors now speak remote MCP over
+  Streamable HTTP, so no OpenAI-specific bridge is needed. Agents talk to HQ; HQ
+  never becomes a peer of either. The shared vocabulary is a small
+  message/handoff envelope carrying references, while each agent performs work
+  through its own tools.
 status: in_progress
 priority: high
 tags:
@@ -15,7 +22,7 @@ tags:
 owner: ""
 squad: ""
 created_at: 2026-08-20T05:22:19.829Z
-updated_at: 2026-08-31T02:48:35.995Z
+updated_at: 2026-08-31T02:48:37.827Z
 linked_commits:
   - sha: c7b0e381bb0e3b71c8032a54116d2753eb18184a
     shortSha: c7b0e38
@@ -29,6 +36,13 @@ linked_commits:
     relationship: related
     linked_at: 2026-08-31T02:37:14.927Z
     linked_by: ai:claude
+  - sha: 2bb21b3b446adb424b4eb6c23af821b3a82ebd4f
+    shortSha: 2bb21b3
+    message: "EPIC-0037: record the first live round trip, and file ISS-0151"
+    relationship: related
+    linked_at: 2026-08-31T02:48:37.827Z
+    linked_by: ai:claude
+
 ---
 
 # AgentHQ as post office: model-agnostic agent-to-agent messaging over remote MCP

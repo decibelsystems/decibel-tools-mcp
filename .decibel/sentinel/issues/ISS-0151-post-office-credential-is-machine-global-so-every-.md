@@ -13,6 +13,15 @@ tags:
   - security
   - epic-0007-issue-b
 created_at: 2026-08-31T02:48:02.310Z
+linked_commits:
+  - sha: 2bb21b3b446adb424b4eb6c23af821b3a82ebd4f
+    shortSha: 2bb21b3
+    message: "EPIC-0037: record the first live round trip, and file ISS-0151"
+    relationship: related
+    linked_at: 2026-08-31T02:48:37.855Z
+    linked_by: ai:claude
+updated_at: 2026-08-31T02:48:37.855Z
+
 ---
 # Post-office credential is machine-global, so every session on this box authors as one agent
 
