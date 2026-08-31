@@ -233,6 +233,12 @@ export interface GetEpicInput {
   epic_id: string;
 }
 
+export interface EpicNote {
+  /** ISO timestamp from the `## Note (…)` heading update_epic writes. */
+  at: string;
+  text: string;
+}
+
 export interface Epic {
   id: string;
   title: string;
@@ -246,6 +252,17 @@ export interface Epic {
   owner: string;
   squad: string;
   created_at: string;
+  /**
+   * Timestamped notes appended by update_epic, oldest first.
+   *
+   * These were written to the body and then unreadable: the model had no field
+   * for them, so read_epic returned an epic whose entire revision history was
+   * missing. EPIC-0038 alone carried five, including the note recording why
+   * Phase 4's target was withdrawn and why the filename renames were dropped —
+   * the two decisions most likely to be re-litigated by someone reading the
+   * epic through the tool.
+   */
+  notes: EpicNote[];
 }
 
 export interface GetEpicOutput {
@@ -538,6 +555,11 @@ async function parseEpicFile(filePath: string): Promise<Epic | null> {
         owner: str('owner'),
         squad: str('squad'),
         created_at: str('created_at'),
+        // Bare-YAML epics have no markdown body, so there is nowhere for a
+        // `## Note (…)` section to live. Empty, not absent — callers should
+        // not have to distinguish "no notes" from "this format cannot hold
+        // notes".
+        notes: [],
       };
     }
 
@@ -549,6 +571,26 @@ async function parseEpicFile(filePath: string): Promise<Epic | null> {
     // Extract sections from body
     const bodyMatch = content.match(/---\n\n([\s\S]*)/);
     const body = bodyMatch ? bodyMatch[1] : '';
+
+    /**
+     * Notes are `## Note (<iso>)` sections appended by update_epic, so the
+     * reader is written against that exact shape rather than against any
+     * heading that looks note-ish. A section runs to the next `##` at column
+     * zero or to the end of the body.
+     */
+    const extractNotes = (): EpicNote[] => {
+      const out: EpicNote[] = [];
+      const re = /^##\s+Note\s*\(([^)]*)\)\s*$/gm;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(body)) !== null) {
+        const from = m.index + m[0].length;
+        const rest = body.slice(from);
+        const next = rest.search(/^##\s/m);
+        const text = (next === -1 ? rest : rest.slice(0, next)).trim();
+        if (text) out.push({ at: m[1].trim(), text });
+      }
+      return out;
+    };
 
     const extractList = (section: string): string[] => {
       const regex = new RegExp(`## ${section}\\n([\\s\\S]*?)(?=\\n## |$)`);
@@ -573,6 +615,7 @@ async function parseEpicFile(filePath: string): Promise<Epic | null> {
       owner: frontmatter.owner as string || '',
       squad: frontmatter.squad as string || '',
       created_at: frontmatter.created_at as string || '',
+      notes: extractNotes(),
     };
   } catch {
     return null;
