@@ -484,6 +484,23 @@ export const proFacades: FacadeSpec[] = [
   },
 
   {
+    name: 'postoffice',
+    description: "Agent-to-agent messaging through AgentHQ (EPIC-0037). Open a thread, send into it, read your mail, ack what you have acted on, and hand work over. Reading does NOT ack — they are separate on purpose, so a reader that dies before acting re-reads rather than silently losing the message. Do not poll messages_read with status='sent'. Actions: agents_list, threads_open, messages_send, messages_read, messages_ack, handoff_request, handoff_respond",
+    compactDescription: 'Agent-to-agent messaging via AgentHQ',
+    microEligible: false,
+    tier: 'pro',
+    actions: {
+      agents_list: 'postoffice_agents_list',
+      threads_open: 'postoffice_threads_open',
+      messages_send: 'postoffice_messages_send',
+      messages_read: 'postoffice_messages_read',
+      messages_ack: 'postoffice_messages_ack',
+      handoff_request: 'postoffice_handoff_request',
+      handoff_respond: 'postoffice_handoff_respond',
+    },
+  },
+
+  {
     name: 'studio',
     description: 'Creative asset generation: images, video, 3D. generate_image returns a job ID — poll get_image_status until complete. Artifacts are the persistent asset records; projects group related artifacts. Device endpoints are for GPU render workers. Actions: generate_image, get_image_status, create_artifact, update_artifact, list_artifacts, create_project, read_project, list_projects, list_tasks, list_jobs, claim_job, update_job, register_device, heartbeat, sync_events',
     compactDescription: 'Generate images, video, and 3D assets',

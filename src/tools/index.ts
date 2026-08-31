@@ -128,13 +128,15 @@ async function loadProTools(): Promise<ToolSpec[]> {
     { voiceTools },
     { studioTools },
     { corpusTools },
+    { postOfficeTools },
   ] = await Promise.all([
     import('./voice/index.js'),
     import('./studio/index.js'),
     import('./corpus/index.js'),
+    import('./postoffice/index.js'),
   ]);
 
-  return [...voiceTools, ...studioTools, ...corpusTools];
+  return [...voiceTools, ...studioTools, ...corpusTools, ...postOfficeTools];
 }
 
 // Export sync version for backward compat (pro tools loaded async)

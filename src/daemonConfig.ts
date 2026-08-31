@@ -47,6 +47,11 @@ export interface DaemonConfig {
     rate_limit_rpm: number;
     gc_interval_secs: number;
   };
+  /** AgentHQ post office (EPIC-0037). The token is a secret — see tools/postoffice.ts. */
+  hq?: {
+    url?: string;
+    token?: string;
+  };
   license?: {
     key?: string;
   };
@@ -99,6 +104,10 @@ export function loadConfig(): DaemonConfig {
         rate_limit_rpm: parsed.daemon?.rate_limit_rpm ?? DEFAULT_CONFIG.daemon.rate_limit_rpm,
         gc_interval_secs: parsed.daemon?.gc_interval_secs ?? DEFAULT_CONFIG.daemon.gc_interval_secs,
       },
+      hq: parsed.hq ? {
+        url: parsed.hq.url,
+        token: parsed.hq.token,
+      } : undefined,
       license: parsed.license ? {
         key: parsed.license.key,
       } : undefined,
