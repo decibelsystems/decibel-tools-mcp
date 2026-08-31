@@ -3,7 +3,7 @@ uid: 01a054f5-a5e8-7089-b9e7-bbecd5a96c4a
 id: ISS-0150
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: closed
 priority: high
 epic_id: EPIC-0037
 tags:
@@ -12,12 +12,14 @@ tags:
   - agent-hq
   - facade
 created_at: 2026-08-30T23:16:20.071Z
-updated_at: 2026-08-30T23:19:29.130Z
+updated_at: 2026-08-31T02:32:39.740Z
+closed_at: 2026-08-31T02:32:39.618Z
+resolution: "Resolved by commit c7b0e38: EPIC-0037: the post office client — all seven verbs"
 ---
 # Six of the seven post-office verbs do not exist — Claude Code cannot read or ack a thread
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 **Epic:** EPIC-0037
 
 ## Details
@@ -52,3 +54,7 @@ messages.read MUST NOT implicitly ack. They stay separate.
   3. THE BUG THAT WOULD SILENTLY UNDO THIS: if messages.read sets status='read', then a mailbox query of      status='sent' never returns it again and a crashed reader cannot recover it — separate columns,      at-most-once behaviour anyway. The mailbox predicate must be status NOT IN ('acked','failed'), never      status='sent'. The index hq_agent_messages_inbox_idx on (to_agent_id, status, created_at desc) supports      either, so nothing stops it being written wrong.
 
 Corollaries: ack is idempotent (acking twice is not an error); read is non-destructive.
+
+## Resolution
+
+Resolved by commit c7b0e38: EPIC-0037: the post office client — all seven verbs
