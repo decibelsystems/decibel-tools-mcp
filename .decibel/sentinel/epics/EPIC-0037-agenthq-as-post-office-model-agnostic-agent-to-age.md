@@ -1,8 +1,15 @@
 ---
 id: EPIC-0037
 projectId: decibel-tools-mcp
-title: "AgentHQ as post office: model-agnostic agent-to-agent messaging over remote MCP"
-summary: Make the Decibel/HQ daemon the single integration surface through which heterogeneous agents (Claude Code, ChatGPT/OpenAI Responses API, local models) exchange work objects — not prompts. Both vendors now speak remote MCP over Streamable HTTP, so no OpenAI-specific bridge is needed. Agents talk to HQ; HQ never becomes a peer of either. The shared vocabulary is a small message/handoff envelope carrying references, while each agent performs work through its own tools.
+title: "AgentHQ as post office: model-agnostic agent-to-agent messaging over
+  remote MCP"
+summary: Make the Decibel/HQ daemon the single integration surface through which
+  heterogeneous agents (Claude Code, ChatGPT/OpenAI Responses API, local models)
+  exchange work objects — not prompts. Both vendors now speak remote MCP over
+  Streamable HTTP, so no OpenAI-specific bridge is needed. Agents talk to HQ; HQ
+  never becomes a peer of either. The shared vocabulary is a small
+  message/handoff envelope carrying references, while each agent performs work
+  through its own tools.
 status: in_progress
 priority: high
 tags:
@@ -15,7 +22,7 @@ tags:
 owner: ""
 squad: ""
 created_at: 2026-08-20T05:22:19.829Z
-updated_at: 2026-08-31T03:19:18.341Z
+updated_at: 2026-08-31T03:19:20.348Z
 linked_commits:
   - sha: c7b0e381bb0e3b71c8032a54116d2753eb18184a
     shortSha: c7b0e38
@@ -41,6 +48,14 @@ linked_commits:
     relationship: related
     linked_at: 2026-08-31T02:49:15.578Z
     linked_by: ai:claude
+  - sha: e3e9af2e52453703a0d09c08353cde945ae44d3e
+    shortSha: e3e9af2
+    message: "EPIC-0037: ChatGPT is blocked on protocol, not auth — and ADR-0001
+      constrains the fix"
+    relationship: related
+    linked_at: 2026-08-31T03:19:20.348Z
+    linked_by: ai:claude
+
 ---
 
 # AgentHQ as post office: model-agnostic agent-to-agent messaging over remote MCP

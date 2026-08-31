@@ -199,3 +199,18 @@ describe('read/ack separation', () => {
     expect(seen[0].body).toEqual({ verb: 'messages.ack', message: 'msg-123' });
   });
 });
+
+
+describe('tool annotations', () => {
+  it('does not claim ack is idempotent while acked_at still drifts', async () => {
+    // Measured 0.959s of drift on a double ack against the live service
+    // (2026-08-31). Status is idempotent; the timestamp is not. A hint that
+    // says retrying is free would be wrong about the half that is recorded.
+    const { postOfficeMessagesAckTool, postOfficeMessagesReadTool } =
+      await import('../../src/tools/postoffice/index.js');
+    expect(postOfficeMessagesAckTool.definition.annotations?.idempotentHint).toBe(false);
+    // read mutates sent->read, so it must not be advertised as read-only or a
+    // client may call it without confirmation.
+    expect(postOfficeMessagesReadTool.definition.annotations?.readOnlyHint).toBe(false);
+  });
+});

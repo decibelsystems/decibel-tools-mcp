@@ -151,8 +151,20 @@ export const postOfficeMessagesAckTool: ToolSpec = {
   definition: {
     name: 'postoffice_messages_ack',
     description:
-      'Acknowledge a message: "I have this and I am acting on it." Separate from reading on purpose, and idempotent — acking twice is not an error. Only the recipient can ack.',
-    annotations: { title: 'Ack Message', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      'Acknowledge a message: "I have this and I am acting on it." Separate from reading on purpose. Acking twice is not an error and does not change status, but it currently REWRITES acked_at to the later time — so a retry moves the recorded acknowledgement time. Only the recipient can ack.',
+    // idempotentHint is FALSE deliberately, and it is not a mistake that the
+    // description says acking twice is safe. Status is idempotent; acked_at is
+    // not — a double ack measured 0.959s of drift against the live service on
+    // 2026-08-31, and the drift always moves the timestamp LATER, which flatters
+    // any ack-latency measure. A retry-on-timeout is exactly when a client acks
+    // twice and exactly when the first ack probably landed, so the error
+    // correlates with slow calls and hides them.
+    //
+    // Claiming idempotent here would tell a client that retrying is free. It is
+    // free for delivery and not free for the record. HQ owns the fix
+    // (coalesce(acked_at, now()) server-side); when it lands this flips back to
+    // true and this comment explains why it ever moved.
+    annotations: { title: 'Ack Message', readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     inputSchema: {
       type: 'object',
       properties: { message: { type: 'string', description: 'Message id to acknowledge.' } },
