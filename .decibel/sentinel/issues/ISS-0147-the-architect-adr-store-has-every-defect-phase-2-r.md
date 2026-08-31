@@ -6,7 +6,16 @@ severity: med
 status: open
 epic_id: EPIC-0038
 created_at: 2026-08-30T03:16:01.381Z
-updated_at: 2026-08-31T00:12:03.180Z
+updated_at: 2026-08-31T00:12:40.862Z
+linked_commits:
+  - sha: 3ecc81b4045dcc542c096f0a65f0f4548c450909
+    shortSha: 3ecc81b
+    message: "ISS-0147: refresh the ADR-store evidence, and record the cross-repo id
+      collision"
+    relationship: related
+    linked_at: 2026-08-31T00:12:40.862Z
+    linked_by: ai:claude
+
 ---
 # The architect ADR store has every defect Phase 2 repaired in the issue store
 
