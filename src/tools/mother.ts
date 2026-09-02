@@ -592,3 +592,41 @@ export const motherTools: ToolSpec[] = [
   motherGetAdviceSnapshot,
   motherListIncidents,
 ];
+
+// ============================================================================
+// Extension manifest (EPIC-0038 Phase 7)
+// ============================================================================
+// This module is excluded from the published build (tsconfig.build.json) and
+// is loaded only when its absolute path appears in `extensions.allow` in
+// ~/.decibel/config.yaml. The facade spec lives here rather than in
+// facades/definitions.ts so the public package does not carry a description of
+// a private tool it can never call.
+
+import type { DecibelExtension } from '../runtime/extensions.js';
+import { RUNTIME_PROTOCOL_VERSION } from '../runtime/protocol.js';
+
+export const extension: DecibelExtension = {
+  manifest: {
+    name: 'mother',
+    version: '1.0.0',
+    protocolVersion: RUNTIME_PROTOCOL_VERSION,
+    tier: 'apps',
+  },
+  facades: [
+    {
+      name: 'mother',
+      description: 'Mother daemon: advice snapshots, policy patches, and incidents. Reads from Postgres (requires MOTHER_DATABASE_URL). write_advice_snapshot validates verdict + multiplier bounds before inserting. propose_policy_patch auto-computes revert_at from TTL. publish_incident for structured postmortems. get_advice_snapshot reads latest non-expired for symbol×strategy. list_incidents queries by symbol/strategy/type/date range. Actions: write_advice_snapshot, propose_policy_patch, publish_incident, get_advice_snapshot, list_incidents',
+      compactDescription: 'Mother daemon advice and incidents (Postgres)',
+      microEligible: false,
+      tier: 'apps',
+      actions: {
+        write_advice_snapshot: 'mother_write_advice_snapshot',
+        propose_policy_patch: 'mother_propose_policy_patch',
+        publish_incident: 'mother_publish_incident',
+        get_advice_snapshot: 'mother_get_advice_snapshot',
+        list_incidents: 'mother_list_incidents',
+      },
+    },
+  ],
+  tools: motherTools,
+};

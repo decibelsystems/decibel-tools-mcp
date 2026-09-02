@@ -575,95 +575,24 @@ export const proFacades: FacadeSpec[] = [
 // — including `decibel` itself, whose entire purpose is public discovery.
 // facadeTiers.test.ts now fails if array and tier ever disagree again.
 
-export const appFacades: FacadeSpec[] = [
-  {
-    name: 'senken',
-    description: 'Trade analysis: strategy summaries, giveback reports, grading. Reads from Postgres (requires SENKEN_DATABASE_URL). trade_summary for aggregate stats by strategy; trade_review for individual trade grades (A-F by MFE capture); giveback_report for unrealized profit analysis. apply_override is a WRITE — it modifies live strategy parameters. Actions: trade_summary, giveback_report, trade_review, list_overrides, apply_override',
-    compactDescription: 'Trading strategy analysis (Postgres)',
-    microEligible: false,
-    tier: 'apps',
-    actions: {
-      trade_summary: 'senken_trade_summary',
-      giveback_report: 'senken_giveback_report',
-      trade_review: 'senken_trade_review',
-      list_overrides: 'senken_list_overrides',
-      apply_override: 'senken_apply_override',
-    },
-  },
-
-  {
-    name: 'deck',
-    description: 'MTG card database and Arena gameplay tracking. Card tools: search by name; list for top movers; stores for data summary; history for price trends; format_deals for budget cards; type_search for tribal/archetype; price_bracket for multi-filter queries; set_analysis for set EV; volatility for price stability; reprints for cross-printing arbitrage. Gameplay tools: match_history for recent Arena matches; win_rate for format-level stats; card_performance for best/worst cards by win rate; deck_record for per-deck W/L; player_summary for combined dashboard; draft_stats for draft history and trophy tracking. Actions: search, list, stores, history, format_deals, type_search, price_bracket, set_analysis, volatility, reprints, match_history, win_rate, card_performance, deck_record, player_summary, draft_stats',
-    compactDescription: 'MTG card prices, deals, gameplay stats, and Arena tracking',
-    microEligible: false,
-    tier: 'apps',
-    actions: {
-      search: 'deck_search',
-      list: 'deck_list',
-      stores: 'deck_summary',
-      history: 'deck_history',
-      format_deals: 'deck_format_deals',
-      type_search: 'deck_type_search',
-      price_bracket: 'deck_price_bracket',
-      set_analysis: 'deck_set_analysis',
-      volatility: 'deck_volatility',
-      reprints: 'deck_reprints',
-      match_history: 'deck_match_history',
-      win_rate: 'deck_win_rate',
-      card_performance: 'deck_card_performance',
-      deck_record: 'deck_record',
-      player_summary: 'deck_player_summary',
-      draft_stats: 'deck_draft_stats',
-      intel_write: 'deck_intel_write',
-      intel_reports: 'deck_intel_reports',
-      intel_publish: 'deck_intel_publish',
-    },
-  },
-
-  {
-    name: 'mother',
-    description: 'Mother daemon: advice snapshots, policy patches, and incidents. Reads from Postgres (requires MOTHER_DATABASE_URL). write_advice_snapshot validates verdict + multiplier bounds before inserting. propose_policy_patch auto-computes revert_at from TTL. publish_incident for structured postmortems. get_advice_snapshot reads latest non-expired for symbol×strategy. list_incidents queries by symbol/strategy/type/date range. Actions: write_advice_snapshot, propose_policy_patch, publish_incident, get_advice_snapshot, list_incidents',
-    compactDescription: 'Mother daemon advice and incidents (Postgres)',
-    microEligible: false,
-    tier: 'apps',
-    actions: {
-      write_advice_snapshot: 'mother_write_advice_snapshot',
-      propose_policy_patch: 'mother_propose_policy_patch',
-      publish_incident: 'mother_publish_incident',
-      get_advice_snapshot: 'mother_get_advice_snapshot',
-      list_incidents: 'mother_list_incidents',
-    },
-  },
-
-  {
-    name: 'terminal',
-    description: 'DX Terminal Pro vault management: market data, portfolio, competitor intelligence, strategy writing. Read actions use REST (no auth); write actions use cast (requires wallet). get_strategies works on ANY vault (public on-chain) — use to scout competitors. Always get_strategies before add_strategy to check slot count (max 8). disable_strategy expired ones before adding new. Writes are on-chain transactions on Base L2. Actions: get_tokens, get_portfolio, get_strategies, get_leaderboard, get_swaps, get_inference_logs, get_holders, get_candles, get_pnl_history, get_vault_settings, get_deposits_withdrawals, add_strategy, disable_strategy, update_settings, deposit_eth, withdraw_eth',
-    compactDescription: 'DX Terminal Pro vault + strategies',
-    microEligible: false,
-    tier: 'apps',
-    actions: {
-      get_tokens: 'terminal_get_tokens',
-      get_portfolio: 'terminal_get_portfolio',
-      get_strategies: 'terminal_get_strategies',
-      get_leaderboard: 'terminal_get_leaderboard',
-      get_swaps: 'terminal_get_swaps',
-      get_inference_logs: 'terminal_get_inference_logs',
-      get_holders: 'terminal_get_holders',
-      get_candles: 'terminal_get_candles',
-      get_pnl_history: 'terminal_get_pnl_history',
-      get_vault_settings: 'terminal_get_vault_settings',
-      get_deposits_withdrawals: 'terminal_get_deposits_withdrawals',
-      add_strategy: 'terminal_add_strategy',
-      disable_strategy: 'terminal_disable_strategy',
-      update_settings: 'terminal_update_settings',
-      deposit_eth: 'terminal_deposit_eth',
-      withdraw_eth: 'terminal_withdraw_eth',
-    },
-  },
-];
+// ============================================================================
+// App Facades — MOVED (EPIC-0038 Phase 7)
+// ============================================================================
+// senken, deck, mother and terminal used to be declared here. They now live
+// beside their implementations in src/tools/<name>.ts, exported as a
+// DecibelExtension and loaded at boot from the absolute-path allowlist in
+// ~/.decibel/config.yaml. See src/runtime/extensions.ts.
+//
+// The move is the point: those four modules were already excluded from the
+// published build, but their facade specs were not — so a public install
+// carried a paragraph describing a live trading Postgres and a wallet-credential
+// tool it had no way to reach. Registration, not description, is the boundary.
 
 // ============================================================================
 // All Facades
 // ============================================================================
 
-export const allFacadeDefinitions: FacadeSpec[] = [...coreFacades, ...proFacades, ...appFacades];
+// Extension facades are deliberately absent: they are machine-dependent, so a
+// static "all facades" list cannot include them. Callers that need the live set
+// must ask the kernel.
+export const allFacadeDefinitions: FacadeSpec[] = [...coreFacades, ...proFacades];

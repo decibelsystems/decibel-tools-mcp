@@ -55,6 +55,15 @@ export interface DaemonConfig {
   license?: {
     key?: string;
   };
+  /**
+   * Private facades loaded at boot (EPIC-0038 Phase 7). `allow` holds absolute
+   * paths to extension modules; anything else is rejected by the loader. This
+   * lives in config rather than the environment on purpose — see the trust
+   * boundary note in runtime/extensions.ts.
+   */
+  extensions?: {
+    allow?: string[];
+  };
   agents?: Record<string, AgentConfig>;
 }
 
@@ -118,6 +127,9 @@ export function loadConfig(): DaemonConfig {
       } : undefined,
       license: parsed.license ? {
         key: parsed.license.key,
+      } : undefined,
+      extensions: parsed.extensions ? {
+        allow: parsed.extensions.allow,
       } : undefined,
       agents: (parsed as Record<string, unknown>).agents as Record<string, AgentConfig> | undefined,
     };

@@ -15,7 +15,8 @@ import { trackToolUse } from './tools/shared/index.js';
 import { log } from './config.js';
 import type { ToolSpec, ToolResult } from './tools/types.js';
 import type { FacadeSpec, DetailTier, McpToolDefinition } from './facades/types.js';
-import { coreFacades, proFacades, appFacades } from './facades/definitions.js';
+import { coreFacades, proFacades } from './facades/definitions.js';
+import { loadExtensions, type ExtensionLoadResult } from './runtime/extensions.js';
 import { buildMcpDefinitions, validateFacades } from './facades/index.js';
 import { getEnabledFacades } from './toolConfig.js';
 import { CircuitBreakerRegistry, type CircuitSnapshot } from './runtime/circuitBreaker.js';
@@ -64,7 +65,31 @@ export interface DispatchContext {
 // silently exposed every pro and apps facade, including `terminal` (reads
 // DX_WALLET_PRIVATE_KEY) and the Postgres trading facades, to ordinary users.
 const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
-const APPS_ENABLED = process.env.DECIBEL_APPS === '1';
+
+// Apps-tier facades are no longer env-gated. They arrive as extensions from the
+// allowlist in ~/.decibel/config.yaml — see runtime/extensions.ts. DECIBEL_APPS
+// was machine-dependent in the worst way: it lived in a launchd plist, so
+// regenerating the plist dropped four facades with no error on any surface.
+let lastExtensionLoad: ExtensionLoadResult | null = null;
+
+/**
+ * What the last createKernel() call loaded, and what it refused. Surfaced on
+ * /health so a rejected extension is visible without reading the daemon log.
+ */
+export function getExtensionDiagnostics(): {
+  loaded: Array<{ name: string; version: string; tier: string; facades: string[] }>;
+  rejected: Array<{ entry: string; reason: string }>;
+} {
+  return {
+    loaded: (lastExtensionLoad?.extensions ?? []).map(e => ({
+      name: e.manifest.name,
+      version: e.manifest.version,
+      tier: e.manifest.tier,
+      facades: e.facades.map(f => f.name),
+    })),
+    rejected: lastExtensionLoad?.rejected ?? [],
+  };
+}
 
 // ============================================================================
 // Tool Kernel
@@ -101,6 +126,15 @@ export interface BatchResult {
   action: string;
   result?: ToolResult;
   error?: string;
+  /**
+   * Machine-readable failure kind. Present only for STRUCTURAL failures — the
+   * call never ran because nothing by that name is registered. A call that ran
+   * and failed carries its failure in `result.isError` instead, which is a
+   * different thing and must stay distinguishable: "this facade does not exist
+   * here" and "this action returned an error" need different reactions from a
+   * caller, and only the first is a configuration problem.
+   */
+  code?: 'UNKNOWN_FACADE';
   duration_ms: number;
 }
 
@@ -288,20 +322,30 @@ export async function createKernel(): Promise<ToolKernel> {
   const tools = await getAllTools();
   const toolMap = new Map(tools.map(t => [t.definition.name, t]));
 
-  // Build facade registry (core + pro if enabled + apps if enabled)
-  // App facades are registered only when their tools actually loaded. The
-  // modules are excluded from the published build, so on a public install the
-  // flag can be set and the facades still will not appear — you cannot call
-  // what was never registered. Fail closed by absence rather than by check.
-  const appFacadesPresent = appFacades.filter((f) =>
-    Object.values(f.actions).some((toolName) => toolMap.has(toolName as string))
-  );
-
-  let facades = [
+  // Build facade registry: core, plus pro when licensed, plus whatever the
+  // extension allowlist yields.
+  const baseFacades = [
     ...coreFacades,
     ...(PRO_ENABLED ? proFacades : []),
-    ...(APPS_ENABLED ? appFacadesPresent : []),
   ];
+
+  // Extensions register into this same toolMap and facade list, so dispatching
+  // to an extension facade takes exactly the path a core call takes — no second
+  // lookup, no parallel registry, nothing that can disagree with core.
+  //
+  // Fail closed by absence: a facade that was not allowlisted is never
+  // registered, so dispatch answers "unknown facade" rather than returning an
+  // empty result. That distinction matters more than it looks — an unregistered
+  // facade returning something zero-shaped is indistinguishable from a real
+  // empty answer, which is exactly how a broken voice inbox read as "0 messages"
+  // for five hours on 2026-09-01.
+  const loaded = await loadExtensions(new Set(baseFacades.map(f => f.name)));
+  lastExtensionLoad = loaded;
+  for (const tool of loaded.tools) {
+    toolMap.set(tool.definition.name, tool);
+  }
+
+  let facades = [...baseFacades, ...loaded.facades];
 
   // DECIBEL_FACADES env var or config: restrict to only these facades
   // Always include 'registry' so config tools remain accessible
@@ -685,6 +729,24 @@ export async function createKernel(): Promise<ToolKernel> {
 
     const promises = calls.map(async (call): Promise<BatchResult> => {
       const start = Date.now();
+
+      // Structural check before dispatch. Without it an unknown facade came
+      // back as a text node saying "Unknown tool: x" inside an otherwise
+      // successful-looking result, so a caller reading the envelope saw
+      // success for a facade that does not exist on this machine. That matters
+      // more since Phase 7 made the registered set machine-dependent: a missing
+      // extension MUST NOT be indistinguishable from an empty answer.
+      // Raw tool names are accepted here too, because dispatch accepts them.
+      if (!facadeMap.has(call.facade) && !toolMap.has(call.facade)) {
+        return {
+          facade: call.facade,
+          action: call.action,
+          error: `Unknown facade: ${call.facade}`,
+          code: 'UNKNOWN_FACADE',
+          duration_ms: Date.now() - start,
+        };
+      }
+
       try {
         const result = await dispatch(
           call.facade,
@@ -722,7 +784,11 @@ export async function createKernel(): Promise<ToolKernel> {
     getMcpToolDefinitions,
     circuitSnapshot: () => circuits.snapshot(),
     resetCircuit: (key?: string) => circuits.reset(key),
-    toolCount: tools.length,
+    // toolMap, not `tools` — extension tools are merged into the map after
+    // getAllTools() returns, so counting the array would under-report by
+    // exactly the private tools and make /health disagree with what dispatch
+    // can actually reach.
+    toolCount: toolMap.size,
     facadeCount: facades.length,
   };
 }

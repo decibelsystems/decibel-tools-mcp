@@ -1,4 +1,4 @@
-// Guards the core/pro/apps boundary — both the tier declarations and the
+// Guards the core/pro/private boundary — both the tier declarations and the
 // packaging rule that depends on them.
 //
 // The bug that motivated this: `decibel` and `conductor` were declared
@@ -7,6 +7,12 @@
 // every public user — including `decibel`, whose entire purpose is public
 // discovery of what Decibel builds. Array membership and tier had drifted apart
 // with nothing checking they agreed.
+//
+// EPIC-0038 Phase 7 removed the appFacades array entirely: private facades now
+// declare themselves inside the excluded module, as a DecibelExtension. The
+// checks below moved with them and are read from source text rather than by
+// importing, because importing src/tools/senken.ts pulls in a Postgres driver
+// to assert a packaging fact.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import path from 'path';
@@ -14,17 +20,19 @@ import { fileURLToPath } from 'url';
 import {
   coreFacades,
   proFacades,
-  appFacades,
   allFacadeDefinitions,
 } from '../../src/facades/definitions.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const buildConfig = readFileSync(path.join(REPO_ROOT, 'tsconfig.build.json'), 'utf-8');
+
+/** The private modules, taken from the one place that decides what ships. */
+const PRIVATE_MODULES = [...buildConfig.matchAll(/"(src\/tools\/[^"]+)"/g)].map(m => m[1]);
 
 describe('facade tier declarations', () => {
   it.each([
     ['core', coreFacades, 'core'],
     ['pro', proFacades, 'pro'],
-    ['apps', appFacades, 'apps'],
   ])('every facade in %s declares tier %s', (_label, facades, tier) => {
     const wrong = facades.filter((f) => f.tier !== tier).map((f) => `${f.name}(${f.tier})`);
     expect(wrong).toEqual([]);
@@ -41,22 +49,26 @@ describe('facade tier declarations', () => {
 });
 
 describe('published package excludes private facades', () => {
-  const buildConfig = readFileSync(path.join(REPO_ROOT, 'tsconfig.build.json'), 'utf-8');
-
-  // The rule that keeps the packaging honest as the private set changes. Add a
-  // fifth apps facade without excluding its module and this fails, rather than
-  // the leak being discovered in a published tarball.
-  it('excludes the module backing every apps-tier facade', () => {
-    const missing = appFacades
-      .map((f) => `src/tools/${f.name}.ts`)
-      .filter((modulePath) => !buildConfig.includes(modulePath));
-    expect(missing).toEqual([]);
+  it('has at least one private module, so the checks below are not vacuous', () => {
+    expect(PRIVATE_MODULES.length).toBeGreaterThan(0);
   });
 
-  it('excludes nothing that is not an apps facade', () => {
-    const excluded = [...buildConfig.matchAll(/"(src\/tools\/[^"]+)"/g)].map((m) => m[1]);
-    const allowed = new Set(appFacades.map((f) => `src/tools/${f.name}.ts`));
-    expect(excluded.filter((e) => !allowed.has(e))).toEqual([]);
+  // The whole point of Phase 7. A facade spec in definitions.ts ships to npm
+  // even when its implementation does not — which is how a public install came
+  // to carry a paragraph describing a live trading Postgres and a tool that
+  // spends from a wallet. If an apps-tier spec reappears here, it leaked.
+  it('declares no apps-tier facade in the public definitions file', () => {
+    const definitions = readFileSync(path.join(REPO_ROOT, 'src/facades/definitions.ts'), 'utf-8');
+    const specs = [...definitions.matchAll(/^\s*tier: '(\w+)',/gm)].map(m => m[1]);
+    expect(specs.filter(t => t !== 'core' && t !== 'pro')).toEqual([]);
+  });
+
+  it.each(PRIVATE_MODULES)('%s carries its own extension manifest', (modulePath) => {
+    const source = readFileSync(path.join(REPO_ROOT, modulePath), 'utf-8');
+    expect(source).toContain('export const extension: DecibelExtension');
+    // A private module that declared itself core or pro would be asking to be
+    // registered by a build that does not contain it.
+    expect(source).toMatch(/tier: 'apps'/);
   });
 
   // pg exists in this repo only for senken and mother. With those excluded from

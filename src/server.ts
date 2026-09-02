@@ -59,7 +59,9 @@ log(`Environment: ${config.env}`);
 log(`Organization: ${config.org}`);
 log(`Root Directory: ${config.rootDir}`);
 if (process.env.DECIBEL_PRO === '1') log('Pro features: ENABLED');
-if (process.env.DECIBEL_APPS === '1') log('Apps: ENABLED');
+// Apps tier is no longer an env flag — private facades come from the extension
+// allowlist in ~/.decibel/config.yaml and the kernel logs what it loaded and
+// what it refused. See runtime/extensions.ts.
 
 async function main() {
   const args = process.argv;

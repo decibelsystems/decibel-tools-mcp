@@ -46,6 +46,7 @@ import { settleCommandFromAck, ORG_ID } from './agentCommands.js';
 import { isSupabaseConfigured, getSupabaseServiceClient } from './lib/supabase.js';
 import { shouldQueueForAgent, parseToolCall } from './httpQueueDetection.js';
 import type { ToolKernel, DispatchContext, DispatchEvent } from './kernel.js';
+import { getExtensionDiagnostics } from './kernel.js';
 import { getLicenseValidator } from './license.js';
 import { listProjects } from './projectRegistry.js';
 import type { AgentRegistry } from './daemon.js';
@@ -797,6 +798,13 @@ export async function startHttpServer(
         // non-empty object means calls to those facades are being refused fast
         // rather than left to time out. See runtime/circuitBreaker.ts.
         circuits: kernel.circuitSnapshot(),
+        // Private facades loaded from the allowlist, and every entry refused.
+        // Reported because the alternative is silence: an extension that failed
+        // to load looks exactly like one that was never configured, and this
+        // daemon has already shipped one bug of that shape — a broken voice
+        // inbox that read as "0 messages" for five hours. See
+        // runtime/extensions.ts.
+        extensions: getExtensionDiagnostics(),
       }));
       return;
     }
@@ -1392,7 +1400,24 @@ export async function startHttpServer(
 
         log(`HTTP: /batch — ${calls.length} calls (agent=${context.agentId || 'anonymous'}, tier=${tier})`);
         const results = await kernel.batch(calls, context);
-        sendJson(res, 200, { status: 'executed', ok: true, results });
+
+        // `ok` reflects STRUCTURAL validity: did every call name something this
+        // runtime actually has. A call that ran and returned isError leaves ok
+        // true — partial failure is a normal batch outcome and callers depend on
+        // that. A call naming a facade that is not registered does not.
+        //
+        // The status stays 200 because the body still carries real results for
+        // the other calls in the batch, and throwing those away behind a 4xx
+        // would trade one silent failure for another.
+        const unknown = results.filter(r => r.code === 'UNKNOWN_FACADE');
+        if (unknown.length > 0) {
+          log(`HTTP: /batch — ${unknown.length} unknown facade(s): ${unknown.map(r => r.facade).join(', ')}`);
+        }
+        sendJson(res, 200, {
+          status: unknown.length > 0 ? 'error' : 'executed',
+          ok: unknown.length === 0,
+          results,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'BATCH_ERROR'));
