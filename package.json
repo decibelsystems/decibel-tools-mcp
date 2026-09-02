@@ -59,7 +59,8 @@
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@supabase/supabase-js": "^2.89.0",
     "express": "^5.2.1",
-    "yaml": "^2.8.2"
+    "yaml": "^2.8.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

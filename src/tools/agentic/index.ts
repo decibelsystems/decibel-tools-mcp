@@ -15,6 +15,7 @@ import {
   RenderInput,
   LintInput,
   GoldenInput,
+  validateCanonicalPayload,
 } from '../../agentic/index.js';
 import {
   agentQueueSync,
@@ -112,6 +113,20 @@ export const agenticRenderTool: ToolSpec = {
     try {
       const input = args as RenderInput;
       requireFields(input, 'payload', 'renderer_id');
+
+      // Shape, not just presence. requireFields only proved `payload` was
+      // there; it let role "NotARealRole", load "PURPLE" and confidence 47
+      // through to the renderer, which happily produced output and returned a
+      // success envelope. The renderer is a view over the canonical payload, so
+      // an invalid payload is not something to render — it is something to
+      // refuse. See validateCanonicalPayload in agentic/types.ts.
+      const payloadErrors = validateCanonicalPayload(input.payload);
+      if (payloadErrors.length > 0) {
+        return toolError(
+          `Invalid canonical payload:\n  ${payloadErrors.join('\n  ')}`
+        );
+      }
+
       const result = await renderPayload(input);
       if (result.status === 'error') {
         return toolError(JSON.stringify(result, null, 2));
@@ -164,6 +179,19 @@ export const agenticLintTool: ToolSpec = {
     try {
       const input = args as LintInput;
       requireFields(input, 'rendered', 'renderer_id');
+
+      // payload is optional here — it is only used for consistency checks — so
+      // absence is fine and malformedness is not. Validating an absent payload
+      // would break the documented contract of this tool.
+      if (input.payload !== undefined) {
+        const payloadErrors = validateCanonicalPayload(input.payload);
+        if (payloadErrors.length > 0) {
+          return toolError(
+            `Invalid canonical payload:\n  ${payloadErrors.join('\n  ')}`
+          );
+        }
+      }
+
       const result = await lintOutput(input);
       if (result.status === 'error') {
         return toolError(JSON.stringify(result, null, 2));

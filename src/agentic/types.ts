@@ -248,3 +248,88 @@ export interface GoldenOutputResult {
   result?: GoldenResult;
   error?: string;
 }
+
+// ============================================================================
+// Runtime Validation
+// ============================================================================
+// The zod mirror of the payload types above. It lives HERE, next to the
+// interfaces it mirrors, rather than beside the code that consumes it — the
+// failure mode being guarded against is the two drifting apart, and a third
+// location would just add another place to fall out of sync.
+//
+// History worth keeping: this schema already existed and was already correct,
+// wired into an McpServer registration function that stopped being called when
+// server.ts was broken into modules (ISS-0029). It typechecked, it imported
+// cleanly, and it validated nothing, because nothing reached it. For 7.7 months
+// and 98k dispatch events, a payload with role "NotARealRole", confidence 47 and
+// a made-up severity rendered successfully with an ok:true envelope.
+//
+// So: if you add a field to CanonicalPayload, add it here in the same edit.
+
+import { z } from 'zod';
+
+export const EvidenceSchema = z.object({
+  source: z.string(),
+  value: z.unknown(),
+  confidence: z.number().min(0).max(1).optional(),
+  timestamp: z.string().optional(),
+});
+
+export const MissingDataSchema = z.object({
+  field: z.string(),
+  reason: z.string(),
+  severity: z.enum(['blocking', 'degraded', 'informational']),
+});
+
+export const GuardrailSchema = z.object({
+  id: z.string(),
+  description: z.string(),
+  status: z.enum(['active', 'triggered', 'disabled']),
+});
+
+export const DissentSummarySchema = z.object({
+  agent_id: z.string(),
+  position: z.string(),
+  confidence: z.number().min(0).max(1),
+});
+
+export const PayloadMetadataSchema = z.object({
+  pack_id: z.string(),
+  pack_hash: z.string(),
+  renderer_id: z.string().optional(),
+  specialist_id: z.string().optional(),
+  created_at: z.string(),
+});
+
+export const CanonicalPayloadSchema = z.object({
+  role: z.enum(['Sensor', 'Analyst', 'Overmind', 'Specialist']),
+  status: z.enum(['OK', 'DEGRADED', 'BLOCKED', 'ALERT']),
+  load: z.enum(['GREEN', 'YELLOW', 'RED']),
+  summary: z.string(),
+  evidence: z.array(EvidenceSchema),
+  missing_data: z.array(MissingDataSchema),
+  decision: z.string().optional(),
+  guardrails: z.array(GuardrailSchema).optional(),
+  dissent_summary: z.array(DissentSummarySchema).optional(),
+  specialist_id: z.string().optional(),
+  specialist_name: z.string().optional(),
+  metadata: PayloadMetadataSchema,
+});
+
+/**
+ * Validate a canonical payload, returning a flat list of human-readable errors.
+ * Empty array means valid.
+ *
+ * Rejects rather than coerces. A confidence of 47 is not silently clamped to 1:
+ * the whole premise of this module is that the canonical payload is the truth
+ * and renderers are only views, and a truth that quietly rewrites its inputs is
+ * a worse foundation than one that refuses them.
+ */
+export function validateCanonicalPayload(payload: unknown): string[] {
+  const result = CanonicalPayloadSchema.safeParse(payload);
+  if (result.success) return [];
+  return result.error.issues.map(issue => {
+    const path = issue.path.length > 0 ? issue.path.join('.') : '(root)';
+    return `${path}: ${issue.message}`;
+  });
+}
