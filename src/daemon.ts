@@ -20,9 +20,12 @@ const DECIBEL_HOME = join(homedir(), '.decibel');
 const PID_PATH = join(DECIBEL_HOME, 'daemon.pid');
 const LOG_DIR = join(DECIBEL_HOME, 'logs');
 const LOG_PATH = join(LOG_DIR, 'daemon.log');
-const PLIST_NAME = 'com.decibel.daemon.plist';
+const LAUNCHD_LABEL = 'com.decibel.daemon';
+const PLIST_NAME = `${LAUNCHD_LABEL}.plist`;
 const LAUNCH_AGENTS_DIR = join(homedir(), 'Library', 'LaunchAgents');
 const PLIST_DEST = join(LAUNCH_AGENTS_DIR, PLIST_NAME);
+const SYSTEM_LAUNCH_AGENTS_DIR = '/Library/LaunchAgents';
+const ENV_FILE_PATH = join(DECIBEL_HOME, 'env');
 
 function ensureDir(dir: string): void {
   if (!existsSync(dir)) {
@@ -292,10 +295,125 @@ export function installShutdownHandlers(
 // launchd Integration (macOS)
 // ============================================================================
 
+/** The launchd domain for the current user, e.g. `gui/501`. */
+function launchdDomain(): string {
+  return `gui/${process.getuid?.() ?? 0}`;
+}
+
+/**
+ * True when `path` lives on the boot volume.
+ *
+ * launchd refuses to bootstrap user agents from any other volume — it fails
+ * with `5: Input/output error`. Used only to explain a failure, never to
+ * decide whether the install succeeded (that comes from `isLaunchdLoaded`).
+ */
+function isOnBootVolume(path: string): boolean {
+  // Walk up to the nearest component that exists — the leaf may not be written yet.
+  let probe = path;
+  while (!existsSync(probe)) {
+    const parent = dirname(probe);
+    if (parent === probe) return false;
+    probe = parent;
+  }
+  try {
+    const dev = statSync(probe).dev;
+    // On APFS volume groups `/` and the Data volume report the same st_dev,
+    // but check both so this holds on older layouts too.
+    for (const root of ['/', '/System/Volumes/Data']) {
+      try {
+        if (statSync(root).dev === dev) return true;
+      } catch {
+        // Root probe missing — try the next one.
+      }
+    }
+  } catch {
+    // Unstattable: treat as off-volume so we surface the hint rather than hide it.
+  }
+  return false;
+}
+
+/**
+ * Ask launchd whether the agent is actually loaded.
+ *
+ * This is the only trustworthy signal. `launchctl load` exits 0 even when it
+ * fails, which is what let install report success for months (ISS-0127).
+ */
+export function isLaunchdLoaded(): boolean {
+  try {
+    execSync(`launchctl print ${launchdDomain()}/${LAUNCHD_LABEL}`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Remedies for the case where $HOME is not on the boot volume, so launchd will
+ * never load the plist we just wrote. Returns [] when that is not the problem.
+ */
+function offBootVolumeAdvice(nodePath: string, serverPath: string, port: number): string[] {
+  if (isOnBootVolume(LAUNCH_AGENTS_DIR)) return [];
+  const systemPlist = join(SYSTEM_LAUNCH_AGENTS_DIR, PLIST_NAME);
+  return [
+    '',
+    `  Cause: your home directory (${homedir()}) is not on the boot volume, and`,
+    '  launchd will not load user agents from another volume.',
+    '',
+    '  Remedy A — install to the boot volume (needs sudo, survives reboot):',
+    `    sudo cp ${PLIST_DEST} ${systemPlist}`,
+    `    sudo chown root:wheel ${systemPlist}`,
+    `    launchctl bootstrap ${launchdDomain()} ${systemPlist}`,
+    '',
+    '  Remedy B — cron, no sudo required:',
+    `    (crontab -l 2>/dev/null; echo "@reboot ${nodePath} ${serverPath} --daemon --port ${port}") | crontab -`,
+  ];
+}
+
 function getTemplateDir(): string {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
   return join(__dirname, '..', 'templates');
+}
+
+/**
+ * Fill in the launchd plist template. Split out from `installLaunchd` so the
+ * substitution can be tested without touching launchctl or ~/Library.
+ */
+export function renderPlist(options?: { port?: number }): { plist: string; serverPath: string; port: number } {
+  const templatePath = join(getTemplateDir(), PLIST_NAME);
+  let plist = readFileSync(templatePath, 'utf-8');
+  const serverPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'server.js');
+  const port = options?.port || 4888;
+
+  // Carry the installing shell's tier opt-in into the agent. Deliberately not
+  // hardcoded in the template: a plist in /Library/LaunchAgents is world-readable,
+  // and guardian flags DECIBEL_PRO=1 in production as an over-grant.
+  //
+  // DECIBEL_APPS is gone (EPIC-0038 Phase 7). Private facades come from the
+  // allowlist in ~/.decibel/config.yaml, which is the owner's file at mode 600
+  // rather than a world-readable plist that has to be regenerated correctly.
+  // Losing that flag on a regenerate is exactly how four facades disappeared
+  // with no error on 2026-09-01.
+  const tierEnv = (['DECIBEL_PRO'] as const)
+    .filter(k => process.env[k] === '1')
+    .map(k => `        <key>${k}</key>\n        <string>1</string>\n`)
+    .join('');
+
+  const substitutions: Record<string, string> = {
+    '{{NODE_PATH}}': process.execPath,
+    '{{SERVER_PATH}}': serverPath,
+    '{{PORT}}': String(port),
+    '{{LOG_PATH}}': LOG_PATH,
+    '{{ERROR_LOG_PATH}}': join(LOG_DIR, 'daemon-error.log'),
+    '{{ENV_FILE}}': ENV_FILE_PATH,
+    '{{HOME}}': homedir(),
+    '{{TIER_ENV}}': tierEnv,
+  };
+  for (const [token, value] of Object.entries(substitutions)) {
+    plist = plist.split(token).join(value);
+  }
+
+  return { plist, serverPath, port };
 }
 
 /**
@@ -312,63 +430,87 @@ export function installLaunchd(options?: { port?: number }): { installed: boolea
     };
   }
 
-  // Read template and substitute variables
-  let plist = readFileSync(templatePath, 'utf-8');
-  const serverPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'server.js');
-  const port = options?.port || 4888;
-
-  plist = plist.replace('{{NODE_PATH}}', process.execPath);
-  plist = plist.replace('{{SERVER_PATH}}', serverPath);
-  plist = plist.replace('{{PORT}}', String(port));
-  plist = plist.replace('{{LOG_PATH}}', LOG_PATH);
-  plist = plist.replace('{{ERROR_LOG_PATH}}', join(LOG_DIR, 'daemon-error.log'));
+  const { plist, serverPath, port } = renderPlist(options);
 
   // Write to LaunchAgents
   ensureDir(LAUNCH_AGENTS_DIR);
   writeFileSync(PLIST_DEST, plist, 'utf-8');
 
-  // Load the agent
+  // Reload rather than load: bootstrap refuses a label that is already present,
+  // and a reinstall must pick up the plist we just wrote.
+  const domain = launchdDomain();
   try {
-    execSync(`launchctl load ${PLIST_DEST}`, { stdio: 'pipe' });
+    execSync(`launchctl bootout ${domain}/${LAUNCHD_LABEL}`, { stdio: 'pipe' });
   } catch {
-    // May already be loaded — try unload then load
-    try {
-      execSync(`launchctl unload ${PLIST_DEST}`, { stdio: 'pipe' });
-      execSync(`launchctl load ${PLIST_DEST}`, { stdio: 'pipe' });
-    } catch (e) {
-      return {
-        installed: true,
-        path: PLIST_DEST,
-        message: `Plist written but launchctl load failed: ${e}`,
-      };
-    }
+    // Not loaded — nothing to boot out.
   }
 
-  return {
-    installed: true,
-    path: PLIST_DEST,
-    message: `Installed and loaded. Daemon will auto-start on login (port ${port}).`,
-  };
+  let bootstrapError = '';
+  try {
+    execSync(`launchctl bootstrap ${domain} ${PLIST_DEST}`, { stdio: 'pipe' });
+  } catch (e) {
+    const err = e as { stderr?: Buffer; message?: string };
+    bootstrapError = String(err.stderr?.toString() || err.message || e).trim();
+  }
+
+  // Never trust the exit code alone — ask launchd what it actually holds.
+  if (isLaunchdLoaded()) {
+    return {
+      installed: true,
+      path: PLIST_DEST,
+      message: `Installed and loaded. Daemon will auto-start on login (port ${port}).`,
+    };
+  }
+
+  const lines = [
+    `Plist written to ${PLIST_DEST}, but launchd did not load it —`,
+    'the daemon will NOT auto-start.',
+  ];
+  if (bootstrapError) lines.push(`  launchctl: ${bootstrapError}`);
+  lines.push(...offBootVolumeAdvice(process.execPath, serverPath, port));
+
+  return { installed: false, path: PLIST_DEST, message: lines.join('\n') };
 }
 
 /**
  * Uninstall the launchd plist and stop the daemon.
  */
 export function uninstallLaunchd(): { uninstalled: boolean; message: string } {
-  if (!existsSync(PLIST_DEST)) {
-    return { uninstalled: false, message: 'Plist not found — daemon not installed.' };
+  const domain = launchdDomain();
+  const wasLoaded = isLaunchdLoaded();
+
+  if (wasLoaded) {
+    try {
+      execSync(`launchctl bootout ${domain}/${LAUNCHD_LABEL}`, { stdio: 'pipe' });
+    } catch {
+      // Verified below rather than trusted here.
+    }
   }
 
-  try {
-    execSync(`launchctl unload ${PLIST_DEST}`, { stdio: 'pipe' });
-  } catch {
-    // May not be loaded
+  if (isLaunchdLoaded()) {
+    return {
+      uninstalled: false,
+      message:
+        `Failed to unload ${LAUNCHD_LABEL}. If it was bootstrapped from ` +
+        `${SYSTEM_LAUNCH_AGENTS_DIR}, remove it with:\n` +
+        `  sudo launchctl bootout ${domain}/${LAUNCHD_LABEL}\n` +
+        `  sudo rm ${join(SYSTEM_LAUNCH_AGENTS_DIR, PLIST_NAME)}`,
+    };
+  }
+
+  if (!existsSync(PLIST_DEST)) {
+    return {
+      uninstalled: wasLoaded,
+      message: wasLoaded
+        ? `Unloaded ${LAUNCHD_LABEL}. No plist at ${PLIST_DEST} to remove — it was loaded from elsewhere.`
+        : 'Plist not found — daemon not installed.',
+    };
   }
 
   try {
     unlinkSync(PLIST_DEST);
   } catch {
-    return { uninstalled: false, message: 'Failed to remove plist file.' };
+    return { uninstalled: false, message: `Unloaded, but failed to remove ${PLIST_DEST}.` };
   }
 
   return { uninstalled: true, message: 'Daemon uninstalled. Will no longer auto-start.' };
@@ -383,6 +525,7 @@ export function daemonStatus(): {
   pidFile: string;
   logFile: string;
   launchd: boolean;
+  launchdPlist: boolean;
   port: number | null;
 } {
   const pid = checkRunning();
@@ -391,7 +534,9 @@ export function daemonStatus(): {
     pid,
     pidFile: PID_PATH,
     logFile: LOG_PATH,
-    launchd: existsSync(PLIST_DEST),
+    // Whether launchd actually holds the job — not merely whether a file exists.
+    launchd: isLaunchdLoaded(),
+    launchdPlist: existsSync(PLIST_DEST),
     port: null, // Would need to read from config or PID metadata
   };
 }
@@ -526,7 +671,12 @@ export function handleDaemonSubcommand(args: string[]): boolean {
       }
       console.log(`  PID file:  ${status.pidFile}`);
       console.log(`  Log file:  ${status.logFile}`);
-      console.log(`  launchd:   ${status.launchd ? 'installed' : 'not installed'}`);
+      const launchdState = status.launchd
+        ? 'loaded (auto-starts on login)'
+        : status.launchdPlist
+          ? 'plist present but NOT loaded — will not auto-start'
+          : 'not installed';
+      console.log(`  launchd:   ${launchdState}`);
       process.exit(0);
       return true;
     }
