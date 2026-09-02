@@ -2,7 +2,7 @@
 uid: 019b28c3-5fdd-7910-9aa3-c379b1fd7dcd
 id: ISS-0012
 projectId: decibel-tools-mcp
-status: open
+status: closed
 priority: medium
 tags:
   - mcp
@@ -10,11 +10,13 @@ tags:
   - fallback
   - phase-2
 created_at: 2025-12-16T20:04:11.357Z
-updated_at: 2025-12-16T20:04:11.357Z
+updated_at: 2026-09-01T21:49:11.559Z
+closed_at: 2026-09-01T21:49:11.500Z
+resolution: Obsolete, not fixed. The premise was that context tools shell out to a decibel CLI and fail with ENOENT when it is absent. They no longer spawn anything — context tools use native file operations, so there is no CLI path to fall back from.
 ---
 # Add YAML fallback to MCP context tools when CLI unavailable
 
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -47,3 +49,7 @@ async function contextList(input): Promise<...> {
   }
 }
 ```
+
+## Resolution
+
+Obsolete, not fixed. The premise was that context tools shell out to a decibel CLI and fail with ENOENT when it is absent. They no longer spawn anything — context tools use native file operations, so there is no CLI path to fall back from.

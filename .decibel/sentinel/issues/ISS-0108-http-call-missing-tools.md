@@ -1,12 +1,15 @@
 ---
 uid: 01a04ec3-f0d7-7a9f-9aa2-433b443818af
 id: ISS-0108
-status: open
+status: closed
 priority: medium
 tags:
   - httpServer
   - tech-debt
   - parity
+updated_at: 2026-09-01T21:49:10.844Z
+closed_at: 2026-09-01T21:49:10.774Z
+resolution: "Fixed. /call no longer uses a manual switch — it dispatches through the kernel. Verified live 2026-09-01: a deck call returned through /call against a registry of 272 internal tools."
 created: 2025-12-25
 renumbered_from: ISS-0016
 renumbered_at: 2026-05-20T00:55:20.000Z
@@ -32,7 +35,7 @@ proposed_fix:
 ---
 # HTTP /call endpoint missing most tools
 
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -52,3 +55,6 @@ Missing from HTTP /call:
 
 This creates confusion and inconsistency between HTTP and MCP access patterns.
 
+## Resolution
+
+Fixed. /call no longer uses a manual switch — it dispatches through the kernel. Verified live 2026-09-01: a deck call returned through /call against a registry of 272 internal tools.

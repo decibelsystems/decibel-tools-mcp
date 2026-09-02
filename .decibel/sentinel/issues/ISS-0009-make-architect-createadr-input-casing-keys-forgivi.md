@@ -2,7 +2,7 @@
 uid: 019b1fbe-cfd9-7ece-86c3-76faffd314f3
 id: ISS-0009
 projectId: decibel-tools-mcp
-status: open
+status: closed
 priority: high
 tags:
   - architect
@@ -12,11 +12,13 @@ tags:
   - ux
   - bug
 created_at: 2025-12-15T02:02:37.401Z
-updated_at: 2025-12-15T02:02:37.401Z
+updated_at: 2026-09-01T21:49:11.342Z
+closed_at: 2026-09-01T21:49:11.279Z
+resolution: Fixed. src/tools/architect/index.ts:44 maps project_id to projectId through an alias table, so both casings are accepted rather than returning an empty 424.
 ---
 # Make architect_createAdr input casing/keys forgiving and return actionable errors
 
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -31,3 +33,7 @@ Acceptance:
 - The same ADR create call succeeds regardless of key casing.
 - If required fields are missing, user sees a precise message listing missing/unknown keys.
 - Errors include context (tool name, args summary, exit code/trace).
+
+## Resolution
+
+Fixed. src/tools/architect/index.ts:44 maps project_id to projectId through an alias table, so both casings are accepted rather than returning an empty 424.

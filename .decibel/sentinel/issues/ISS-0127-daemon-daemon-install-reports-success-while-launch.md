@@ -3,15 +3,17 @@ uid: 01a0024d-ec80-74af-a541-627361c81b78
 id: ISS-0127
 projectId: decibel-tools-mcp
 severity: high
-status: in_progress
+status: closed
 created_at: 2026-08-14T22:04:16.384Z
-updated_at: 2026-09-01T04:23:41.244Z
+updated_at: 2026-09-02T19:25:55.643Z
+closed_at: 2026-09-02T19:25:55.580Z
+resolution: "Resolved by commit 933f9b0: daemon install now verifies launchd actually took the job"
 ---
 
 # daemon --daemon install reports success while launchctl load silently fails (HOME on external volume)
 
 **Severity:** high
-**Status:** in_progress
+**Status:** closed
 
 ## Details
 
@@ -59,3 +61,7 @@ NEW FINDING, not in the original report: launchd does not inherit the login shel
 Tests: new tests/unit/daemonLaunchd.test.ts (5 cases) guards unsubstituted {{TOKEN}}s, the env-file flag, port rendering, and that pro is granted only on explicit opt-in. renderPlist() was extracted from installLaunchd so substitution is testable without touching launchctl. Full suite 696/696.
 
 REMAINING: commit; and on this machine re-copy the regenerated plist to /Library/LaunchAgents so the running agent picks up --env-file-if-exists (currently loaded from the older hand-written copy, so supabase_configured is still false).
+
+## Resolution
+
+Resolved by commit 933f9b0: daemon install now verifies launchd actually took the job

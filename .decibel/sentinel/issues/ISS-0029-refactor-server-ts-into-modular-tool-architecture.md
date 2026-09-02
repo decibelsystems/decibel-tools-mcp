@@ -2,7 +2,7 @@
 uid: 019b70ae-330d-7bc4-81a9-1cc8e1f17d6a
 id: ISS-0029
 projectId: decibel-tools-mcp
-status: open
+status: closed
 priority: medium
 tags:
   - refactor
@@ -10,11 +10,13 @@ tags:
   - ai-efficiency
   - architecture
 created_at: 2025-12-30T19:13:43.181Z
-updated_at: 2025-12-30T19:35:00.000Z
+updated_at: 2026-09-01T21:49:10.597Z
+closed_at: 2026-09-01T21:49:10.181Z
+resolution: "Shipped by EPIC-0025. server.ts is no longer a monolith: tools live in src/tools/<domain>/ and dispatch goes through src/kernel.ts, which both transports share."
 ---
 # Refactor server.ts into modular tool architecture
 
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -203,3 +205,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 - [ ] All domains migrated
 - [ ] server.ts reduced to ~150 lines
 - [ ] All existing tests pass
+
+## Resolution
+
+Shipped by EPIC-0025. server.ts is no longer a monolith: tools live in src/tools/<domain>/ and dispatch goes through src/kernel.ts, which both transports share.

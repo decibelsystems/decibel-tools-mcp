@@ -2,7 +2,7 @@
 uid: 019b299b-4400-76c1-9c42-0989de1c2fd4
 id: ISS-0014
 projectId: decibel-tools-mcp
-status: open
+status: closed
 priority: high
 tags:
   - bench
@@ -10,11 +10,13 @@ tags:
   - tools
   - perf
 created_at: 2025-12-17T00:00:00.000Z
-updated_at: 2025-12-17T00:00:00.000Z
+updated_at: 2026-09-01T21:49:09.963Z
+closed_at: 2026-09-01T21:49:09.777Z
+resolution: Shipped. src/tools/bench/ implements the bench tools and bench is a registered core facade — verified in the live registry.
 ---
 # Add decibel_bench and decibel_bench_compare tools
 
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -51,3 +53,7 @@ export function benchmarks() {
 - decibel_bench runs TS/JS benchmark suites with kind support (micro/integration)
 - decibel_bench_compare shows side-by-side delta analysis between two baselines
 - Both tools available via MCP and HTTP endpoints
+
+## Resolution
+
+Shipped. src/tools/bench/ implements the bench tools and bench is a registered core facade — verified in the live registry.
