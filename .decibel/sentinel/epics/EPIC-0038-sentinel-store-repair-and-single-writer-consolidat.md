@@ -167,13 +167,19 @@ tags: []
 owner: ""
 squad: ""
 created_at: 2026-08-29T00:18:38.007Z
-updated_at: 2026-09-02T19:25:46.275Z
+updated_at: 2026-09-02T19:26:11.854Z
 linked_commits:
   - sha: 19d8c06a37b1e16f31ba2e821b849eb64879709f
     shortSha: 19d8c06
     message: "EPIC-0038 Phase 7: apps facades become allowlisted extensions"
     relationship: related
     linked_at: 2026-09-02T19:25:46.275Z
+    linked_by: ai:claude
+  - sha: 85b1ab958c46b89d76a3d10d10886a93d1ed953f
+    shortSha: 85b1ab9
+    message: "sentinel: EPIC-0038 Phase 7 notes and six evidence-based closures"
+    relationship: related
+    linked_at: 2026-09-02T19:26:11.854Z
     linked_by: ai:claude
 
 ---
