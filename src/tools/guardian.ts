@@ -14,6 +14,7 @@ import { log } from '../config.js';
 import { resolveProjectPaths, ResolvedProjectPaths } from '../projectRegistry.js';
 import { loadConfig } from '../daemonConfig.js';
 import YAML from 'yaml';
+import { listDirEntriesOrThrow } from './shared/storeRead.js';
 
 // ============================================================================
 // Types
@@ -294,8 +295,10 @@ async function scanDirectory(
 ): Promise<void> {
   let entries;
   try {
-    entries = await fs.readdir(dir, { withFileTypes: true });
-  } catch {
+    entries = await listDirEntriesOrThrow(dir);
+  } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
     return;
   }
 

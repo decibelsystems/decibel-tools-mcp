@@ -18,7 +18,10 @@ import type { ToolKernel } from '../kernel.js';
  * Each transport gets its own Server instance (MCP SDK only supports
  * one transport per Server).
  */
-export function createMcpServer(kernel: ToolKernel): Server {
+export function createMcpServer(
+  kernel: ToolKernel,
+  transport: 'stdio' | 'http' = 'stdio'
+): Server {
   const server = new Server(
     { name: '@decibelsystems/tools', version: '2.0.0' },
     { capabilities: { tools: {} } }
@@ -28,7 +31,7 @@ export function createMcpServer(kernel: ToolKernel): Server {
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {
     const meta = (request.params as Record<string, unknown> | undefined)?._meta as Record<string, unknown> | undefined;
     const tier = (meta?.detailTier as 'full' | 'compact' | 'micro') || 'full';
-    return { tools: kernel.getMcpToolDefinitions(tier) };
+    return { tools: kernel.getMcpToolDefinitions(tier, { transport }) };
   });
 
   // Handle tool calls — dispatch through kernel
@@ -49,7 +52,11 @@ export function createMcpServer(kernel: ToolKernel): Server {
         engagementMode: meta.engagementMode as string | undefined,
         userKey: meta.userKey as string | undefined,
         requestId: meta.requestId as string | undefined,
-      } : undefined;
+        // From the factory argument, not from _meta: _meta is caller-supplied,
+        // so reading it here would let a remote caller claim to be stdio and
+        // walk through the local-only gate.
+        transport,
+      } : { transport };
 
       const result = await kernel.dispatch(name, args as Record<string, unknown>, context);
       return result as { content: Array<{ type: 'text'; text: string }>; isError?: boolean };

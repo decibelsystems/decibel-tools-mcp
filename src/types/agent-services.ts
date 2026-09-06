@@ -234,6 +234,13 @@ export interface AssumptionStatsWithContext extends AssumptionStats {
     end: string;
     run_count: number;
   };
+  /**
+   * Runs that exist and could not be read, so their assumptions are missing
+   * from these totals. A validation rate computed over an unknown fraction of
+   * the runs is not the number it claims to be.
+   */
+  store_status?: 'ok' | 'empty' | 'unreadable' | 'partial' | 'project_unresolved';
+  unreadable_count?: number;
 }
 
 // ============================================================================

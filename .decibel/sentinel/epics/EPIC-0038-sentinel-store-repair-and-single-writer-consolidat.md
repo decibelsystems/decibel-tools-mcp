@@ -167,7 +167,7 @@ tags: []
 owner: ""
 squad: ""
 created_at: 2026-08-29T00:18:38.007Z
-updated_at: 2026-09-02T19:26:11.854Z
+updated_at: 2026-09-03T04:00:54.594Z
 linked_commits:
   - sha: 19d8c06a37b1e16f31ba2e821b849eb64879709f
     shortSha: 19d8c06
@@ -180,6 +180,12 @@ linked_commits:
     message: "sentinel: EPIC-0038 Phase 7 notes and six evidence-based closures"
     relationship: related
     linked_at: 2026-09-02T19:26:11.854Z
+    linked_by: ai:claude
+  - sha: 72dea7f513c1946de6ab28c620d9171e46455630
+    shortSha: 72dea7f
+    message: "chore(sentinel): auto-linked commit metadata for EPIC-0038"
+    relationship: related
+    linked_at: 2026-09-03T04:00:54.594Z
     linked_by: ai:claude
 
 ---

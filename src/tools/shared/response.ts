@@ -90,6 +90,41 @@ export function toolSuccess(data: unknown): ToolResult {
 }
 
 /**
+ * True when a payload is already a machine-readable error object.
+ *
+ * Deliberately narrow: a STRING `error` field, and not a payload that has
+ * explicitly declared itself a success. A payload carrying `error` as data —
+ * a list of errors, an error count — is not this shape and must not be
+ * mistaken for it.
+ */
+export function isErrorPayload(payload: unknown): payload is Record<string, unknown> {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  const p = payload as Record<string, unknown>;
+  return typeof p.error === 'string' && p.success !== true;
+}
+
+/**
+ * Return a structured failure WITH its payload intact.
+ *
+ * `toolError` builds a fresh `{success, error, hint}` object, which is right
+ * when all you have is a message but wrong when the tool already produced a
+ * machine-readable error — it drops every other field, `message` included.
+ *
+ * The alternative that was in use is worse: `toolSuccess(result)` on a payload
+ * carrying an `error` field. That is the exact shape S1 hunts for — it reads
+ * as failure to a human and as SUCCESS to every programmatic consumer, because
+ * `isError` is what they branch on. designer.tokens, designer.drift and
+ * designer.lateral_session each answered `{error: "NO_TOKENS"}` with the
+ * failure marker unset.
+ */
+export function toolFailure(payload: Record<string, unknown>): ToolResult {
+  return {
+    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+    isError: true,
+  };
+}
+
+/**
  * Create an error tool response
  */
 export function toolError(error: string, hint?: string): ToolResult {

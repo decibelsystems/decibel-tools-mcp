@@ -19,6 +19,8 @@ import YAML from 'yaml';
 import { log } from '../../config.js';
 import { ensureDir } from '../../dataRoot.js';
 import { resolveProjectPaths, ResolvedProjectPaths } from '../../projectRegistry.js';
+import { listDirOrThrow } from '../shared/storeRead.js';
+import { readStoreFile, storeUnparseable } from '../shared/storeRead.js';
 
 // ============================================================================
 // Constants
@@ -220,12 +222,15 @@ function getCoordDir(resolved: ResolvedProjectPaths): string {
 
 async function readLocks(coordDir: string): Promise<Lock[]> {
   const locksPath = path.join(coordDir, 'locks.yaml');
+  const content = await readStoreFile(locksPath);
+  if (content === null) return [];
   try {
-    const content = await fs.readFile(locksPath, 'utf-8');
     const data = YAML.parse(content);
     return data?.locks || [];
-  } catch {
-    return [];
+  } catch (err) {
+    // A corrupt lock file read as "no locks" is worse than an error: the whole
+    // point of a lock is that a caller believes the answer.
+    throw storeUnparseable(locksPath, err);
   }
 }
 
@@ -237,12 +242,13 @@ async function writeLocks(coordDir: string, locks: Lock[]): Promise<void> {
 
 async function readAgents(coordDir: string): Promise<Agent[]> {
   const agentsPath = path.join(coordDir, 'agents.yaml');
+  const content = await readStoreFile(agentsPath);
+  if (content === null) return [];
   try {
-    const content = await fs.readFile(agentsPath, 'utf-8');
     const data = YAML.parse(content);
     return data?.agents || [];
-  } catch {
-    return [];
+  } catch (err) {
+    throw storeUnparseable(agentsPath, err);
   }
 }
 
@@ -260,15 +266,26 @@ async function appendEvent(coordDir: string, event: CoordEvent): Promise<void> {
 
 async function readEvents(coordDir: string, limit: number): Promise<CoordEvent[]> {
   const eventsPath = path.join(coordDir, 'events.jsonl');
-  try {
-    const content = await fs.readFile(eventsPath, 'utf-8');
-    const lines = content.trim().split('\n').filter(l => l.length > 0);
-    const events = lines.map(l => JSON.parse(l) as CoordEvent);
-    // Return most recent first
-    return events.reverse().slice(0, limit);
-  } catch {
-    return [];
+  const content = await readStoreFile(eventsPath);
+  if (content === null) return [];
+  const lines = content.trim().split('\n').filter(l => l.length > 0);
+  const events: CoordEvent[] = [];
+  let unparseable = 0;
+  for (const line of lines) {
+    try {
+      events.push(JSON.parse(line) as CoordEvent);
+    } catch {
+      // One bad line should not hide the log, but it must not be invisible
+      // either — a journal is append-only, so a truncated tail is normal and a
+      // silently short read is not.
+      unparseable++;
+    }
   }
+  if (unparseable > 0 && events.length === 0) {
+    throw storeUnparseable(eventsPath, `${unparseable} of ${lines.length} lines`);
+  }
+  // Return most recent first
+  return events.reverse().slice(0, limit);
 }
 
 function isExpired(expiresAt: string): boolean {
@@ -659,9 +676,11 @@ async function writeMessage(filePath: string, msg: CoordMessage): Promise<void> 
 
 async function listMessageFiles(dir: string): Promise<string[]> {
   try {
-    const files = await fs.readdir(dir);
+    const files = await listDirOrThrow(dir);
     return files.filter(f => f.startsWith('MSG-') && f.endsWith('.yaml')).sort().reverse();
-  } catch {
+  } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
     return [];
   }
 }
@@ -871,8 +890,10 @@ export async function coordGarbageCollect(projectIds: string[]): Promise<GcResul
       const messagesDir = path.join(coordDir, 'messages');
       let agentDirs: string[];
       try {
-        agentDirs = await fs.readdir(messagesDir);
-      } catch {
+        agentDirs = await listDirOrThrow(messagesDir);
+      } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
         agentDirs = [];
       }
 
@@ -903,7 +924,9 @@ export async function coordGarbageCollect(projectIds: string[]): Promise<GcResul
           }
         }
       }
-    } catch {
+    } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
       // Messages dir doesn't exist — that's fine
     }
 

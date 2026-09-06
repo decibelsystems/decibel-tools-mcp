@@ -388,7 +388,8 @@ async function executeTool(
       requestId: req.headers['x-request-id'] as string | undefined,
       tier: tierOverride,
       allowedFacades,
-    } : tierOverride ? { tier: tierOverride } : undefined;
+      transport: 'http',
+    } : tierOverride ? { tier: tierOverride, transport: 'http' } : { transport: 'http' };
 
     const toolResult = await kernel.dispatch(tool, args, context);
     const text = toolResult.content[0]?.text;
@@ -508,7 +509,7 @@ interface OpenAIFunction {
  * Get tools in OpenAI function calling format (facade-based)
  */
 function getOpenAITools(): OpenAIFunction[] {
-  return kernel.getMcpToolDefinitions('full').map(def => ({
+  return kernel.getMcpToolDefinitions('full', { transport: 'http' }).map(def => ({
     type: 'function' as const,
     function: {
       name: def.name,
@@ -982,7 +983,7 @@ export async function startHttpServer(
         version: PKG.version,
         protocol_version: RUNTIME_PROTOCOL_VERSION,
         tier,
-        tools: kernel.getMcpToolDefinitions(tier),
+        tools: kernel.getMcpToolDefinitions(tier, { transport: 'http' }),
       }));
       return;
     }
@@ -1396,6 +1397,10 @@ export async function startHttpServer(
           requestId: (req.headers['x-request-id'] as string) || bodyContext.requestId,
           allowedFacades: bodyContext.allowedFacades as unknown as string[] | undefined,
           tier,
+          // Set here, never read from the request: a caller that could name its
+          // own transport could name 'stdio' and walk straight through the
+          // local-only gate.
+          transport: 'http',
         };
 
         log(`HTTP: /batch — ${calls.length} calls (agent=${context.agentId || 'anonymous'}, tier=${tier})`);

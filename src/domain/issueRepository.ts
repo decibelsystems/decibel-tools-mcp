@@ -20,7 +20,8 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { writeFileAtomic } from '../lib/atomicWrite.js';
-import { allocateAndWriteIssue } from '../lib/issueIdAllocator.js';
+import { allocateAndWriteIssue } from '../lib/recordIdAllocator.js';
+import { listDirOrThrow } from '../tools/shared/storeRead.js';
 import {
   Issue,
   IssuePriority,
@@ -124,12 +125,13 @@ export class FsIssueRepository implements IssueRepository {
   constructor(private readonly issuesDir: string) {}
 
   private async readAll(): Promise<StoredIssue[]> {
-    let names: string[];
-    try {
-      names = (await fs.readdir(this.issuesDir)).filter((f) => RECORD_RE.test(f));
-    } catch {
-      return [];
-    }
+    // ISS-0153. ENOENT is the only error that means "empty": a directory that
+    // was never created is what an untouched project looks like. EACCES,
+    // EPERM, EIO and the rest mean the issues may well be there and this
+    // process cannot see them — returning [] there reported "no issues" for a
+    // store it could not open, and list_issues is the read most likely to be
+    // believed.
+    const names = await listDirOrThrow(this.issuesDir, (f) => RECORD_RE.test(f));
 
     const out: StoredIssue[] = [];
     for (const filename of names) {
@@ -277,7 +279,10 @@ export class FsIssueRepository implements IssueRepository {
 
     const build = (issueId: string): string => {
       const body = [
-        `# ${spec.title}`,
+        // First line only — a heading ends at the newline, so the rest would
+        // land in the body as stray prose. encodeIssue writes the whole title
+        // to frontmatter when it does not fit here.
+        `# ${spec.title.split(/\r?\n/)[0]}`,
         '',
         `**Severity:** ${spec.severity}`,
         `**Status:** open`,

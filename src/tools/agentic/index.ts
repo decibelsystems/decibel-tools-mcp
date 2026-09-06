@@ -242,7 +242,14 @@ export const agenticGoldenEvalTool: ToolSpec = {
       if (result.status === 'error') {
         return toolError(JSON.stringify(result, null, 2));
       }
-      return toolSuccess(result);
+      // `status` is runGolden's own discriminant and is provably 'executed' by
+      // this line, so forwarding it puts a constant on the wire that collides
+      // with the envelope's marker: /call cannot tell it from the envelope's
+      // own field, and the thin client deletes it. The same call then answers
+      // differently on stdio and over HTTP, which S4 caught. `isError` and the
+      // envelope's `ok` already carry what it was saying.
+      const { status: _executed, ...payload } = result;
+      return toolSuccess(payload);
     } catch (err) {
       return toolError(err instanceof Error ? err.message : String(err));
     }

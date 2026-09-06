@@ -56,6 +56,16 @@ export interface DaemonConfig {
     key?: string;
   };
   /**
+   * Zoom AI Companion ingestion (EPIC-0036). Server-to-Server OAuth credentials.
+   * These are ACCOUNT-WIDE ADMIN scope — meeting_summary:read:admin reads every
+   * meeting in the account, not only client ones. See ISS-0123.
+   */
+  zoom?: {
+    account_id?: string;
+    client_id?: string;
+    client_secret?: string;
+  };
+  /**
    * Private facades loaded at boot (EPIC-0038 Phase 7). `allow` holds absolute
    * paths to extension modules; anything else is rejected by the loader. This
    * lives in config rather than the environment on purpose — see the trust
@@ -127,6 +137,11 @@ export function loadConfig(): DaemonConfig {
       } : undefined,
       license: parsed.license ? {
         key: parsed.license.key,
+      } : undefined,
+      zoom: parsed.zoom ? {
+        account_id: parsed.zoom.account_id,
+        client_id: parsed.zoom.client_id,
+        client_secret: parsed.zoom.client_secret,
       } : undefined,
       extensions: parsed.extensions ? {
         allow: parsed.extensions.allow,

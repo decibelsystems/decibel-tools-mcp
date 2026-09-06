@@ -1,0 +1,296 @@
+# Torture-test waivers.
+#
+# An action listed here is deliberately not covered by the named sweeps.
+# A waiver is a visible, reviewable decision; an untested tool is not.
+# Waivers EXPIRE. An expired waiver fails S0 — renew it or remove it.
+#
+# Every waiver below is for the same reason: S2's four situations are
+# PROJECT-STORE situations (empty / unreadable / unparseable / unresolvable
+# .decibel), and these reads do not consult the project store at all. Waiving
+# them is not a statement that they handle absence well — it is a statement
+# that this sweep cannot tell. A remote-absence sweep is the follow-up.
+
+- action: corpus.status
+  waived: [S2]
+  reason: "Reads the shared corpus over the network, not the project's .decibel store."
+  owner: ben
+  expires: 2026-12-01
+
+- action: deck.card_performance
+  waived: [S2]
+  reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."
+  owner: ben
+  expires: 2026-12-01
+
+- action: deck.deck_record
+  waived: [S2]
+  reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."
+  owner: ben
+  expires: 2026-12-01
+
+- action: deck.draft_stats
+  waived: [S2]
+  reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."
+  owner: ben
+  expires: 2026-12-01
+
+- action: deck.intel_reports
+  waived: [S2]
+  reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."
+  owner: ben
+  expires: 2026-12-01
+
+- action: deck.list
+  waived: [S2]
+  reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."
+  owner: ben
+  expires: 2026-12-01
+
+- action: deck.match_history
+  waived: [S2]
+  reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."
+  owner: ben
+  expires: 2026-12-01
+
+- action: deck.player_summary
+  waived: [S2]
+  reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."
+  owner: ben
+  expires: 2026-12-01
+
+- action: deck.search
+  waived: [S2]
+  reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."
+  owner: ben
+  expires: 2026-12-01
+
+- action: deck.stores
+  waived: [S2]
+  reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."
+  owner: ben
+  expires: 2026-12-01
+
+- action: deck.type_search
+  waived: [S2]
+  reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."
+  owner: ben
+  expires: 2026-12-01
+
+- action: deck.volatility
+  waived: [S2]
+  reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."
+  owner: ben
+  expires: 2026-12-01
+
+- action: deck.win_rate
+  waived: [S2]
+  reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."
+  owner: ben
+  expires: 2026-12-01
+
+- action: studio.list_tasks
+  waived: [S2]
+  reason: "Reads a remote generation service. project_id selects a namespace, not a filesystem store."
+  owner: ben
+  expires: 2026-12-01
+
+- action: terminal.get_candles
+  waived: [S2]
+  reason: "Reads a wallet/DEX API, not the project's .decibel store. Same reasoning as deck."
+  owner: ben
+  expires: 2026-12-01
+
+- action: terminal.get_leaderboard
+  waived: [S2]
+  reason: "Reads a wallet/DEX API, not the project's .decibel store. Same reasoning as deck."
+  owner: ben
+  expires: 2026-12-01
+
+- action: terminal.get_tokens
+  waived: [S2]
+  reason: "Reads a wallet/DEX API, not the project's .decibel store. Same reasoning as deck."
+  owner: ben
+  expires: 2026-12-01
+
+- action: voice.inbox_list
+  waived: [S2]
+  reason: "Reads the Supabase voice inbox. NOTE: the 5.5-hour silent-failure incident that motivated this whole spec was in voice — but it was a NETWORK failure returning zero, which S2's project-store situations cannot reproduce. Needs a dedicated remote-absence sweep; tracked separately."
+  owner: ben
+  expires: 2026-12-01
+
+- action: zoom.routes
+  waived: [S2]
+  reason: "Reads the Zoom API and the project REGISTRY (not the project's .decibel store), so a broken .decibel changes nothing about the answer."
+  owner: ben
+  expires: 2026-12-01
+
+- action: zoom.status
+  waived: [S2]
+  reason: "Reads the Zoom API and the project REGISTRY (not the project's .decibel store), so a broken .decibel changes nothing about the answer."
+  owner: ben
+  expires: 2026-12-01
+
+# ---------------------------------------------------------------------------
+# S4-batch — /batch does not run the sweep in sequence, and cannot
+# ---------------------------------------------------------------------------
+# stdio, the thin client and /call each run the sweep one call at a time.
+# /batch runs a chunk of up to twenty in PARALLEL, which is its entire purpose.
+# A read whose answer depends on what has already run therefore answers
+# differently there, and it is not the transport mangling the payload — it is
+# the call observing a different history.
+#
+# The waiver is narrow on purpose: it suspends only the stdio-vs-/batch payload
+# comparison. These actions are still compared across stdio, thin and /call,
+# still checked for the failure marker on all four, and still required to
+# preserve S2's discriminability on all four.
+
+- action: sentinel.audit_policies
+  waived: [S4-batch]
+  reason: "Reports freshness timestamps of compiled policy and test manifests. Another call in the same parallel batch compiles them, so the freshness block differs by execution order rather than by transport. Verified order-dependent: reversing the pass order moved the odd answer to whichever transport ran first."
+  owner: ben
+  expires: 2027-03-01
+
+- action: oracle.hygiene_report
+  waived: [S4-batch]
+  reason: "Counts analysed vector runs, which other calls in the same parallel batch create. runsAnalyzed differs by execution order, not by transport."
+  owner: ben
+  expires: 2027-03-01
+
+- action: vector.list_runs
+  waived: [S4-batch]
+  reason: "Lists runs that dispatch auto-tracks. A parallel batch has created one by the time this read runs, where a sequential sweep reaches the read first. Ordering, not payload mangling."
+  owner: ben
+  expires: 2027-03-01
+
+- action: vector.assumptions
+  waived: [S4-batch]
+  reason: "Aggregates over the same auto-tracked runs as vector.list_runs, and diverges for the same ordering reason."
+  owner: ben
+  expires: 2027-03-01
+
+# ---------------------------------------------------------------------------
+# S2 — reads that do not consult the project's .decibel store
+# ---------------------------------------------------------------------------
+# The same reasoning as the corpus and deck waivers above: S2's four situations
+# are PROJECT-STORE situations, so a read that never opens the project store
+# legitimately answers identically in all four. Waiving is a statement that
+# this sweep cannot tell, not that the read handles absence well.
+#
+# These were all found by the sweep failing in all THREE situations at once,
+# which is the signature: a read that consults the store fails in one or two,
+# a read that does not fails in every one.
+
+- action: decibel.about
+  waived: [S2]
+  reason: "Static product information compiled into the tool. There is no store to be empty, unreadable, or unparseable."
+  owner: ben
+  expires: 2027-03-01
+
+- action: decibel.capabilities
+  waived: [S2]
+  reason: "Static product information compiled into the tool. No store read of any kind."
+  owner: ben
+  expires: 2027-03-01
+
+- action: decibel.case_studies
+  waived: [S2]
+  reason: "Static product information compiled into the tool. No store read of any kind."
+  owner: ben
+  expires: 2027-03-01
+
+- action: registry.list
+  waived: [S2]
+  reason: "Lists the machine's project registry (~/.decibel/projects.json), which is what makes a project resolvable in the first place. A per-project store situation cannot change its answer."
+  owner: ben
+  expires: 2027-03-01
+
+- action: registry.config_list
+  waived: [S2]
+  reason: "Enumerates the configurable facades and their environment variables from the tool's own definitions. Nothing per-project is read."
+  owner: ben
+  expires: 2027-03-01
+
+- action: swarm.session_status
+  waived: [S2]
+  reason: "Reads agent sessions from Supabase, not the project's .decibel store."
+  owner: ben
+  expires: 2027-03-01
+
+- action: swarm.read_signals
+  waived: [S2]
+  reason: "Reads agent signals from Supabase, not the project's .decibel store."
+  owner: ben
+  expires: 2027-03-01
+
+- action: dojo.projects
+  waived: [S2]
+  reason: "Lists every registered project on the machine. It answers ABOUT projects rather than FROM one, so a single project's store situation cannot change it."
+  owner: ben
+  expires: 2027-03-01
+
+- action: oracle.portfolio_summary
+  waived: [S2]
+  reason: "Summarises across the whole portfolio rather than one project. One project's store being unreadable is a fact it should surface, but that is a different assertion from the one S2 makes."
+  owner: ben
+  expires: 2027-03-01
+
+# guardian scans the SOURCE TREE (src/, package.json, the global config), never
+# the project's .decibel store — so no store situation reaches it. Worth
+# recording what the sweep did show: on an unresolvable project id, every
+# guardian scan falls back to process.cwd() and grades whatever directory the
+# caller happens to be in, reporting it under the project id that named
+# nothing. That fallback is deliberate (the pre-push hook relies on it) but it
+# is a different hazard from the one S2 tests, and it is not waived here — it
+# is filed separately.
+
+- action: guardian.scan_deps
+  waived: [S2]
+  reason: "Audits the dependency tree via npm, not the project's .decibel store."
+  owner: ben
+  expires: 2027-03-01
+
+- action: guardian.scan_secrets
+  waived: [S2]
+  reason: "Scans source directories, not the project's .decibel store. Only the allowlist comes from .decibel, and its absence is not one of the four situations."
+  owner: ben
+  expires: 2027-03-01
+
+- action: guardian.scan_http
+  waived: [S2]
+  reason: "Inspects HTTP server configuration in source, not the project's .decibel store."
+  owner: ben
+  expires: 2027-03-01
+
+- action: guardian.scan_config
+  waived: [S2]
+  reason: "Checks the daemon's global config and runtime files under ~/.decibel, not the project's store."
+  owner: ben
+  expires: 2027-03-01
+
+- action: guardian.report
+  waived: [S2]
+  reason: "Aggregates the four scans above, none of which reads the project's .decibel store."
+  owner: ben
+  expires: 2027-03-01
+
+# sentinel's hygiene scanners walk the SOURCE TREE — src/, package.json, env
+# files, test directories — never the project's .decibel store. Same reasoning
+# as guardian above: no store situation reaches them.
+
+- action: sentinel.scan_codebase
+  waived: [S2]
+  reason: "Walks the project's source tree for structural smells. Never opens the .decibel store, so none of the four store situations can change its answer."
+  owner: ben
+  expires: 2027-03-01
+
+- action: sentinel.scan_config
+  waived: [S2]
+  reason: "Scans config and env files in the source tree, not the .decibel store."
+  owner: ben
+  expires: 2027-03-01
+
+- action: sentinel.scan_coverage
+  waived: [S2]
+  reason: "Compares source files against test files on disk. Nothing in the .decibel store is read."
+  owner: ben
+  expires: 2027-03-01

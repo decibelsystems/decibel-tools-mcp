@@ -1,6 +1,6 @@
 # Tool Torture Test — release gate for 3.0
 
-**Status:** design, not built
+**Status:** BUILT — all eight sweeps green (2026-09-06)
 **Date:** 2026-09-02
 **Surface under test:** 35 facades / ~269 facade actions / 272 internal tools, across 4 transports
 **Blocks:** publishing `@decibelsystems/tools@3.0.0` to the `latest` npm tag
@@ -260,6 +260,31 @@ Release-blocking assertions on the tarball itself:
 5. **S4**, then **S6**, then **S5**.
 
 Stop after step 3 and 3.0 is already better guarded than any release so far.
+
+## Outcome (2026-09-06)
+
+All eight sweeps built and green. The build order above was followed exactly, and
+S5 was last, which is why the epic duplicate-id race (ISS-0158) survived until the
+end: every sweep before it calls tools one at a time, and that defect is invisible
+under sequential calls. Phase 1's lock had been read as covering "the allocator",
+but it covered `create_issue`; `log_epic` still scanned the directory for its
+maximum and wrote ~20 awaits later with nothing holding the two together.
+
+The prediction in "Expected outcome" held twice over, in both directions:
+
+- S2 came back with 18 findings, of which SIX were the harness lying — fixture
+  files planted at paths no reader globs, so tools that handled absence correctly
+  were reported broken.
+- S5's first crash test reported four successful SIGKILLs while all four victims
+  kept running. `node_modules/.bin/tsx` spawns node as a grandchild, so killing the
+  child reaped the wrapper and orphaned the writer; one was still at 95% CPU twelve
+  minutes later. Fixed with a detached process group, and the kill is now verified
+  by the store no longer growing rather than by having sent a signal.
+
+Both are the same lesson the spec already states — verify non-circularly — and both
+were caught by calibration probes rather than by review. Every sweep now carries
+one: S5 asserts its racers actually overlapped before believing anything about
+contention.
 
 ## Expected outcome
 

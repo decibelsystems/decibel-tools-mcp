@@ -14,6 +14,7 @@ import type {
 } from '../../types/agent-services.js';
 import type { VectorEvent, RunInfo } from '../../tools/vector.js';
 import { getRun, listRuns } from '../../tools/vector.js';
+import { countedStoreMeta } from '../../tools/shared/storeRead.js';
 
 // ============================================================================
 // Constants
@@ -163,10 +164,15 @@ export async function aggregateAssumptions(
   const maxRuns = options?.max_runs || 100;
 
   // Get recent runs
-  const { runs } = await listRuns({
+  const { runs, unreadable_count: runsUnreadable = 0 } = await listRuns({
     projectId,
     limit: maxRuns,
   });
+
+  // Runs listRuns could not describe, plus runs whose events this loop could
+  // not read. Both mean the same thing here: assumptions that were made and
+  // are not in the totals below.
+  let unreadable = runsUnreadable;
 
   // Filter by date
   const cutoff = new Date();
@@ -209,7 +215,7 @@ export async function aggregateAssumptions(
 
       allAssumptions.push(...assumptions);
     } catch {
-      // Skip runs we can't read
+      unreadable++;
     }
   }
 
@@ -224,6 +230,7 @@ export async function aggregateAssumptions(
       end: new Date().toISOString(),
       run_count: recentRuns.length,
     },
+    ...countedStoreMeta(recentRuns.length, unreadable),
   };
 }
 

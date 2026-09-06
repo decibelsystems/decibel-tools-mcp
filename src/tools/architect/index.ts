@@ -5,6 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
+import { countedStoreMeta } from '../shared/storeRead.js';
 import { toolSuccess, toolError, requireFields, withRunTracking, summaryGenerators } from '../shared/index.js';
 import {
   recordArchDecision,
@@ -536,8 +537,12 @@ export const architectListAdrsTool: ToolSpec = {
       const rawInput = args as Record<string, unknown>;
       const projectId = (rawInput.projectId ?? rawInput.project_id) as string;
       requireFields({ projectId }, 'projectId');
-      const result = await listProjectAdrs(projectId);
-      return toolSuccess({ adrs: result, count: result.length });
+      const { adrs, unreadable_count } = await listProjectAdrs(projectId);
+      return toolSuccess({
+        adrs,
+        count: adrs.length,
+        ...countedStoreMeta(adrs.length, unreadable_count),
+      });
     } catch (err) {
       return toolError(err instanceof Error ? err.message : String(err));
     }

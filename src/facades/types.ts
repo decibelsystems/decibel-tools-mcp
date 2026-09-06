@@ -36,6 +36,24 @@ export interface FacadeSpec {
 
   /** Deprecated action name → canonical action name. Hidden from LLM, resolved at dispatch. */
   aliases?: Record<string, string>;
+
+  /**
+   * Reachable from a local stdio client only — never over the HTTP transport,
+   * regardless of tier or license.
+   *
+   * For facades whose blast radius is wider than the caller's own project: the
+   * `zoom` credential is account-wide admin scope, so one call over an
+   * unauthenticated hosted bind hands the caller every meeting summary in the
+   * account. Tier is the wrong instrument for that — it answers "may this
+   * caller use pro features", not "should this reach the open internet".
+   *
+   * Defence in depth, not a boundary on its own. A deployment that fronts this
+   * process with a local reverse proxy (senken.pro runs gunicorn in front of
+   * it) makes remote requests arrive wearing a loopback source address. The
+   * gate that actually holds for zoom is registration by absence: no
+   * DECIBEL_ZOOM=1, no facade.
+   */
+  localOnly?: boolean;
 }
 
 /** Detail tier for tool descriptions */

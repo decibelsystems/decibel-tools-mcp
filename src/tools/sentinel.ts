@@ -6,6 +6,7 @@ import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
 import { emitCreateProvenance } from './provenance.js';
 import { safeParseYaml } from '../sentinelIssues.js';
+import { readStoreDir, storeMeta, type StoreStatus } from './shared/storeRead.js';
 import {
   FsIssueRepository,
   AmbiguousIssueIdError as RepoAmbiguousIssueIdError,
@@ -13,6 +14,7 @@ import {
   StoredIssue,
 } from '../domain/issueRepository.js';
 import { writeFileAtomic } from '../lib/atomicWrite.js';
+import { allocateAndWriteEpic } from '../lib/recordIdAllocator.js';
 
 /**
  * Sentinel record files exist in two on-disk formats: markdown-with-frontmatter
@@ -226,6 +228,11 @@ export interface EpicSummary {
 
 export interface ListEpicsOutput {
   epics: EpicSummary[];
+  /** Which of empty / unreadable / partial this listing actually is (ISS-0153). */
+  store_status?: StoreStatus;
+  /** Records present but skipped. Non-zero means the list is short. */
+  unreadable_count?: number;
+  store_reason?: string;
 }
 
 export interface GetEpicInput {
@@ -389,24 +396,11 @@ function formatTimestampForFilename(date: Date): string {
   return iso.replace(/:/g, '-').replace(/\.\d{3}Z$/, 'Z');
 }
 
-async function getNextEpicNumber(epicsDir: string): Promise<number> {
-  try {
-    const files = await fs.readdir(epicsDir);
-    const epicNumbers = files
-      .filter((f) => f.startsWith('EPIC-') && isRecordFile(f))
-      .map((f) => {
-        const match = f.match(/^EPIC-(\d+)/);
-        return match ? parseInt(match[1], 10) : 0;
-      });
-    return epicNumbers.length > 0 ? Math.max(...epicNumbers) + 1 : 1;
-  } catch {
-    return 1;
-  }
-}
-
-function formatEpicId(num: number): string {
-  return `EPIC-${num.toString().padStart(4, '0')}`;
-}
+// getNextEpicNumber/formatEpicId lived here and were the epic half of the
+// duplicate-id race: they read the directory for the current maximum, and the
+// write happened ~20 awaits later with nothing holding the two together.
+// Allocation now runs under the same cross-process lock as issues — see
+// allocateAndWriteEpic in src/lib/recordIdAllocator.ts.
 
 function formatIssueId(num: number): string {
   return `ISS-${num.toString().padStart(4, '0')}`;
@@ -575,8 +569,21 @@ async function parseEpicFile(filePath: string): Promise<Epic | null> {
     /**
      * Notes are `## Note (<iso>)` sections appended by update_epic, so the
      * reader is written against that exact shape rather than against any
-     * heading that looks note-ish. A section runs to the next `##` at column
-     * zero or to the end of the body.
+     * heading that looks note-ish.
+     *
+     * A note runs to the NEXT `## Note (…)` heading, not to the next `##`.
+     * That distinction is the whole bug: a note whose own text opens with a
+     * markdown heading — `## Resolution`, the commonest thing anyone writes in
+     * one — made the terminator match at offset zero, so the section came back
+     * empty and `if (text)` dropped it. read_epic then returned `notes: []` for
+     * an epic whose file plainly held the note, and update_epic had reported
+     * success, which is why it survived #72.
+     *
+     * Ending at the next NOTE heading is safe because notes are only ever
+     * appended after every other section: log_epic writes Summary, Motivation,
+     * Outcomes and Acceptance Criteria before any note can exist, and the one
+     * writer that could append a section later (the summary fallback below)
+     * now inserts ahead of the notes for this reason.
      */
     const extractNotes = (): EpicNote[] => {
       const out: EpicNote[] = [];
@@ -585,7 +592,7 @@ async function parseEpicFile(filePath: string): Promise<Epic | null> {
       while ((m = re.exec(body)) !== null) {
         const from = m.index + m[0].length;
         const rest = body.slice(from);
-        const next = rest.search(/^##\s/m);
+        const next = rest.search(/^##\s+Note\s*\([^)]*\)\s*$/m);
         const text = (next === -1 ? rest : rest.slice(0, next)).trim();
         if (text) out.push({ at: m[1].trim(), text });
       }
@@ -1183,64 +1190,71 @@ export async function logEpic(input: LogEpicInput): Promise<LogEpicOutput | Proj
 
   ensureDir(epicsDir);
 
-  const epicNum = await getNextEpicNumber(epicsDir);
-  const epicId = formatEpicId(epicNum);
   const slug = slugify(input.title);
-  const filename = `${epicId}-${slug}.md`;
-  const filePath = path.join(epicsDir, filename);
-  validateWritePath(filePath, resolved);
 
   const priority = input.priority || 'medium';
   const tags = input.tags || [];
   const owner = input.owner || '';
   const squad = input.squad || '';
 
-  // Build frontmatter — use yamlScalar on free-text fields so values containing
-  // `#`, `:` etc. don't truncate on read-back (see ISS-0110 bug 3).
-  const frontmatter = [
-    '---',
-    `id: ${epicId}`,
-    `projectId: ${yamlScalar(resolved.id)}`,
-    `title: ${yamlScalar(input.title)}`,
-    `summary: ${yamlScalar(input.summary)}`,
-    `status: planned`,
-    `priority: ${priority}`,
-    `tags: [${tags.map(yamlScalar).join(', ')}]`,
-    `owner: ${yamlScalar(owner)}`,
-    `squad: ${yamlScalar(squad)}`,
-    `created_at: ${timestamp}`,
-    '---',
-  ].join('\n');
+  // Content is built from the id the allocator hands out, so it cannot be
+  // assembled before allocation — the id appears in the frontmatter.
+  const buildContent = (epicId: string): string => {
+    // Build frontmatter — use yamlScalar on free-text fields so values containing
+    // `#`, `:` etc. don't truncate on read-back (see ISS-0110 bug 3).
+    const frontmatter = [
+      '---',
+      `id: ${epicId}`,
+      `projectId: ${yamlScalar(resolved.id)}`,
+      `title: ${yamlScalar(input.title)}`,
+      `summary: ${yamlScalar(input.summary)}`,
+      `status: planned`,
+      `priority: ${priority}`,
+      `tags: [${tags.map(yamlScalar).join(', ')}]`,
+      `owner: ${yamlScalar(owner)}`,
+      `squad: ${yamlScalar(squad)}`,
+      `created_at: ${timestamp}`,
+      '---',
+    ].join('\n');
 
-  // Build body sections
-  const sections: string[] = [];
+    // Build body sections
+    const sections: string[] = [];
 
-  sections.push(`# ${input.title}`, '', '## Summary', '', input.summary);
+    sections.push(`# ${input.title}`, '', '## Summary', '', input.summary);
 
-  if (input.motivation && input.motivation.length > 0) {
-    sections.push('', '## Motivation', '');
-    for (const item of input.motivation) {
-      sections.push(`- ${item}`);
+    if (input.motivation && input.motivation.length > 0) {
+      sections.push('', '## Motivation', '');
+      for (const item of input.motivation) {
+        sections.push(`- ${item}`);
+      }
     }
-  }
 
-  if (input.outcomes && input.outcomes.length > 0) {
-    sections.push('', '## Outcomes', '');
-    for (const item of input.outcomes) {
-      sections.push(`- ${item}`);
+    if (input.outcomes && input.outcomes.length > 0) {
+      sections.push('', '## Outcomes', '');
+      for (const item of input.outcomes) {
+        sections.push(`- ${item}`);
+      }
     }
-  }
 
-  if (input.acceptance_criteria && input.acceptance_criteria.length > 0) {
-    sections.push('', '## Acceptance Criteria', '');
-    for (const item of input.acceptance_criteria) {
-      sections.push(`- [ ] ${item}`);
+    if (input.acceptance_criteria && input.acceptance_criteria.length > 0) {
+      sections.push('', '## Acceptance Criteria', '');
+      for (const item of input.acceptance_criteria) {
+        sections.push(`- [ ] ${item}`);
+      }
     }
-  }
 
-  const content = `${frontmatter}\n\n${sections.join('\n')}\n`;
+    return `${frontmatter}\n\n${sections.join('\n')}\n`;
+  };
 
-  await writeFileAtomic(filePath, content);
+  // Capture what actually landed rather than rebuilding it, so the provenance
+  // fingerprint below is of the bytes on disk and not of a second render.
+  let content = '';
+  const { id: epicId, filePath } = await allocateAndWriteEpic(
+    epicsDir,
+    slug,
+    (id) => (content = buildContent(id)),
+    { validate: (p) => validateWritePath(p, resolved) }
+  );
   log(`Sentinel: Created epic at ${filePath} (project: ${resolved.id})`);
 
   // Emit provenance event for this creation
@@ -1270,38 +1284,31 @@ export async function listEpics(input: ListEpicsInput): Promise<ListEpicsOutput 
 
   const epics: EpicSummary[] = [];
 
-  try {
-    const files = await fs.readdir(epicsDir);
-    for (const file of files) {
-      if (!isRecordFile(file)) continue;
+  // ISS-0153. The previous form was `catch { /* directory doesn't exist yet */ }`
+  // wrapped around BOTH the readdir and the parse loop, with `if (!epic)
+  // continue` inside it. So a permissions failure, a corrupt epic, and a project
+  // that has never logged one all returned `{epics: []}` — and the caller could
+  // not tell which. readStoreDir keeps them apart and counts what it skipped.
+  const read = await readStoreDir(epicsDir, parseEpicFile, isRecordFile);
 
-      const filePath = path.join(epicsDir, file);
-      const epic = await parseEpicFile(filePath);
-      if (!epic) continue;
-
-      // Apply filters
-      if (input.status && epic.status !== input.status) continue;
-      if (input.priority && epic.priority !== input.priority) continue;
-      if (input.tags && input.tags.length > 0) {
-        const hasTag = input.tags.some((t) => epic.tags.includes(t));
-        if (!hasTag) continue;
-      }
-
-      epics.push({
-        id: epic.id,
-        title: epic.title,
-        status: epic.status,
-        priority: epic.priority,
-      });
+  for (const epic of read.entries) {
+    if (input.status && epic.status !== input.status) continue;
+    if (input.priority && epic.priority !== input.priority) continue;
+    if (input.tags && input.tags.length > 0) {
+      if (!input.tags.some((t) => epic.tags.includes(t))) continue;
     }
-  } catch {
-    // Directory doesn't exist yet
+    epics.push({
+      id: epic.id,
+      title: epic.title,
+      status: epic.status,
+      priority: epic.priority,
+    });
   }
 
   // Sort by ID (newest first based on number)
   epics.sort((a, b) => b.id.localeCompare(a.id));
 
-  return { epics };
+  return { epics, ...storeMeta(read) };
 }
 
 export async function getEpic(input: GetEpicInput): Promise<GetEpicOutput | ProjectResolutionError> {
@@ -1467,9 +1474,17 @@ export async function updateEpic(
     // untrustworthy to read.
     const summarySection = /^## Summary\s*\n[\s\S]*?(?=\n## |\s*$)/m;
     const replacement = `## Summary\n\n${input.summary}\n`;
-    body = summarySection.test(body)
-      ? body.replace(summarySection, replacement)
-      : `${body.trimEnd()}\n\n${replacement}`;
+    if (summarySection.test(body)) {
+      body = body.replace(summarySection, replacement);
+    } else {
+      // Ahead of the notes, not after them. A note section ends at the next
+      // note heading (see extractNotes), so a Summary appended past the last
+      // note would be read back as part of that note's text.
+      const firstNote = body.search(/^##\s+Note\s*\([^)]*\)\s*$/m);
+      body = firstNote === -1
+        ? `${body.trimEnd()}\n\n${replacement}`
+        : `${body.slice(0, firstNote).trimEnd()}\n\n${replacement}\n${body.slice(firstNote)}`;
+    }
   }
 
   if (input.note) {

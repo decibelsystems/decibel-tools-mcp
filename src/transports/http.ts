@@ -17,7 +17,7 @@ export class HttpAdapter implements TransportAdapter {
 
   async start(kernel: ToolKernel | null, config: TransportConfig): Promise<void> {
     if (!kernel) throw new Error(`${this.name} adapter requires a local kernel`);
-    const server = createMcpServer(kernel);
+    const server = createMcpServer(kernel, 'http');
     this.handle = await startHttpServer(server, kernel, {
       port: config.port || 4888,
       host: config.host || '0.0.0.0',

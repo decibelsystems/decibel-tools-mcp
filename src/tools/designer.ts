@@ -5,6 +5,7 @@ import { log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
 import { emitCreateProvenance } from './provenance.js';
+import { listDirOrThrow, pathIsPresent, countedStoreMeta, type StoreMetaFields } from './shared/storeRead.js';
 
 // ============================================================================
 // Figma API Configuration
@@ -305,13 +306,11 @@ interface DesignPrinciple {
 async function loadPrinciples(resolved: ResolvedProjectPaths): Promise<DesignPrinciple[]> {
   const principlesDir = resolved.subPath('designer', 'principles');
 
-  try {
-    await fs.access(principlesDir);
-  } catch {
-    return [];
-  }
+  // The listDirOrThrow below reports an unopenable store — but only if this
+  // guard lets it run. fs.access swallowed EACCES and returned [] first.
+  if (!(await pathIsPresent(principlesDir))) return [];
 
-  const files = await fs.readdir(principlesDir);
+  const files = await listDirOrThrow(principlesDir);
   const principles: DesignPrinciple[] = [];
 
   for (const file of files) {
@@ -1143,7 +1142,7 @@ export async function logEval(
   // Auto-link to most recent eval with same evalType + target
   let previousEvalId: string | null = null;
   try {
-    const existingFiles = await fs.readdir(evalsDir);
+    const existingFiles = await listDirOrThrow(evalsDir);
     const candidates: { id: string; timestamp: string }[] = [];
     for (const f of existingFiles) {
       if (!f.endsWith('.yaml') && !f.endsWith('.yml')) continue;
@@ -1159,7 +1158,9 @@ export async function logEval(
       candidates.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
       previousEvalId = candidates[0].id;
     }
-  } catch { /* no evals dir yet */ }
+  } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err; /* no evals dir yet */ }
 
   const findingCounts = {
     critical: input.findings.filter(f => f.severity === 'critical').length,
@@ -1240,7 +1241,7 @@ export interface EvalSummary {
   timestamp: string;
 }
 
-export interface ListEvalsOutput {
+export interface ListEvalsOutput extends StoreMetaFields {
   evals: EvalSummary[];
   total: number;
   path: string;
@@ -1260,12 +1261,17 @@ export async function listEvals(
 
   let files: string[];
   try {
-    files = await fs.readdir(evalsDir);
-  } catch {
+    files = await listDirOrThrow(evalsDir);
+  } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
     return { evals: [], total: 0, path: evalsDir };
   }
 
   const evals: EvalSummary[] = [];
+  // An eval record that did not parse is a design review the caller is about
+  // to be told never happened.
+  let unreadable = 0;
 
   for (const file of files) {
     if (!file.endsWith('.yaml') && !file.endsWith('.yml')) continue;
@@ -1273,7 +1279,7 @@ export async function listEvals(
     try {
       const content = await fs.readFile(path.join(evalsDir, file), 'utf-8');
       const data = YAML.parse(content);
-      if (!data?.id) continue;
+      if (!data?.id) { unreadable++; continue; }
 
       evals.push({
         id: data.id,
@@ -1288,7 +1294,7 @@ export async function listEvals(
         timestamp: data.timestamp,
       });
     } catch {
-      // Skip malformed files
+      unreadable++;
     }
   }
 
@@ -1328,6 +1334,7 @@ export async function listEvals(
     evals: filtered,
     total: filtered.length,
     path: evalsDir,
+    ...countedStoreMeta(evals.length, unreadable),
   };
 }
 

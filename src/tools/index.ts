@@ -107,14 +107,19 @@ async function loadProTools(): Promise<ToolSpec[]> {
     { studioTools },
     { corpusTools },
     { postOfficeTools },
+    { zoomTools },
   ] = await Promise.all([
     import('./voice/index.js'),
     import('./studio/index.js'),
     import('./corpus/index.js'),
     import('./postoffice/index.js'),
+    import('./zoom/index.js'),
   ]);
 
-  return [...voiceTools, ...studioTools, ...corpusTools, ...postOfficeTools];
+  // zoomTools is empty unless DECIBEL_ZOOM=1 — it reaches an account-wide admin
+  // Zoom credential, so it is registered by explicit opt-in rather than gated
+  // after the fact. See ISS-0123.
+  return [...voiceTools, ...studioTools, ...corpusTools, ...postOfficeTools, ...zoomTools];
 }
 
 // Export sync version for backward compat (pro tools loaded async)

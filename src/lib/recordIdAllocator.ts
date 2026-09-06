@@ -1,5 +1,5 @@
 /**
- * Serialized ISS-NNNN allocation.
+ * Serialized ISS-NNNN and EPIC-NNNN allocation.
  *
  * The defect this closes: `create_issue` picked the next id by scanning the
  * issues directory for the current maximum, then wrote the file many awaits
@@ -28,8 +28,16 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { withFileLock } from './fileLock.js';
 
-/** Lock file guarding id allocation, scoped per issues directory. */
-const LOCK_FILENAME = '.issue-id.lock';
+/**
+ * Lock file guarding id allocation, scoped per record directory.
+ *
+ * Issues and epics number independently and live in different directories, so
+ * one lock file name per directory is exactly one lock per numbering space.
+ */
+const LOCK_FILENAME = '.record-id.lock';
+
+/** The record kinds that carry an allocated NNNN. */
+export type RecordPrefix = 'ISS' | 'EPIC';
 
 /** Records the allocator considers when scanning for the current maximum. */
 function isRecordFile(filename: string): boolean {
@@ -45,42 +53,49 @@ function frontmatterRegion(content: string): string | null {
   return headingIdx > 0 ? content.split('\n').slice(0, headingIdx).join('\n') : content;
 }
 
+export function formatRecordId(prefix: RecordPrefix, num: number): string {
+  return `${prefix}-${num.toString().padStart(4, '0')}`;
+}
+
 export function formatIssueId(num: number): string {
-  return `ISS-${num.toString().padStart(4, '0')}`;
+  return formatRecordId('ISS', num);
 }
 
 /**
- * Highest ISS-NNNN currently present, by filename prefix or frontmatter id.
+ * Highest PREFIX-NNNN currently present, by filename prefix or frontmatter id.
  *
- * Both sources are checked because the two record formats disagree: ISS-NNNN
+ * Both sources are checked because the two record formats disagree: PREFIX-NNNN
  * files carry the id in the name, while timestamp-slug records carry it only in
  * frontmatter. Scanning one source alone under-counts and hands out an id that
  * is already taken.
  */
-export async function scanMaxIssueNumber(issuesDir: string): Promise<number> {
+export async function scanMaxRecordNumber(dir: string, prefix: RecordPrefix): Promise<number> {
   let max = 0;
   let files: string[];
   try {
-    files = await fs.readdir(issuesDir);
+    files = await fs.readdir(dir);
   } catch {
     return 0; // Directory does not exist yet.
   }
 
+  const fromName = new RegExp(`^${prefix}-(\\d+)`, 'i');
+  const fromId = new RegExp(`^${prefix}-(\\d+)$`, 'i');
+
   for (const file of files) {
-    const prefixMatch = file.match(/^ISS-(\d+)/i);
+    const prefixMatch = file.match(fromName);
     if (prefixMatch) {
       max = Math.max(max, parseInt(prefixMatch[1], 10));
       continue;
     }
     if (!isRecordFile(file)) continue;
     try {
-      const content = await fs.readFile(path.join(issuesDir, file), 'utf-8');
+      const content = await fs.readFile(path.join(dir, file), 'utf-8');
       const region = frontmatterRegion(content);
       if (!region) continue;
       const idLine = region.split('\n').find((l) => l.trim().toLowerCase().startsWith('id:'));
       if (!idLine) continue;
       const idVal = idLine.slice(idLine.indexOf(':') + 1).trim();
-      const idMatch = idVal.match(/^ISS-(\d+)$/i);
+      const idMatch = idVal.match(fromId);
       if (idMatch) max = Math.max(max, parseInt(idMatch[1], 10));
     } catch {
       // Unreadable record — skip rather than abort the whole allocation.
@@ -89,14 +104,18 @@ export async function scanMaxIssueNumber(issuesDir: string): Promise<number> {
   return max;
 }
 
-export interface AllocatedIssue {
+export async function scanMaxIssueNumber(issuesDir: string): Promise<number> {
+  return scanMaxRecordNumber(issuesDir, 'ISS');
+}
+
+export interface AllocatedRecord {
   id: string;
   filename: string;
   filePath: string;
 }
 
 /**
- * Allocate the next ISS-NNNN and write the record, with both held under one
+ * Allocate the next PREFIX-NNNN and write the record, with both held under one
  * lock so no other process can allocate the same id in between.
  *
  * `buildContent` receives the allocated id because the id appears inside the
@@ -107,25 +126,33 @@ export interface AllocatedIssue {
  * Retrying is correct here: the id is genuinely taken, and the next one up is a
  * valid answer to the caller's request.
  */
-export async function allocateAndWriteIssue(
-  issuesDir: string,
+export async function allocateAndWriteRecord(
+  dir: string,
+  prefix: RecordPrefix,
   extension: 'md' | 'yml',
   slug: string,
-  buildContent: (issueId: string) => string,
-  options: { maxAttempts?: number; timeoutMs?: number } = {}
-): Promise<AllocatedIssue> {
+  buildContent: (recordId: string) => string,
+  options: {
+    maxAttempts?: number;
+    timeoutMs?: number;
+    /** Called with the resolved path before each write attempt, to reject a
+     *  path that escapes the project. Throwing aborts the allocation. */
+    validate?: (filePath: string) => void;
+  } = {}
+): Promise<AllocatedRecord> {
   const maxAttempts = options.maxAttempts ?? 5;
-  const lockPath = path.join(issuesDir, LOCK_FILENAME);
+  const lockPath = path.join(dir, LOCK_FILENAME);
 
   return withFileLock(
     lockPath,
     async () => {
-      let next = (await scanMaxIssueNumber(issuesDir)) + 1;
+      let next = (await scanMaxRecordNumber(dir, prefix)) + 1;
 
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const id = formatIssueId(next);
+        const id = formatRecordId(prefix, next);
         const filename = `${id}-${slug}.${extension}`;
-        const filePath = path.join(issuesDir, filename);
+        const filePath = path.join(dir, filename);
+        options.validate?.(filePath);
         try {
           // 'wx' is O_EXCL: fails rather than clobbering an existing record.
           await fs.writeFile(filePath, buildContent(id), { encoding: 'utf-8', flag: 'wx' });
@@ -137,11 +164,42 @@ export async function allocateAndWriteIssue(
       }
 
       throw new Error(
-        `Could not allocate an unused issue id in ${issuesDir} after ${maxAttempts} attempts ` +
-          `(last tried ${formatIssueId(next - 1)}). The directory may contain records written ` +
-          `by a process that bypasses id locking.`
+        `Could not allocate an unused ${prefix} id in ${dir} after ${maxAttempts} attempts ` +
+          `(last tried ${formatRecordId(prefix, next - 1)}). The directory may contain records ` +
+          `written by a process that bypasses id locking.`
       );
     },
     { timeoutMs: options.timeoutMs }
   );
+}
+
+/** ISS-NNNN allocation. See {@link allocateAndWriteRecord}. */
+export async function allocateAndWriteIssue(
+  issuesDir: string,
+  extension: 'md' | 'yml',
+  slug: string,
+  buildContent: (issueId: string) => string,
+  options: { maxAttempts?: number; timeoutMs?: number; validate?: (filePath: string) => void } = {}
+): Promise<AllocatedRecord> {
+  return allocateAndWriteRecord(issuesDir, 'ISS', extension, slug, buildContent, options);
+}
+
+/**
+ * EPIC-NNNN allocation.
+ *
+ * Added because `logEpic` had the pre-lock defect verbatim: it read the
+ * directory for the current maximum, then wrote the file ~20 awaits later.
+ * Epics are the worse half of that race. An issue collision at least left two
+ * files and a visible duplicate id; the epic path wrote through
+ * `writeFileAtomic`, whose rename CLOBBERS, so the loser was not duplicated —
+ * it was gone, and its caller had already been told it was created. Found by
+ * the S5 concurrency sweep.
+ */
+export async function allocateAndWriteEpic(
+  epicsDir: string,
+  slug: string,
+  buildContent: (epicId: string) => string,
+  options: { maxAttempts?: number; timeoutMs?: number; validate?: (filePath: string) => void } = {}
+): Promise<AllocatedRecord> {
+  return allocateAndWriteRecord(epicsDir, 'EPIC', 'md', slug, buildContent, options);
 }

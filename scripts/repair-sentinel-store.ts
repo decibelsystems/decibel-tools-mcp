@@ -57,7 +57,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { writeFileAtomic } from '../src/lib/atomicWrite.js';
-import { formatIssueId, scanMaxIssueNumber } from '../src/lib/issueIdAllocator.js';
+import { formatIssueId, scanMaxIssueNumber } from '../src/lib/recordIdAllocator.js';
 import { isUid, newUid } from '../src/domain/issue.js';
 import { decodeIssue, encodeIssue } from '../src/domain/issueCodec.js';
 

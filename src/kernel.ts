@@ -46,6 +46,15 @@ export interface DispatchContext {
   allowedFacades?: string[];
   /** License tier — when set, pro facades are rejected for 'core' tier */
   tier?: 'core' | 'pro' | 'apps';
+  /**
+   * Which transport carried this call. Set by the adapter, never by the caller.
+   * 'http' rejects facades marked localOnly — see FacadeSpec.localOnly.
+   *
+   * Unset means stdio: a context arriving without a transport came from an
+   * in-process caller, and defaulting the ABSENT case to 'http' would break
+   * every existing direct kernel consumer. The HTTP adapters set it explicitly.
+   */
+  transport?: 'stdio' | 'http';
   /** Engagement mode: 'suggest' | 'curate' | 'compose' */
   engagementMode?: string;
   /** Identity of the calling user (Supabase access token / JWT, via X-User-Key) */
@@ -166,7 +175,10 @@ export interface ToolKernel {
    * Get MCP tool definitions for the tools/list response.
    * Returns facade definitions filtered by detail tier.
    */
-  getMcpToolDefinitions(tier?: DetailTier): McpToolDefinition[];
+  getMcpToolDefinitions(
+    tier?: DetailTier,
+    opts?: { transport?: 'stdio' | 'http' }
+  ): McpToolDefinition[];
 
   /** Subscribe to dispatch events (dispatch, result, error) */
   on(event: string, listener: (evt: DispatchEvent) => void): void;
@@ -435,14 +447,22 @@ export async function createKernel(): Promise<ToolKernel> {
     };
   }
 
-  // Pre-build MCP definitions for each tier (cached)
-  const mcpDefCache = new Map<DetailTier, McpToolDefinition[]>();
+  // Pre-build MCP definitions for each tier (cached). Keyed on transport too:
+  // an HTTP listing must not advertise a local-only facade it would then refuse
+  // to dispatch. Offering a tool and rejecting every call to it is a worse
+  // failure than not offering it — the caller reads the rejection as a bug.
+  const mcpDefCache = new Map<string, McpToolDefinition[]>();
 
-  function getMcpToolDefinitions(tier: DetailTier = 'full'): McpToolDefinition[] {
-    let cached = mcpDefCache.get(tier);
+  function getMcpToolDefinitions(
+    tier: DetailTier = 'full',
+    opts: { transport?: 'stdio' | 'http' } = {}
+  ): McpToolDefinition[] {
+    const key = `${tier}:${opts.transport ?? 'stdio'}`;
+    let cached = mcpDefCache.get(key);
     if (!cached) {
-      cached = buildMcpDefinitions(facades, tier, toolMap);
-      mcpDefCache.set(tier, cached);
+      const visible = opts.transport === 'http' ? facades.filter(f => !f.localOnly) : facades;
+      cached = buildMcpDefinitions(visible, tier, toolMap);
+      mcpDefCache.set(key, cached);
     }
     return cached;
   }
@@ -467,6 +487,29 @@ export async function createKernel(): Promise<ToolKernel> {
           content: [{ type: 'text', text: JSON.stringify({
             error: `Facade "${facadeKey}" not in allowed scope`,
             allowed_facades: allowed,
+          }) }],
+          isError: true,
+        };
+      }
+    }
+
+    // Local-only enforcement: a facade whose blast radius exceeds the caller's
+    // own project never leaves the local machine, whatever the tier says.
+    // Checked BEFORE tier, because a licensed pro caller over HTTP is exactly
+    // the case tier gating would wave through.
+    if (context?.transport === 'http') {
+      const localFacade = facadeMap.get(name) ?? (() => {
+        const owner = toolToFacade.get(name);
+        return owner ? facadeMap.get(owner.name) : undefined;
+      })();
+
+      if (localFacade?.localOnly) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({
+            error: `Facade "${localFacade.name}" is local-only and is not served over HTTP`,
+            facade: localFacade.name,
+            transport: 'http',
+            hint: 'Call it from a local stdio client. This facade reaches credentials whose scope is wider than one project, so it is not exposed on a network bind.',
           }) }],
           isError: true,
         };

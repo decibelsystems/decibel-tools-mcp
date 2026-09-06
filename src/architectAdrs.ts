@@ -230,14 +230,28 @@ export async function createProjectAdr(input: AdrInput): Promise<AdrOutput> {
 /**
  * List ADRs for a project (ID + title + status)
  */
-export async function listProjectAdrs(projectId: string): Promise<Array<{
+export interface AdrSummary {
   id: string;
   title: string;
   status: string;
   filename: string;
-}>> {
+}
+
+/**
+ * Every ADR in the project, plus a count of the ones that could not be read.
+ *
+ * The count is the return value's reason for being an object. A decision
+ * record that does not parse is a decision the caller is about to be told was
+ * never made — and "we have no ADR about that" is precisely the answer someone
+ * acts on by making the choice again, differently.
+ */
+export async function listProjectAdrs(projectId: string): Promise<{
+  adrs: AdrSummary[];
+  unreadable_count: number;
+}> {
   const files = await readFilesFromBothPaths(projectId, ADRS_SUBPATH, ['.yml', '.yaml', '.md']);
-  const adrs: Array<{ id: string; title: string; status: string; filename: string }> = [];
+  const adrs: AdrSummary[] = [];
+  let unreadable = 0;
 
   for (const { filePath } of files) {
     try {
@@ -250,12 +264,12 @@ export async function listProjectAdrs(projectId: string): Promise<Array<{
         filename: path.basename(filePath),
       });
     } catch {
-      // Skip unparseable files
+      unreadable++;
     }
   }
 
   adrs.sort((a, b) => extractAdrNumber(a.id) - extractAdrNumber(b.id));
-  return adrs;
+  return { adrs, unreadable_count: unreadable };
 }
 
 /**

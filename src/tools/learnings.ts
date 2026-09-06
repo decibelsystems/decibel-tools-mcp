@@ -4,6 +4,7 @@ import { log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
 import { emitCreateProvenance } from './provenance.js';
+import { readStoreFile, storeUnparseable, countedStoreMeta, type StoreMetaFields } from './shared/storeRead.js';
 
 // ============================================================================
 // Project Resolution Error
@@ -63,7 +64,7 @@ export interface LearningEntry {
   tags: string[];
 }
 
-export interface ListLearningsOutput {
+export interface ListLearningsOutput extends StoreMetaFields {
   path: string;
   entries: LearningEntry[];
   total_count: number;
@@ -185,23 +186,38 @@ export async function listLearnings(
   const dirPath = resolved.subPath('oracle', 'learnings');
   const filePath = path.join(dirPath, 'learnings.md');
 
+  const content = await readStoreFile(filePath);
+  if (content === null) {
+    return { path: filePath, entries: [], total_count: 0, location: 'project' };
+  }
+
   try {
-    const content = await fs.readFile(filePath, 'utf-8');
     
     // Split by entry headers
     const blocks = content.split(/(?=^### \[)/m).filter(b => b.startsWith('### ['));
     
     let entries: LearningEntry[] = [];
+    // Entries are blocks of ONE file, so a lost record cannot show up as a
+    // failed file read — the read succeeds and the record simply is not in the
+    // answer. A block that did not parse, and a whole file that produced no
+    // blocks at all, are both counted here.
+    let unreadable = 0;
+    let matched = 0;
     for (const block of blocks) {
       const entry = parseEntry(block);
-      if (entry) {
-        // Filter by category if specified
-        if (input.category && entry.category !== input.category) {
-          continue;
-        }
-        entries.push(entry);
+      if (!entry) { unreadable++; continue; }
+      matched++;
+
+      // Filter by category if specified
+      if (input.category && entry.category !== input.category) {
+        continue;
       }
+      entries.push(entry);
     }
+    // appendLearning only ever writes the file header together with a first
+    // entry, so bytes that yield no blocks are not what an untouched project
+    // looks like.
+    if (blocks.length === 0 && content.trim().length > 0) unreadable++;
 
     const totalCount = entries.length;
 
@@ -218,14 +234,12 @@ export async function listLearnings(
       entries,
       total_count: totalCount,
       location: 'project',
+      ...countedStoreMeta(matched, unreadable),
     };
-  } catch {
-    // File doesn't exist
-    return {
-      path: filePath,
-      entries: [],
-      total_count: 0,
-      location: 'project',
-    };
+  } catch (err) {
+    // Absence is handled above by readStoreFile. Reaching here means the file
+    // is present and something about parsing it failed, which is not the same
+    // answer as "no learnings recorded".
+    throw storeUnparseable(filePath, err);
   }
 }

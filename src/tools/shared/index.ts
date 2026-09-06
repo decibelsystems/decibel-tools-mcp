@@ -2,7 +2,7 @@
 // Shared Helpers - Barrel Export
 // ============================================================================
 
-export { toolSuccess, toolError, trackToolUse } from './response.js';
+export { toolSuccess, toolError, toolFailure, isErrorPayload, trackToolUse } from './response.js';
 export { withProject, withProjectResult } from './project.js';
 export { requireFields, requireOneOf } from './validation.js';
 export {
@@ -12,3 +12,14 @@ export {
   summaryGenerators,
   type TrackedToolConfig,
 } from './runTracker.js';
+export {
+  listStoreDir,
+  readStoreDir,
+  storeMeta,
+  isProjectUnresolved,
+  listDirOrThrow,
+  listDirEntriesOrThrow,
+  type StoreStatus,
+  type StoreListing,
+  type StoreRead,
+} from './storeRead.js';

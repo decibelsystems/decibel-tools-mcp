@@ -9,6 +9,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { resolveProjectPaths } from '../projectRegistry.js';
 import { log } from '../config.js';
+import { listDirEntriesOrThrow, countedStoreMeta, type StoreMetaFields } from './shared/storeRead.js';
 
 // ============================================================================
 // Types
@@ -558,7 +559,7 @@ ${input.summary || 'No summary provided.'}
 /**
  * List runs for a project
  */
-export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] }> {
+export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] } & StoreMetaFields> {
   const projectId = input.projectId || input.project_id;
   const runsDir = getRunsDir(projectId);
 
@@ -569,8 +570,10 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
   // and the mistake left a trace on disk. A missing directory is simply no runs.
   let entries;
   try {
-    entries = await fs.readdir(runsDir, { withFileTypes: true });
+    entries = await listDirEntriesOrThrow(runsDir);
   } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { runs: [] };
     throw err;
   }
@@ -584,6 +587,10 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
 
   const limit = input.limit || 20;
   const runs: RunInfo[] = [];
+  // A run directory that exists and cannot be read is not an absent run. The
+  // log line below already recorded it — on the server's stdout, where the
+  // caller reading `runs: []` will never see it.
+  let unreadable = 0;
 
   for (const run_id of runDirs.slice(0, limit)) {
     try {
@@ -591,7 +598,7 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
       const promptPath = path.join(runDir, 'prompt.json');
       const eventsPath = path.join(runDir, 'events.jsonl');
 
-      if (!await fileExists(promptPath)) continue;
+      if (!await fileExists(promptPath)) { unreadable++; continue; }
 
       const promptContent = await fs.readFile(promptPath, 'utf-8');
       const promptSpec = JSON.parse(promptContent) as PromptSpec;
@@ -637,11 +644,12 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
         summary,
       });
     } catch (err) {
+      unreadable++;
       log(`Vector: Error reading run ${run_id}: ${err}`);
     }
   }
 
-  return { runs };
+  return { runs, ...countedStoreMeta(runs.length, unreadable) };
 }
 
 /**

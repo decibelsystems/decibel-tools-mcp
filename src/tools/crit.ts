@@ -3,6 +3,7 @@ import path from 'path';
 import { log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
+import { pathIsPresent, countedStoreMeta, type StoreMetaFields } from './shared/storeRead.js';
 
 // ============================================================================
 // Project Resolution Error
@@ -80,7 +81,7 @@ export interface CritEntry {
   tags?: string[];
 }
 
-export interface ListCritsOutput {
+export interface ListCritsOutput extends StoreMetaFields {
   path: string;
   entries: CritEntry[];
   total_count: number;
@@ -178,9 +179,9 @@ export async function listCrits(input: ListCritsInput): Promise<ListCritsOutput 
 
   const filePath = path.join(resolved.subPath('designer', 'crits'), 'crits.md');
 
-  try {
-    await fs.access(filePath);
-  } catch {
+  // A crits file we cannot open is not an absent one — reporting zero crits
+  // for a store at chmod 000 is the ISS-0153 shape.
+  if (!(await pathIsPresent(filePath))) {
     return {
       path: filePath,
       entries: [],
@@ -190,6 +191,16 @@ export async function listCrits(input: ListCritsInput): Promise<ListCritsOutput 
 
   const content = await fs.readFile(filePath, 'utf-8');
   const entries: CritEntry[] = [];
+
+  // The crit journal is one file, so "some records did not parse" cannot be
+  // counted by failed file reads — there is only ever one read, and it
+  // succeeds. logCrit writes every entry under a `## ` heading, so a heading
+  // the pattern below did not turn into an entry is a crit that is on disk and
+  // missing from this answer. A file holding bytes that produce no entries at
+  // all counts as one loss rather than none: the header is only ever written
+  // together with a first entry, so a non-empty journal with nothing in it is
+  // not what an untouched project looks like.
+  const headings = (content.match(/^## /gm) ?? []).length;
 
   // Parse entries (simple regex-based parsing)
   const entryPattern = /## ([✓✗?•]) (.+?) — (\d{4}-\d{2}-\d{2})(?:\s*\[([^\]]+)\])?\n\n([\s\S]*?)(?=\n---|\n## |$)/g;
@@ -241,9 +252,17 @@ export async function listCrits(input: ListCritsInput): Promise<ListCritsOutput 
     filtered = filtered.slice(0, input.limit);
   }
 
+  const unreadable =
+    headings > entries.length
+      ? headings - entries.length
+      : entries.length === 0 && content.trim().length > 0
+        ? 1
+        : 0;
+
   return {
     path: filePath,
     entries: filtered,
     total_count: entries.length,
+    ...countedStoreMeta(entries.length, unreadable),
   };
 }

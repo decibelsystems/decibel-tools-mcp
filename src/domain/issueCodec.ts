@@ -176,10 +176,22 @@ export function decodeIssue(filename: string, content: string): DecodedIssue {
     fmId ??
     filename.replace(/\.(md|ya?ml)$/i, '');
 
-  // ---- title: markdown heading wins, then frontmatter, then filename ------
+  // ---- title: frontmatter wins, then the heading, then the filename -------
+  //
+  // Frontmatter first, because the writer puts a title there ONLY when the
+  // body cannot hold it — no heading at all, or a title containing a newline,
+  // which a `# heading` truncates at the line break. Reading the heading first
+  // meant a multi-line title came back as its first line, from a record whose
+  // frontmatter held the whole thing: "first line\nsecond line" read back as
+  // "first line", with create_issue reporting success.
+  //
+  // Preferring frontmatter cannot regress a record that predates this, because
+  // the writer never emitted both: `title` went to frontmatter exactly when
+  // there was no heading to compete with it.
   const heading = body.match(/^#\s+(.+)$/m)?.[1]?.trim();
-  const title = heading ?? str(data.title) ?? filename.replace(/\.(md|ya?ml)$/i, '');
-  if (!heading && !str(data.title)) {
+  const fmTitle = str(data.title);
+  const title = fmTitle ?? heading ?? filename.replace(/\.(md|ya?ml)$/i, '');
+  if (!heading && !fmTitle) {
     warnings.push('no title in heading or frontmatter — fell back to the filename');
   }
 
@@ -244,7 +256,13 @@ function syncBodyMirror(body: string, issue: Issue): string {
     out = out.replace(/^\*\*Epic:\*\* .*$/m, `**Epic:** ${issue.epicId}`);
   }
   // The heading is the title's home in this format; keep them in step.
-  out = out.replace(/^#\s+.+$/m, `# ${issue.title}`);
+  //
+  // Only ever the FIRST LINE. Splicing a multi-line title into the heading
+  // line pushed its remaining lines into the body as loose prose — and since
+  // the writer had already put them there once, they appeared twice. The
+  // authoritative copy of such a title is in frontmatter (see encodeIssue);
+  // this is the human-readable rendering of it.
+  out = out.replace(/^#\s+.+$/m, `# ${issue.title.split(/\r?\n/)[0]}`);
 
   // Resolution is rendered into the body for the same reason status is: a
   // markdown record is read by people, and `## Resolution` is where they look.
@@ -278,8 +296,15 @@ export function encodeIssue(decoded: DecodedIssue): string {
   // to keep it, and omitting it there means the title is silently replaced by
   // the filename on the next read. So: frontmatter holds the title exactly when
   // the body cannot.
+  //
+  // A MULTI-LINE TITLE IS A TITLE THE BODY CANNOT HOLD. A markdown heading ends
+  // at the newline, so `# first\nsecond` is a heading reading "first" followed
+  // by a stray paragraph, and the record came back a line long with no error
+  // anywhere in the chain (ISS-0155). YAML quotes and escapes it exactly, so
+  // frontmatter is the only container that round-trips one.
   const bodyHasHeading = /^#\s+.+$/m.test(raw.body);
-  if (format === 'yaml' || !bodyHasHeading) put('title', issue.title);
+  const titleFitsAHeading = !/[\r\n]/.test(issue.title);
+  if (format === 'yaml' || !bodyHasHeading || !titleFitsAHeading) put('title', issue.title);
   // The markdown writer spells it projectId; keep each format's own spelling so
   // a rewrite is not a gratuitous diff on every record.
   put(format === 'md' ? 'projectId' : 'project', issue.project);

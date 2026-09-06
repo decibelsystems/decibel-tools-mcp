@@ -32,12 +32,31 @@ export interface DecibelPaths {
 /**
  * Check if a directory exists
  */
+/**
+ * Does this directory exist — and say so only when we could actually tell.
+ *
+ * ISS-0153, second round. The readdir calls below were made to THROW on an
+ * unreadable store rather than return empty, and the fix was reported as
+ * landed. It never fired: every one of them sits behind this guard, and this
+ * guard caught everything. A store at chmod 000 makes stat() fail with EACCES
+ * on the directory INSIDE it, so `dirExists` answered false, the readdir was
+ * skipped, and the throw was unreachable. The result was the exact behaviour
+ * the fix was written to remove — "no issues" for a project whose issues could
+ * not be read — with the code that says otherwise sitting right there.
+ *
+ * ENOENT and ENOTDIR mean the directory genuinely is not there, which is what
+ * an untouched project looks like. Every other errno means it may well be
+ * there and this process cannot see it, and that is not an answer this
+ * function is entitled to give.
+ */
 async function dirExists(dirPath: string): Promise<boolean> {
   try {
     const stat = await fs.stat(dirPath);
     return stat.isDirectory();
-  } catch {
-    return false;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return false;
+    throw new Error(`STORE_UNREADABLE: cannot stat ${dirPath} (${code ?? 'unknown'})`);
   }
 }
 
@@ -153,6 +172,17 @@ export async function readFilesFromBothPaths(
   const paths = await resolveDecibelPaths(projectId, subpath);
   const seen = new Set<string>();
   const results: { filePath: string; source: 'primary' | 'legacy' }[] = [];
+  // ISS-0153: a directory that exists but cannot be opened is NOT an empty
+  // directory. Both reads below used to `catch { /* Directory read failed */ }`
+  // and return whatever had been collected — which, for an unreadable store,
+  // was nothing. Every caller then reported "no issues" for a project whose
+  // issues it simply could not see.
+  //
+  // These now THROW. "I could not look" is an exceptional condition, not an
+  // empty result, and letting it propagate turns it into a loud tool failure at
+  // no cost to the six call sites. Note the dirExists() guard above already
+  // handles the ordinary not-created-yet case, so reaching the readdir at all
+  // means the directory is really there.
   
   // Read primary first (takes precedence)
   if (await dirExists(paths.primary)) {
@@ -167,8 +197,9 @@ export async function readFilesFromBothPaths(
           });
         }
       }
-    } catch {
-      // Directory read failed
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code ?? 'unknown';
+      throw new Error(`STORE_UNREADABLE: cannot read ${paths.primary} (${code})`);
     }
   }
   
@@ -187,10 +218,11 @@ export async function readFilesFromBothPaths(
           }
         }
       }
-    } catch {
-      // Directory read failed
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code ?? 'unknown';
+      throw new Error(`STORE_UNREADABLE: cannot read ${paths.legacy} (${code})`);
     }
   }
-  
+
   return results;
 }

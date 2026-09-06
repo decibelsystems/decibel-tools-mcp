@@ -558,6 +558,29 @@ export const proFacades: FacadeSpec[] = [
       cancel_job: 'agentic_cancel_job',
     },
   },
+
+  // EPIC-0036. Registered ONLY when DECIBEL_ZOOM=1 — see the spread below.
+  //
+  // localOnly because the credential behind it is account-wide admin scope:
+  // meeting_summary:read:admin reads every meeting in the account, personal as
+  // well as client. ISS-0123 is explicit that tier gating alone is not the
+  // boundary here, since the DECIBEL_PRO bypass (ISS-0101) is still open and
+  // senken.pro serves this repo's /call, /batch and /tools unauthenticated.
+  ...(process.env.DECIBEL_ZOOM === '1' ? [{
+    name: 'zoom',
+    description:
+      "Zoom AI Companion meeting summaries, pulled into Decibel projects as markdown. sync writes them; list is the dry run; routes shows which project claims which meeting; status checks credentials without calling Zoom. Routing is by meeting-topic substring, longest needle first. A meeting matching no rule has its identity recorded in the unrouted bucket and its BODY DELIBERATELY NOT FETCHED — add a zoom.match rule to the project and re-run to claim it. Dedup is on meeting_uuid + start, so re-running is safe. Local/stdio only. Actions: sync, list, routes, status",
+    compactDescription: 'Pull Zoom meeting summaries into projects',
+    microEligible: false,
+    tier: 'pro' as const,
+    localOnly: true,
+    actions: {
+      sync: 'zoom_sync',
+      list: 'zoom_list',
+      routes: 'zoom_routes',
+      status: 'zoom_status',
+    },
+  }] : []),
 ];
 
 // ============================================================================
