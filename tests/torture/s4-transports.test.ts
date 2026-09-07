@@ -32,6 +32,10 @@ import {
   isWaived,
   DECLARED_DIFFERENCES,
   TRANSPORTS,
+  TRANSIENT_BACKEND_SIGNATURES,
+  MAX_INCONCLUSIVE_FRACTION,
+  transientSignature,
+  transientAnswers,
   type S4Report,
   type SandboxPaths,
   type TransportName,
@@ -85,6 +89,35 @@ function comparable(report: S4Report): EquivalenceRow[] {
   return report.rows.filter(r => !isLocalOnly(r));
 }
 
+/**
+ * A row whose transports DISAGREE, where at least one of them says the backend
+ * failed.
+ *
+ * Both halves are load-bearing. Without the signature, a genuine transport bug
+ * would be excused as a bad network day. Without the disagreement, a row where
+ * every transport failed the same way would be dropped for nothing — and that
+ * row is worth keeping: four identical backend failures are evidence that the
+ * transports handle a failing backend identically, which is a real assertion
+ * and the only one this mechanism would otherwise cost us.
+ *
+ * The first run of this sweep is what showed the difference. guardian.scan_headers
+ * makes a live HTTP request and returned "fetch failed" on all four transports
+ * in all four S2 situations — five rows that agreed perfectly and were being
+ * thrown away by the looser predicate.
+ *
+ * See TRANSIENT_BACKEND_SIGNATURES for why this is decided on the answer rather
+ * than by waiving the live-backend actions by name.
+ */
+function isInconclusive(row: EquivalenceRow): boolean {
+  if (transientAnswers(row).length === 0) return false;
+  return new Set(TRANSPORTS.map(t => row.answers[t].digest)).size > 1;
+}
+
+/** The rows S4's payload comparison is entitled to draw a conclusion from. */
+function conclusive(report: S4Report): EquivalenceRow[] {
+  return comparable(report).filter(r => !isInconclusive(r));
+}
+
 function describeRow(row: EquivalenceRow, against: TransportName[]): string {
   return [`${row.id}:`, ...against.map(t => `    ${t.padEnd(11)} ${row.answers[t].digest || row.answers[t].failure}`)].join('\n');
 }
@@ -99,7 +132,14 @@ describe('S4 — the sweep reached every transport', () => {
     for (const report of [s1, s2]) {
       for (const row of report.rows) {
         for (const t of TRANSPORTS) {
-          if (row.answers[t].failure) unanswered.push(`${report.sweep} ${row.id} via ${t}: ${row.answers[t].failure}`);
+          const answer = row.answers[t];
+          if (!answer.failure) continue;
+          // A remote backend that went down mid-sweep produces no answer, and
+          // that is a fact about the backend rather than about the transport.
+          // It still costs the row its comparison, and the ceiling below is
+          // what stops that from quietly becoming the normal case.
+          if (transientSignature(answer)) continue;
+          unanswered.push(`${report.sweep} ${row.id} via ${t}: ${answer.failure}`);
         }
       }
     }
@@ -177,7 +217,7 @@ describe('S4 — the same call returns the same payload', () => {
   for (const [label, get] of [['S1 (every action)', () => s1], ['S2 (every read, four situations)', () => s2]] as const) {
     it(`agrees across stdio, thin and /call — ${label}`, () => {
       const sequential: TransportName[] = ['stdio', 'thin', 'http-call'];
-      const diverged = comparable(get())
+      const diverged = conclusive(get())
         .filter(r => new Set(sequential.map(t => r.answers[t].digest)).size > 1)
         .map(r => describeRow(r, sequential));
 
@@ -188,7 +228,7 @@ describe('S4 — the same call returns the same payload', () => {
       // /batch runs a chunk in parallel, so a read whose answer depends on what
       // has already run legitimately differs. Those are waived by name in
       // waivers.yaml with the evidence; everything else must match.
-      const diverged = comparable(get())
+      const diverged = conclusive(get())
         .filter(r => !isWaived(waivers, actionOf(r), 'S4-batch'))
         .filter(r => r.answers.stdio.digest !== r.answers['http-batch'].digest)
         .map(r => describeRow(r, ['stdio', 'http-batch']));
@@ -203,7 +243,7 @@ describe('S4 — the same call returns the same payload', () => {
     // everywhere, even where the payloads legitimately differ.
     const disagreed: string[] = [];
     for (const report of [s1, s2]) {
-      for (const row of comparable(report)) {
+      for (const row of conclusive(report)) {
         if (isWaived(waivers, actionOf(row), 'S4-batch')) continue;
         const marks = new Set(TRANSPORTS.map(t => row.answers[t].isError));
         if (marks.size > 1) {
@@ -242,8 +282,15 @@ describe('S4 — absence stays loud through every transport', () => {
     // HTTP consumer, and no kernel-level sweep can see it.
     const bySituation = new Map<string, Map<TransportName, Set<string>>>();
 
+    // A read whose backend failed on one pass tells fewer situations apart on
+    // that transport for a reason S2 is not asserting about, so the whole
+    // ACTION drops out here rather than just the row — one inconclusive row
+    // would otherwise shrink that transport's set and read as a collapse.
+    const shaky = new Set(comparable(s2).filter(isInconclusive).map(actionOf));
+
     for (const row of comparable(s2)) {
       const action = actionOf(row);
+      if (shaky.has(action)) continue;
       if (!bySituation.has(action)) {
         bySituation.set(action, new Map(TRANSPORTS.map(t => [t, new Set<string>()])));
       }
@@ -322,6 +369,154 @@ describe('S4 — the list of legitimate differences is closed', () => {
     }
     console.log('S4 declared differences exercised:\n' + [...counts].map(([k, n]) => `     ${k}: ${n}`).join('\n'));
     expect(counts.size).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================================
+// Inconclusive rows — visible, bounded, and never silent
+// ============================================================================
+// "Inconclusive" is a hole in the sweep's coverage. A hole nobody is told about
+// is the same thing as a pass, so these print every affected row by name and
+// cap how much of the surface may go uncompared before the run stops counting
+// as evidence about the build at all.
+
+describe('S4 — a failing backend is reported, not absorbed', () => {
+  it('names every row it could not draw a conclusion from', () => {
+    const lines: string[] = [];
+    let total = 0;
+
+    for (const report of [s1, s2]) {
+      for (const row of comparable(report).filter(isInconclusive)) {
+        total += 1;
+        const seen = transientAnswers(row).map(a => `${a.transport}=${a.signature}`).join(' ');
+        lines.push(`     ${report.sweep} ${row.id}: ${seen}`);
+      }
+    }
+
+    // Not an assertion — a report. The assertion is the ceiling below.
+    console.log(
+      total === 0
+        ? 'S4: no transient backend failures — every comparable row was compared.'
+        : `S4: ${total} row(s) INCONCLUSIVE — a backend failed mid-sweep and the transports diverged, ` +
+          `so these were not compared:\n${lines.join('\n')}`
+    );
+    expect(true).toBe(true);
+  });
+
+  it('fails when too much of the surface goes uncompared', () => {
+    // One flaky read is a busy database. A broken environment is not a build
+    // this sweep can say anything about, and saying so is better than a green
+    // with a long footnote.
+    const offenders: string[] = [];
+    for (const report of [s1, s2]) {
+      const rows = comparable(report);
+      const bad = rows.filter(isInconclusive).length;
+      const fraction = rows.length ? bad / rows.length : 0;
+      if (fraction > MAX_INCONCLUSIVE_FRACTION) {
+        offenders.push(
+          `${report.sweep}: ${bad}/${rows.length} rows (${(fraction * 100).toFixed(1)}%) hit a transient ` +
+          `backend failure, over the ${(MAX_INCONCLUSIVE_FRACTION * 100).toFixed(0)}% ceiling — ` +
+          `this run is not evidence about the build, it is evidence about the network.`
+        );
+      }
+    }
+    expect(offenders, 'too much of the surface went uncompared for this sweep to gate a release').toEqual([]);
+  });
+});
+
+// ============================================================================
+// Calibration — the transient predicate is neither blind nor greedy
+// ============================================================================
+// The same standing instruction the equivalence calibration below follows.
+// This predicate can fail in two directions and both are silent: too narrow
+// and it never fires (the flake comes back), too broad and it excuses a real
+// transport bug. Both directions are exercised here against synthetic answers,
+// because a real Supabase timeout cannot be summoned on demand.
+
+describe('S4 calibration — the transient-failure predicate', () => {
+  const answerWith = (raw: string) =>
+    ({ isError: true, parsed: true, digest: 'd', sample: raw.slice(0, 300), raw }) as EquivalenceRow['answers']['stdio'];
+
+  it('SEES every signature it declares', () => {
+    // A pattern that matches nothing is dead code that reads as protection.
+    const blind: string[] = [];
+    for (const [name, { match }] of Object.entries(TRANSIENT_BACKEND_SIGNATURES)) {
+      const specimen = match.source
+        .replace(/\\b/g, '')
+        .replace(/\(([^)]*)\)/g, (_m, g: string) => g.split('|')[0])
+        .replace(/[?]/g, '');
+      if (transientSignature(answerWith(`{"error":"${specimen}"}`)) === undefined) blind.push(`${name} (${match.source})`);
+    }
+    expect(blind, 'a declared signature that matches nothing is protection that is not there').toEqual([]);
+  });
+
+  it('catches the exact payload that reddened the 3.0 gate', () => {
+    // The real one, verbatim, so a future edit to the pattern cannot lose it.
+    const real = '{"error":"canceling statement due to statement timeout","facade":"deck","action":"search"}';
+    expect(transientSignature(answerWith(real))).toBe('backend:statement-timeout');
+  });
+
+  it('does NOT fire on ordinary answers, errors included', () => {
+    // The dangerous direction. Every one of these is a payload S4 must still
+    // compare — a real divergence among them has to stay a finding.
+    const mustNotMatch = [
+      '{"issues":[],"count":0}',
+      '{"error":"project not found: nope"}',
+      '{"error":"Unknown action \'frobnicate\' for facade sentinel"}',
+      '{"error":"ENOENT: no such file or directory"}',
+      '{"error":"missing required parameter: project_id"}',
+      '{"ok":false,"error":"validation failed","details":["title is required"]}',
+      '{"error":"Supabase is not configured — set SUPABASE_URL"}',
+      '{"error":"401 Unauthorized"}',
+      '{"error":"404 Not Found"}',
+    ];
+    const wrongly = mustNotMatch.filter(p => transientSignature(answerWith(p)) !== undefined);
+    expect(wrongly, 'a predicate this broad would excuse real transport divergence as a bad network day').toEqual([]);
+  });
+
+  it('keeps a row where every transport failed the SAME transient way', () => {
+    // The tightening. Four identical backend failures are a comparison that
+    // succeeded, not one that could not be made — and dropping them would
+    // quietly shrink the surface every time a network was slow.
+    const uniform = {
+      id: 'x.y', facade: 'x',
+      answers: Object.fromEntries(
+        TRANSPORTS.map(t => [t, { isError: true, parsed: true, digest: 'same', sample: '', raw: '{"error":"fetch failed"}' }])
+      ),
+    } as unknown as EquivalenceRow;
+    expect(transientAnswers(uniform).length, 'the signature must still be detected').toBe(TRANSPORTS.length);
+    expect(isInconclusive(uniform), 'agreement is a conclusion, even about a failure').toBe(false);
+  });
+
+  it('drops a row where a transient failure hit only SOME transports', () => {
+    // The deck.search shape: healthy on one pass, timed out on the next.
+    const split = {
+      id: 'deck.search', facade: 'deck',
+      answers: Object.fromEntries(
+        TRANSPORTS.map((t, i) => [t, i === 2
+          ? { isError: true, parsed: true, digest: 'boom', sample: '', raw: '{"error":"canceling statement due to statement timeout"}' }
+          : { isError: false, parsed: true, digest: 'rows', sample: '', raw: '{"cards":[]}' }])
+      ),
+    } as unknown as EquivalenceRow;
+    expect(isInconclusive(split), 'a backend that failed on one pass of four cannot be compared').toBe(true);
+  });
+
+  it('does NOT drop a row that diverged with no transient signature', () => {
+    // The bug S4 exists to find must survive this whole mechanism untouched.
+    const realBug = {
+      id: 'sentinel.list_issues', facade: 'sentinel',
+      answers: Object.fromEntries(
+        TRANSPORTS.map((t, i) => [t, { isError: false, parsed: true, digest: i === 3 ? 'mangled' : 'ok', sample: '', raw: '{"issues":[]}' }])
+      ),
+    } as unknown as EquivalenceRow;
+    expect(isInconclusive(realBug), 'a plain transport divergence is a finding, not a bad network day').toBe(false);
+  });
+
+  it('treats a row as conclusive when nothing transient happened', () => {
+    // Guards the wiring, not the predicate: if isInconclusive() were inverted
+    // or always-true, every assertion above would pass vacuously forever.
+    const clean = comparable(s1).filter(r => !isInconclusive(r));
+    expect(clean.length, 'no row survived as conclusive — S4 would be asserting nothing').toBeGreaterThan(100);
   });
 });
 
