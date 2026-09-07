@@ -26,6 +26,7 @@
     "build": "tsc",
     "build:dist": "rm -rf dist && tsc -p tsconfig.build.json",
     "prepack": "npm run build:dist",
+    "postpack": "npm run build",
     "dev": "tsx src/server.ts",
     "start": "node dist/server.js",
     "start:http": "node dist/server.js --http",
