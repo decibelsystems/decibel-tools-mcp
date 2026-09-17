@@ -4,6 +4,16 @@ severity: high
 status: closed
 created_at: 2026-06-07T18:52:35.340Z
 closed_at: 2026-09-17T00:42:11.799Z
+linked_commits:
+  - sha: fdd2822518525f79a5024c3022dbe90342a9f815
+    shortSha: fdd2822
+    message: "fix(security): hosted-mode fail-closed + queue-write authz decoupling
+      (A+B)"
+    relationship: fixes
+    linked_at: 2026-09-17T00:42:55.702Z
+    linked_by: ai:claude
+updated_at: 2026-09-17T00:42:55.702Z
+
 ---
 
 # Hosted (--http) mode serves /call,/connect,/batch,/events unauthenticated — make it fail closed (crucible re-run)

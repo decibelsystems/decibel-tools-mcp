@@ -4,6 +4,16 @@ severity: high
 status: closed
 created_at: 2026-06-04T23:51:37.924Z
 closed_at: 2026-09-17T00:42:05.819Z
+linked_commits:
+  - sha: 19415c72098c66d3af237575dd407fc603b75e98
+    shortSha: 19415c7
+    message: "fix(security): close crucible sec-review findings
+      (tier/CORS/events/queue/kernel)"
+    relationship: fixes
+    linked_at: 2026-09-17T00:42:41.594Z
+    linked_by: ai:claude
+updated_at: 2026-09-17T00:42:41.594Z
+
 ---
 
 # CORS localhost allowlist uses startsWith → http://localhost.evil.com bypass + /events leaks before auth (crucible)

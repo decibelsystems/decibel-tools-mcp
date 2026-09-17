@@ -4,6 +4,16 @@ severity: critical
 status: closed
 created_at: 2026-06-04T23:51:33.068Z
 closed_at: 2026-09-17T00:42:09.827Z
+linked_commits:
+  - sha: fdd2822518525f79a5024c3022dbe90342a9f815
+    shortSha: fdd2822
+    message: "fix(security): hosted-mode fail-closed + queue-write authz decoupling
+      (A+B)"
+    relationship: fixes
+    linked_at: 2026-09-17T00:42:54.325Z
+    linked_by: ai:claude
+updated_at: 2026-09-17T00:42:54.325Z
+
 ---
 
 # Hosted MCP runs unauthenticated + queueForAgent service-role write with spoofable caller ids (crucible sec review)
