@@ -44,3 +44,6 @@ projects.json
 
 # Crucible adversarial-review run outputs (local artifacts)
 .crucible/runs/
+
+# Agent run telemetry (runtime data; provenance events stay tracked)
+.decibel/runs/

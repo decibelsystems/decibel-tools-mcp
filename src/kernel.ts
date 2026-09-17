@@ -53,9 +53,11 @@ export interface DispatchContext {
   requestId?: string;
 }
 
-// Tier gating (same logic as tools/index.ts)
-const PRO_ENABLED = process.env.DECIBEL_PRO === '1' || process.env.NODE_ENV !== 'production';
-const APPS_ENABLED = process.env.DECIBEL_APPS === '1' || process.env.NODE_ENV !== 'production';
+// Tier gating (same logic as tools/index.ts). Fail CLOSED: explicit opt-in only.
+// NODE_ENV is unset in a default `npx @decibelsystems/tools` install, so the old
+// `NODE_ENV !== 'production'` branch exposed every pro/apps facade to every user.
+const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
+const APPS_ENABLED = process.env.DECIBEL_APPS === '1';
 
 // ============================================================================
 // Tool Kernel

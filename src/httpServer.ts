@@ -1902,6 +1902,17 @@ export async function startHttpServer(
     // Studio API Endpoints (frontend_v0.2 compatible)
     // ========================================================================
 
+    // Tier guard: these REST shortcuts call studio (pro-tier) tools directly,
+    // bypassing kernel dispatch where tier gating normally lives. Enforce it
+    // here once for all /api/generate-* routes. (crucible re-run 2026-06-07)
+    if (path.startsWith('/api/generate-') && req.method === 'POST') {
+      const tier = await resolveTier(req, configLicenseKey);
+      if (tier === 'core') {
+        sendJson(res, 403, wrapError('Studio generation requires a pro license', 'TIER_REQUIRED'));
+        return;
+      }
+    }
+
     // POST /api/generate-flux-kontext-image - Start image generation
     if (path === '/api/generate-flux-kontext-image' && req.method === 'POST') {
       try {

@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"/media/hiro/AI_Drive/Linux/Projects/Round_3/decibel-tools-mcp/hooks/session-init.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -7,7 +19,7 @@
           {
             "type": "agent",
             "if": "Bash(git push:*)",
-            "prompt": "Code is about to be pushed. Run mcp__decibel-tools__guardian with action report (project_id: decibel-tools-mcp) to scan for security issues. If ANY findings are grade D or F, output JSON: {\"continue\": false, \"stopReason\": \"Guardian found critical issues (grade D/F). Fix these before pushing: [list findings]\"}. If all findings are grade C or better, output {}.",
+            "prompt": "A Bash command is about to run. Read the command from tool_input.command in $ARGUMENTS. GATE: if the command does NOT contain `git push`, output exactly {} and stop immediately — do nothing else, do not call any tools. If it IS a git push: run the Decibel guardian security scan with action report (project_id: decibel-tools-mcp). Try the tool named mcp__plugin_tools_decibel-tools__guardian first; if it is unavailable, try mcp__decibel-tools__guardian. FAIL-OPEN: if the guardian tool is unavailable, denied, or errors for any reason, output exactly {} (do NOT block the push). Only if the scan completes successfully AND returns one or more findings graded D or F, output JSON: {\"continue\": false, \"stopReason\": \"Guardian found critical issues (grade D/F). Fix these before pushing: [list the D/F findings]\"}. In every other case output exactly {}.",
             "model": "claude-sonnet-4-6",
             "timeout": 30,
             "statusMessage": "Guardian: scanning before push..."
@@ -23,6 +35,16 @@
             "type": "prompt",
             "prompt": "A file was just edited. Check the tool_input in $ARGUMENTS for the file_path. If file_path is missing, or the path is outside the current project directory, output exactly: {}. If the file path matches ANY of these architecture-sensitive paths: src/kernel.ts, src/transports/, src/server.ts, src/httpServer.ts, src/facades/definitions.ts, src/facades/index.ts, src/license.ts, src/daemonConfig.ts — output: {\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ARCHITECTURE NUDGE: You just modified an architecture-sensitive file. If this is a non-trivial architectural change, consider recording an ADR via architect createAdr. Check existing ADRs first with architect list_adrs.\"}}. If the path does NOT match any of those, output exactly: {}",
             "statusMessage": "Checking architecture sensitivity..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"/media/hiro/AI_Drive/Linux/Projects/Round_3/decibel-tools-mcp/hooks/issue-close-reminder.sh\"",
+            "timeout": 10
           }
         ]
       }

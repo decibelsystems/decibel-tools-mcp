@@ -47,9 +47,9 @@ import {
   graduatedToolsToMcpDefinitions,
 } from './dojoGraduated.js';
 
-// Tier gating (in production, require explicit env vars; in dev, always enabled)
-const PRO_ENABLED = process.env.DECIBEL_PRO === '1' || process.env.NODE_ENV !== 'production';
-const APPS_ENABLED = process.env.DECIBEL_APPS === '1' || process.env.NODE_ENV !== 'production';
+// Tier gating: explicit opt-in only (fail closed). Local dev: DECIBEL_PRO=1 DECIBEL_APPS=1.
+const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
+const APPS_ENABLED = process.env.DECIBEL_APPS === '1';
 
 // ============================================================================
 // Aggregate All Tools

@@ -1,0 +1,11 @@
+event_id: PROV-20260430T231241-910
+timestamp: 2026-04-30T23:12:41.911Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-04-30T23-12-41Z-review-security-sentinel-close-issue-does-not-emit.md
+reason_code: initial_creation
+summary: "Created issue: [review/security] sentinel.close_issue does not emit provenance events — audit-trail claim unverified"
+fingerprint_before: null
+fingerprint_after: sha256:a034f6b0a96990e6
