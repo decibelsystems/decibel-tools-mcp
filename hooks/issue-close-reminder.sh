@@ -23,7 +23,9 @@ echo "$CMD" | grep -qE 'git[[:space:]]+commit' || { printf '{}'; exit 0; }
 
 CWD=$(echo "$HOOK_INPUT" | jq -r '.cwd // "."')
 PROJECT=$(basename "$CWD")
-PORT="${DECIBEL_DAEMON_PORT:-$(jq -r '.port // 4888' "$HOME/.decibel/daemon.meta" 2>/dev/null || echo 4888)}"
+PORT="${DECIBEL_DAEMON_PORT:-$(jq -r '.port // empty' "$HOME/.decibel/daemon.meta" 2>/dev/null)}"
+PORT="${PORT:-$(sed -n 's/^[[:space:]]*port:[[:space:]]*//p' "$HOME/.decibel/config.yaml" 2>/dev/null | head -1)}"
+PORT="${PORT:-4888}"
 BATCH="http://localhost:${PORT}/batch"
 TOKEN="${DECIBEL_AUTH_TOKEN:-$(sed -n 's/^[[:space:]]*auth_token:[[:space:]]*//p' "$HOME/.decibel/config.yaml" 2>/dev/null | head -1 | tr -d '"'"'"'')}"
 AUTH=(); [ -n "$TOKEN" ] && AUTH=(-H "Authorization: Bearer ${TOKEN}")

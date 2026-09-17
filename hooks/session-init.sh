@@ -5,7 +5,9 @@
 PROJECT_ID=$(basename "$PWD")
 # Discover the daemon port from ~/.decibel/daemon.meta (written by the daemon),
 # matching HQ's vite.config discovery. Env var wins; fallback 4888 (the daemon default).
-PORT="${DECIBEL_DAEMON_PORT:-$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.decibel/daemon.meta')))['port'])" 2>/dev/null || echo 4888)}"
+PORT="${DECIBEL_DAEMON_PORT:-$(jq -r '.port // empty' "$HOME/.decibel/daemon.meta" 2>/dev/null)}"
+PORT="${PORT:-$(sed -n 's/^[[:space:]]*port:[[:space:]]*//p' "$HOME/.decibel/config.yaml" 2>/dev/null | head -1)}"
+PORT="${PORT:-4888}"
 URL="http://localhost:${PORT}/batch"
 # Daemon auth token: env var wins, else daemon.auth_token from ~/.decibel/config.yaml.
 TOKEN="${DECIBEL_AUTH_TOKEN:-$(sed -n 's/^[[:space:]]*auth_token:[[:space:]]*//p' "$HOME/.decibel/config.yaml" 2>/dev/null | head -1 | tr -d '"'"'"'')}"

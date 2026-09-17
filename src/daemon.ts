@@ -173,7 +173,9 @@ function readMeta(): DaemonMeta | null {
 
 function writeMeta(meta: DaemonMeta): void {
   ensureDir(DECIBEL_HOME);
-  writeFileSync(META_PATH, JSON.stringify(meta), 'utf-8');
+  // Merge so crash-loop / reset writes (and a second instance that exits on
+  // "already running") don't drop the port/pid setDaemonPort recorded.
+  writeFileSync(META_PATH, JSON.stringify({ ...readMeta(), ...meta }), 'utf-8');
 }
 
 /**
