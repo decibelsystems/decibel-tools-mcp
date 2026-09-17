@@ -16,7 +16,13 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-17T22:44:39.005Z
     linked_by: ai:claude
-updated_at: 2026-09-17T22:44:39.005Z
+  - sha: f1bb42838c47a89b9a56459ed7a3591a3f9ed042
+    shortSha: f1bb428
+    message: "sentinel: add EPIC-0034 and provenance event for daemon.meta issue"
+    relationship: related
+    linked_at: 2026-09-17T22:48:35.078Z
+    linked_by: ai:claude
+updated_at: 2026-09-17T22:48:35.078Z
 
 ---
 
