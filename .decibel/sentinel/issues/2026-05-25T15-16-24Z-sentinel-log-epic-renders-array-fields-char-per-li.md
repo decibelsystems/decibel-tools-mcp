@@ -4,6 +4,16 @@ severity: high
 status: closed
 created_at: 2026-05-25T15:16:24.324Z
 closed_at: 2026-09-17T23:40:30.930Z
+linked_commits:
+  - sha: 6353f482e974697cb34d27d26060a0e40502568f
+    shortSha: 6353f48
+    message: "fix(kernel): coerce JSON-encoded string params to arrays/objects
+      before dispatch"
+    relationship: fixes
+    linked_at: 2026-09-17T23:40:57.400Z
+    linked_by: ai:claude
+updated_at: 2026-09-17T23:40:57.400Z
+
 ---
 
 # sentinel log_epic renders array fields char-per-line (corrupts epic .md; can hard-stop the calling agent)
