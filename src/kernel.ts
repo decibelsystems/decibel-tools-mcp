@@ -12,6 +12,7 @@
 import { EventEmitter } from 'events';
 import { getAllTools } from './tools/index.js';
 import { trackToolUse } from './tools/shared/index.js';
+import { logToolEvent } from './tools/shared/runTracker.js';
 import { log } from './config.js';
 import type { ToolSpec, ToolResult } from './tools/types.js';
 import type { FacadeSpec, DetailTier, McpToolDefinition } from './facades/types.js';
@@ -58,6 +59,9 @@ export interface DispatchContext {
 // `NODE_ENV !== 'production'` branch exposed every pro/apps facade to every user.
 const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
 const APPS_ENABLED = process.env.DECIBEL_APPS === '1';
+
+// Heartbeat/poll reads: 18k of 18.3k run-log events were coord_status polls.
+const POLLING_TOOLS = new Set(['coord_status', 'coord_heartbeat', 'coord_inbox']);
 
 // ============================================================================
 // Tool Kernel
@@ -328,6 +332,13 @@ export async function createKernel(): Promise<ToolKernel> {
 
       try {
         const result = await tool.handler(params);
+        // Read telemetry: write tools wrap themselves with withRunTracking; reads
+        // (readOnlyHint) were invisible, so the run log could not show that an
+        // agent consulted the project memory. Polling tools stay excluded.
+        if (!result.isError && tool.definition.annotations?.readOnlyHint && !POLLING_TOOLS.has(internalName)) {
+          const pid = params.projectId as string | undefined;
+          if (pid) logToolEvent(pid, internalName, 'success', `${internalName} read`).catch(() => {});
+        }
         emitter.emit('result', {
           type: 'result', facade: name, action, tool: internalName,
           agentId, runId, requestId, timestamp: new Date().toISOString(),

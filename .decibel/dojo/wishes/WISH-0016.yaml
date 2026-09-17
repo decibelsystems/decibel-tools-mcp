@@ -1,0 +1,26 @@
+id: WISH-0016
+capability: Ship a CLAUDE.md / AGENTS.md section with the plugin and
+  project_init that makes Claude treat Decibel as the durable intelligence layer
+  over its own session memory
+reason: "Usage across 18 projects dropped from 314 issues/month (Apr 2026) to 5
+  (Sep 2026). Diagnosis: Claude's default memory got good enough that we stopped
+  writing plans and roadmaps, but that memory is ephemeral, non-visual, dies on
+  a crash, and makes large scopes a hail mary. Decibel must be the layer Claude
+  reaches for by instruction, not by habit. templates/AGENT.md exists but
+  nothing installs it into a project's CLAUDE.md, and the SessionStart digest
+  does not include roadmap position."
+inputs: "[\"templates/AGENT.md\", \"hooks/session-init.sh\", \"registry init /
+  project_init\", \"user's CLAUDE.md\"]"
+outputs: "project_init appends a Decibel section to CLAUDE.md (or writes
+  AGENTS.md) that says: Decibel is the project memory, Claude memory is session
+  cache; read roadmap + next_actions at start, write issues/ADRs/learnings
+  before stopping. SessionStart digest adds one line of roadmap position
+  (current objective, % done)."
+created_at: 2026-09-17T19:21:34.339Z
+status: open
+project_id: decibel-tools-mcp
+integration_point: src/tools/registry (init), hooks/session-init.sh, .claude-plugin
+success_metric: Sessions calling a Decibel write tool per week returns to the
+  May 2026 level (about 45/week across projects) within a month of shipping
+risks: "[\"Instruction fatigue: CLAUDE.md sections get ignored if too long\",
+  \"Conflicts with a user's existing CLAUDE.md conventions\"]"

@@ -16,7 +16,8 @@ RESULT=$(curl -s -m 5 -X POST "$URL" \
       {\"facade\": \"oracle\", \"action\": \"next_actions\", \"params\": {\"project_id\": \"${PROJECT_ID}\"}},
       {\"facade\": \"voice\", \"action\": \"inbox_sync\", \"params\": {\"project_id\": \"${PROJECT_ID}\"}},
       {\"facade\": \"agentic\", \"action\": \"queue_sync\", \"params\": {\"project_id\": \"${PROJECT_ID}\"}},
-      {\"facade\": \"sentinel\", \"action\": \"list_issues\", \"params\": {\"project_id\": \"${PROJECT_ID}\", \"status\": \"open\"}}
+      {\"facade\": \"sentinel\", \"action\": \"list_issues\", \"params\": {\"project_id\": \"${PROJECT_ID}\", \"status\": \"open\"}},
+      {\"facade\": \"roadmap\", \"action\": \"read\", \"params\": {\"project_id\": \"${PROJECT_ID}\"}}
     ]
   }" 2>/dev/null)
 
@@ -30,10 +31,19 @@ if [ $? -eq 0 ] && printf '%s' "$RESULT" | grep -q '"status"'; then
   NVOICE=$(pick inbox_sync | jq -r '.synced // 0' 2>/dev/null);                      NVOICE=${NVOICE:-0}
   NQ=$(pick queue_sync | jq -r '.synced // 0' 2>/dev/null);                          NQ=${NQ:-0}
   NISS=$(pick list_issues | jq -r '.issues | length' 2>/dev/null);                   NISS=${NISS:-0}
+  # Roadmap position: the next milestone by target date (or the last one if all are past).
+  # Empty when no roadmap exists, and the line is then omitted.
+  ROAD=$(pick read | jq -r --arg today "$(date +%F)" '
+    ([.milestones[]? | select(.target_date >= $today)] | sort_by(.target_date) | .[0]) as $next
+    | ($next // ([.milestones[]?] | sort_by(.target_date) | last)) as $m
+    | if $m == null then empty
+      else "  ▸ roadmap: \($m.label) (due \($m.target_date), \($m.epics|length) epics) · \(.objectives|length) objectives · \(.summary.unhealthy_epics_count // 0) unhealthy epics"
+      end' 2>/dev/null)
   CTX="DECIBEL ${PROJECT_ID}: ${NISS} open issues (${BLOCK} blocking) · voice ${NVOICE} · queue ${NQ} · ${NACT} next actions:
-${TOP}"
+${TOP}${ROAD:+
+$ROAD}"
   jq -cn --arg ctx "$CTX" '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$ctx}}'
 else
   # Daemon not running — fall back to nudge
-  printf '%s' "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"DECIBEL SESSION INIT: Daemon not reachable. Run these tools now before doing anything else: 1. oracle next_actions (project_id: ${PROJECT_ID}) 2. voice inbox_sync (project_id: ${PROJECT_ID}) 3. agentic queue_sync (project_id: ${PROJECT_ID}) 4. sentinel list_issues (project_id: ${PROJECT_ID}, status: open). Do NOT skip these.\"}}"
+  printf '%s' "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"DECIBEL SESSION INIT: Daemon not reachable. Run these tools now before doing anything else: 1. oracle next_actions (project_id: ${PROJECT_ID}) 2. voice inbox_sync (project_id: ${PROJECT_ID}) 3. agentic queue_sync (project_id: ${PROJECT_ID}) 4. sentinel list_issues (project_id: ${PROJECT_ID}, status: open) 5. roadmap read (project_id: ${PROJECT_ID}) to see where the project is. Decibel is the project memory; your session memory is a cache. Do NOT skip these.\"}}"
 fi

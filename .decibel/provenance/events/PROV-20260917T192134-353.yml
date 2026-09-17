@@ -1,0 +1,11 @@
+event_id: PROV-20260917T192134-353
+timestamp: 2026-09-17T19:21:34.353Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - dojo:wish:WISH-0016
+reason_code: initial_creation
+summary: "Created wish: Ship a CLAUDE.md / AGENTS.md section with the plugin and project_init that makes Claude treat Decibel as the durable intelligence layer over its own session memory"
+fingerprint_before: null
+fingerprint_after: sha256:543a005a48f727b2

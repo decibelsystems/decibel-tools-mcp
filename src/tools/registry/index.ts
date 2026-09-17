@@ -6,6 +6,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { ToolSpec } from '../types.js';
 import { toolSuccess, toolError, requireFields } from '../shared/index.js';
 import {
@@ -152,6 +153,10 @@ This creates: architect/, designer/, sentinel/, dojo/, oracle/, context/, fricti
           type: 'boolean',
           description: 'Generate .cursor/mcp.json for Cursor MCP integration',
         },
+        claude_md: {
+          type: 'boolean',
+          description: 'Append a Decibel section to CLAUDE.md so Claude treats Decibel as the project memory (default: true, idempotent)',
+        },
       },
       required: ['path'],
     },
@@ -239,6 +244,22 @@ decibel_version: "1.0"
         cursorConfigCreated = true;
       }
 
+      // Append the Decibel section to CLAUDE.md (default on). Claude's own memory
+      // is ephemeral and per-account; the CLAUDE.md instruction is what makes it
+      // reach for Decibel as the durable project memory. Idempotent via marker.
+      let claudeMdUpdated = false;
+      if (args.claude_md !== false) {
+        const claudeMdPath = path.join(args.path, 'CLAUDE.md');
+        const existing = fs.existsSync(claudeMdPath) ? fs.readFileSync(claudeMdPath, 'utf-8') : '';
+        if (!existing.includes('<!-- decibel:start -->')) {
+          const templateDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'templates');
+          const section = fs.readFileSync(path.join(templateDir, 'CLAUDE-decibel.md'), 'utf-8');
+          const sep = existing.length === 0 ? '' : existing.endsWith('\n') ? '\n' : '\n\n';
+          fs.writeFileSync(claudeMdPath, existing + sep + section);
+          claudeMdUpdated = true;
+        }
+      }
+
       // Register in project registry
       try {
         registerProject({
@@ -263,6 +284,9 @@ decibel_version: "1.0"
       if (cursorConfigCreated) {
         nextSteps.push('Cursor config created at .cursor/mcp.json - restart Cursor to activate');
       }
+      if (claudeMdUpdated) {
+        nextSteps.push('CLAUDE.md now tells Claude to use Decibel as the project memory');
+      }
 
       return toolSuccess({
         success: true,
@@ -282,6 +306,7 @@ decibel_version: "1.0"
           config_path: path.join(args.path, '.cursor', 'mcp.json'),
           server_name: 'decibel-tools',
         } : undefined,
+        claude_md_updated: claudeMdUpdated,
         next_steps: nextSteps,
       });
     } catch (err) {

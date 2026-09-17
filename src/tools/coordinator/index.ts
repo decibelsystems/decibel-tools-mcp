@@ -260,18 +260,16 @@ export const coordStatusTool: ToolSpec = {
       required: [],
     },
   },
-  handler: withRunTracking(
-    async (args) => {
-      const input = args as CoordStatusInput;
+  // Not run-tracked: this is a poll, and it drowned every other run event.
+  handler: async (args) => {
+    const input = args as CoordStatusInput;
 
-      const result = await coordStatus(input);
-      if (isCoordError(result)) {
-        return toolError(result.error, result.message);
-      }
-      return toolSuccess(result);
-    },
-    { toolName: 'coord_status' }
-  ),
+    const result = await coordStatus(input);
+    if (isCoordError(result)) {
+      return toolError(result.error, result.message);
+    }
+    return toolSuccess(result);
+  },
 };
 
 // ============================================================================
