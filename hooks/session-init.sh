@@ -7,10 +7,13 @@ PROJECT_ID=$(basename "$PWD")
 # matching HQ's vite.config discovery. Env var wins; fallback 4888 (the daemon default).
 PORT="${DECIBEL_DAEMON_PORT:-$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.decibel/daemon.meta')))['port'])" 2>/dev/null || echo 4888)}"
 URL="http://localhost:${PORT}/batch"
+# Daemon auth token: env var wins, else daemon.auth_token from ~/.decibel/config.yaml.
+TOKEN="${DECIBEL_AUTH_TOKEN:-$(sed -n 's/^[[:space:]]*auth_token:[[:space:]]*//p' "$HOME/.decibel/config.yaml" 2>/dev/null | head -1 | tr -d '"'"'"'')}"
 
 # Try the daemon batch endpoint
 RESULT=$(curl -s -m 5 -X POST "$URL" \
   -H "Content-Type: application/json" \
+  ${TOKEN:+-H "Authorization: Bearer ${TOKEN}"} \
   -d "{
     \"calls\": [
       {\"facade\": \"oracle\", \"action\": \"next_actions\", \"params\": {\"project_id\": \"${PROJECT_ID}\"}},
@@ -21,7 +24,8 @@ RESULT=$(curl -s -m 5 -X POST "$URL" \
     ]
   }" 2>/dev/null)
 
-if [ $? -eq 0 ] && printf '%s' "$RESULT" | grep -q '"status"'; then
+# An auth/error envelope also carries "status", so require the results array.
+if [ $? -eq 0 ] && printf '%s' "$RESULT" | grep -q '"results"'; then
   # Daemon responded — inject a COMPACT digest (counts + top 3 next actions), not raw JSON.
   # Select by action name (order-independent); printf (not echo) preserves JSON escapes.
   pick() { printf '%s' "$RESULT" | jq -r --arg a "$1" '.results[] | select(.action==$a) | .result.content[0].text' 2>/dev/null; }
