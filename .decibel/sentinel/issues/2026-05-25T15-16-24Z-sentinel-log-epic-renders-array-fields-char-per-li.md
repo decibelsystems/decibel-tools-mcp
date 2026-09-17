@@ -1,14 +1,15 @@
 ---
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: closed
 created_at: 2026-05-25T15:16:24.324Z
+closed_at: 2026-09-17T23:40:30.930Z
 ---
 
 # sentinel log_epic renders array fields char-per-line (corrupts epic .md; can hard-stop the calling agent)
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -23,3 +24,7 @@ FIX (per machina): before mapping a list field to `- ` lines, coerce — if it's
 BLAST RADIUS (not cosmetic): the resulting wall of single-char lines tripped a content-filter / "policy violation" on machina's side and HARD-STOPPED the calling agent mid-write, aborting the session. So this bug can abort the caller, not just produce ugly output.
 
 STATUS: my EPIC-0033/0034 bodies repaired by hand. Repro artifacts: git history of EPIC-0039 (machina) and EPIC-0033/0034 (this repo).
+
+## Resolution
+
+Fixed in kernel: coerceParams() parses JSON-encoded string values back into arrays/objects using the internal tool's inputSchema before dispatch (src/kernel.ts). Covers log_epic tags/motivation/outcomes, roadmap link_epic objectives, registry init aliases. Unit test: tests/unit/kernelCoerce.test.ts.

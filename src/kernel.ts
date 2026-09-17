@@ -146,6 +146,34 @@ export interface ToolKernel {
 /**
  * Create the tool kernel. Call once at startup — both transports share it.
  */
+/**
+ * Facade MCP schemas only declare `action` (+ additionalProperties), so clients
+ * have no type to coerce against and array/object params can arrive as
+ * JSON-encoded strings ("[\"a\",\"b\"]"). Handlers then crash (`tags.join is
+ * not a function`) or persist the blob verbatim. Parse those strings back
+ * using the internal tool's real inputSchema. Unparseable strings are left
+ * alone so the handler's own validation reports them.
+ */
+export function coerceParams(
+  params: Record<string, unknown>,
+  schema: { properties?: Record<string, unknown> } | undefined,
+): Record<string, unknown> {
+  const props = schema?.properties;
+  if (!props) return params;
+  for (const [key, spec] of Object.entries(props)) {
+    const v = params[key];
+    if (typeof v !== 'string') continue;
+    const type = (spec as { type?: unknown })?.type;
+    const wantsArray = type === 'array' || (Array.isArray(type) && type.includes('array'));
+    const wantsObject = type === 'object' || (Array.isArray(type) && type.includes('object'));
+    if (!wantsArray && !wantsObject) continue;
+    const t = v.trim();
+    if (!(wantsArray && t.startsWith('[')) && !(wantsObject && t.startsWith('{'))) continue;
+    try { params[key] = JSON.parse(t); } catch { /* leave as-is */ }
+  }
+  return params;
+}
+
 export async function createKernel(): Promise<ToolKernel> {
   const tools = await getAllTools();
   const toolMap = new Map(tools.map(t => [t.definition.name, t]));
@@ -319,7 +347,7 @@ export async function createKernel(): Promise<ToolKernel> {
       if (project_id !== undefined && merged.projectId === undefined) {
         merged.projectId = project_id;
       }
-      const params = merged;
+      const params = coerceParams(merged, tool.definition.inputSchema);
 
       log(`Kernel: facade ${name}.${action} → ${internalName} (agent=${agentId}${runId ? ` run=${runId}` : ''})`);
       trackToolUse(internalName);
