@@ -393,3 +393,9 @@ A repeatable procedure for fixing a Decibel project where epics exist but were n
 **Lesson:** Sentinel and Roadmap are separate facades by design (Sentinel owns epic records, Roadmap owns the epic↔objective link). The bridge tool (`roadmap link_epic`) commonly just never gets run, so the two layers silently drift apart. This playbook is the reconciliation.
 
 ---
+### [2026-09-17 23:59:10] Kernel coerces JSON-string array/object params using the internal tool schema
+**Category:** architecture | **Tags:** `kernel`, `facades`, `mcp`, `coercion`
+
+Facade MCP schemas expose only `action` + additionalProperties, so clients send array params as JSON strings ("[\"a\",\"b\"]") and handlers crashed (`tags.join is not a function`) or stored the blob. Fix: `coerceParams()` in src/kernel.ts parses string values whose internal-tool inputSchema type is array/object, in one place for all facades. Malformed JSON is left for handler validation. Lesson: the type info always existed in toolMap; it just never reached the wire schema or the dispatch path. If a facade param ever needs number/boolean coercion, extend coerceParams rather than patching individual handlers. Also: the Claude Code plugin runs the published npm package (npx @decibelsystems/tools), not the local dist — local fixes only reach that path after a publish.
+
+---
