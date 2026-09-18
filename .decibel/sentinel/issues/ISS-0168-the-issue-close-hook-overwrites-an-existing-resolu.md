@@ -12,7 +12,7 @@ tags:
   - silent-overwrite
   - completion-ritual
 created_at: 2026-09-18T21:38:27.738Z
-updated_at: 2026-09-18T21:39:03.413Z
+updated_at: 2026-09-18T21:40:49.950Z
 linked_commits:
   - sha: 389263a1ad04a3b4987643a27a35dc7f4864d5fa
     shortSha: 389263a
@@ -20,7 +20,12 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-18T21:39:03.413Z
     linked_by: ai:claude
-
+  - sha: 3bfb33dcb5c4dbe655783b563b8450078f053dfe
+    shortSha: 3bfb33d
+    message: "sentinel: auto-linked commit metadata for ISS-0168"
+    relationship: related
+    linked_at: 2026-09-18T21:39:41.826Z
+    linked_by: ai:claude
 ---
 # The issue-close hook overwrites an existing resolution with the triggering commit's subject line
 
@@ -88,3 +93,15 @@ D2. Closing an already-closed issue overwrites its resolution instead of being a
 D1 alone is a correctness bug for any commit message that quotes a trailer — documentation, this issue, a fix for this issue. D1 + D2 together mean the act of documenting the problem destroys the evidence of it. The restoration only survived because the third attempt deliberately avoided writing the pattern in prose.
 
 FIX FOR D1: parse trailers properly — only the final contiguous block of `Key: value` lines at the end of the message, per git-interpret-trailers. A line inside a paragraph, inside backticks, or indented as a quote is not a trailer.
+
+[2026-09-18] LOCATED — both defects are in hooks/issue-close-reminder.sh, not in sentinel's close_issue.
+
+D1, line 38: IDS=$(echo "$BODY" | grep -ioE '(closes|fixes|resolves):[[:space:]]*[A-Za-z0-9._-]+' ...) — a case-insensitive grep over the entire commit body. Nothing anchors it to the trailer block, to line start, or to the final paragraph, so it matches the pattern anywhere: mid-sentence, inside backticks, inside an indented quote. That is how a commit describing the bug triggered it.
+
+D2, line 44: the hook unconditionally sends resolution="Resolved by commit ${SHA}: ${SUBJECT}" with status=closed. It never asks whether the issue is already closed, so close_issue is being told, correctly, to overwrite. The defect is the caller's, though a guard in close_issue (never replace a non-empty resolution unless explicitly asked) would be a second belt worth having.
+
+The installed copy at ~/.decibel/hooks/issue-close-reminder.sh carries both, identically — the 12-line drift between installed and repo is entirely about the daemon port and auth token, nothing to do with this.
+
+FIX, both in the hook:
+- D1: take only the trailing trailer block, e.g. read the body's last paragraph and match '^[[:space:]]*(Closes|Fixes|Resolves):' with a line anchor, case-sensitive.
+- D2: read_issue first; skip any issue already status=closed, and report "already closed" rather than re-closing it.
