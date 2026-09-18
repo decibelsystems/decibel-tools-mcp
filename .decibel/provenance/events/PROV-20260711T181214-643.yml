@@ -1,0 +1,11 @@
+event_id: PROV-20260711T181214-643
+timestamp: 2026-07-11T18:12:14.643Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0114-guardian-report-does-not-apply-project-secret-allo.md
+reason_code: initial_creation
+summary: "Created issue: Guardian report() does not apply project secret allowlist (allowlisted stays 0)"
+fingerprint_before: null
+fingerprint_after: sha256:61beeb08dcbec163

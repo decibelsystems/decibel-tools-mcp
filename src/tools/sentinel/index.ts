@@ -5,6 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
+import { ISSUE_PRIORITIES, ISSUE_STATUSES } from '../../domain/issue.js';
 import { toolSuccess, toolError, requireFields, requireOneOf, withRunTracking, summaryGenerators } from '../shared/index.js';
 import {
   createIssue,
@@ -22,7 +23,9 @@ import {
   listEpics,
   ListEpicsInput,
   getEpic,
+  updateEpic,
   GetEpicInput,
+  UpdateEpicInput,
   getEpicIssues,
   GetEpicIssuesInput,
   resolveEpic,
@@ -103,6 +106,16 @@ export const sentinelCreateIssueTool: ToolSpec = {
           type: 'string',
           description: 'Optional parent epic ID (e.g., "EPIC-0001")',
         },
+        priority: {
+          type: 'string',
+          enum: [...ISSUE_PRIORITIES],
+          description: 'Optional scheduling priority. Distinct from severity: severity is how bad the problem is, priority is when it gets worked on.',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional freeform tags.',
+        },
       },
       required: ['severity', 'title', 'details'],
     },
@@ -177,7 +190,10 @@ export const sentinelCloseIssueTool: ToolSpec = {
 
         const result = await closeIssue(args as CloseIssueInput);
 
-        if ('error' in result && result.error === 'ISSUE_NOT_FOUND') {
+        // Any error-shaped result is an error. Matching on ISSUE_NOT_FOUND
+        // alone let AMBIGUOUS_ISSUE_ID (and project-resolution failures) be
+        // reported to the caller as a successful close.
+        if ('error' in result) {
           return toolError(JSON.stringify(result));
         }
 
@@ -411,6 +427,76 @@ export const sentinelReadEpicTool: ToolSpec = {
       }
 
       return toolSuccess(result.epic);
+    } catch (err) {
+      return toolError(err instanceof Error ? err.message : String(err));
+    }
+  },
+};
+
+export const sentinelUpdateEpicTool: ToolSpec = {
+  definition: {
+    name: 'sentinel_update_epic',
+    description:
+      'Update an existing epic: status, priority, summary, title, owner, squad, tags, or append a timestamped note. ' +
+      'Use this instead of hand-editing the epic file — the summary is stored in both frontmatter and the body, and ' +
+      'this keeps them in step. Epics were previously write-once, which left status pinned at "planned" forever.',
+    annotations: {
+      title: 'Update Epic',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project identifier. Uses default project if not specified.',
+        },
+        epic_id: { type: 'string', description: 'Epic ID (e.g., "EPIC-0038")' },
+        status: {
+          type: 'string',
+          enum: ['planned', 'in_progress', 'shipped', 'on_hold', 'cancelled'],
+          description: 'New lifecycle status.',
+        },
+        priority: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          description: 'New priority.',
+        },
+        summary: {
+          type: 'string',
+          description: 'Replacement summary. Updates frontmatter and the body ## Summary section together.',
+        },
+        title: { type: 'string', description: 'New title.' },
+        owner: { type: 'string', description: 'New owner.' },
+        squad: { type: 'string', description: 'New squad.' },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Replacement tag list (not merged with existing tags).',
+        },
+        note: {
+          type: 'string',
+          description: 'Free-text note appended to the body with a timestamp, preserving prior notes.',
+        },
+      },
+      required: ['epic_id'],
+    },
+  },
+  handler: async (args) => {
+    try {
+      requireFields(args, 'epic_id');
+      const result = await updateEpic(args as UpdateEpicInput);
+
+      if (isProjectResolutionError(result)) {
+        return toolError(JSON.stringify(result));
+      }
+      if ('error' in result) {
+        return toolError(JSON.stringify(result));
+      }
+
+      return toolSuccess(result);
     } catch (err) {
       return toolError(err instanceof Error ? err.message : String(err));
     }
@@ -693,7 +779,9 @@ export const sentinelListIssuesTool: ToolSpec = {
       const projectId = resolved.id;
 
       if (args.status) {
-        const validStatuses: SentinelIssueStatus[] = ['open', 'in_progress', 'done', 'blocked'];
+        // 'done' is gone: it was never in the canonical vocabulary, so filtering
+        // by it could only ever return nothing. See domain/issue.ts.
+        const validStatuses: SentinelIssueStatus[] = [...ISSUE_STATUSES];
         requireOneOf(args.status, 'status', validStatuses);
       }
 
@@ -779,7 +867,7 @@ export const sentinelCreateIssueTool2: ToolSpec = {
         const resolved = resolveProjectPaths(args.projectId as string | undefined);
 
         if (args.priority) {
-          const validPriorities: SentinelIssuePriority[] = ['low', 'medium', 'high'];
+          const validPriorities: SentinelIssuePriority[] = [...ISSUE_PRIORITIES];
           requireOneOf(args.priority, 'priority', validPriorities);
         }
 
@@ -1150,6 +1238,7 @@ export const sentinelTools: ToolSpec[] = [
   sentinelLogEpicTool,
   sentinelListEpicsTool,
   sentinelReadEpicTool,
+  sentinelUpdateEpicTool,
   sentinelListEpicIssuesTool,
   sentinelResolveEpicTool,
   // Data inspector tools

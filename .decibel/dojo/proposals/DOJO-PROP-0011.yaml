@@ -1,0 +1,109 @@
+id: DOJO-PROP-0011
+title: Proto-to-Figma capture pipeline as a Decibel capability
+problem: >-
+  Turning a rendered HTML prototype into real editable Figma layers is a
+  capability Ben wants Decibel to own in-house — his words, "it's a key use case
+  for us" — and he explicitly rejected the third-party option (html.to.design)
+  on trust grounds. A working pipeline now exists, built 2026-09-04, but it
+  lives in a client repo (plasiv) where it will grow roots if nobody flags it.
+
+
+  Location: plasiv/strategy/design-system/proto-to-figma/ — extract.js (213
+  lines, in-page DOM walker), capture.mjs (~130 lines, Playwright driver),
+  figma-plugin/ (271 lines), README.md. Pipeline: proto.html -> capture.mjs
+  (Chrome) -> out/<state>.json -> Figma plugin -> layers.
+
+
+  A browser is not incidental to this. A JS-built prototype has no DOM until it
+  renders, so static parsing yields nothing; extract.js walks the LIVE tree for
+  geometry, fills, per-edge strokes, corner radii, shadows, text
+  (family/weight/size/tracking/line-height) and SVG as markup so icons stay
+  vectors. Geometry is absolute relative to the capture root, which is what
+  makes the rebuild pixel-faithful.
+hypothesis: >-
+  The capability generalises almost completely: extract.js, the Figma plugin,
+  and the driver's structure are all client-agnostic. The only plasiv-specific
+  part is the STATES array at the top of capture.mjs — route names, the proto
+  path default, and the plugin's default page name. That is configuration, not
+  logic, which is the same shape the Zoom puller turned out to have (EPIC-0036:
+  one client-specific registry entry, everything else general).
+
+
+  Two design ideas are the actual value, above and beyond "HTML to Figma":
+
+
+  1. STYLE BINDING, not colour pasting. Captured fills are matched against local
+  Figma paint styles by hex and BOUND to them. A design system generated into
+  the same file stays connected to the imported screens, so accepting a token
+  later moves the screens with it. This is what separates it from a screenshot
+  tool.
+
+
+  2. DECLARATIVE STATES WITH PER-STATE SETTLE TIME. Each state is a name, a
+  route, optional page script, and a settle time. Today's run captured six
+  states off one prototype including three animation-timed ones — an AI
+  assistant mid-thought with one step ticked and the next still spinning, caught
+  at 900ms into a 700ms-per-step sequence. Per-state settle time is what makes
+  transient states capturable at all, and it generalises to any animated
+  prototype.
+owner: human
+state: draft
+created_at: 2026-09-04T22:55:20.176Z
+project_id: decibel-tools-mcp
+target_module: designer
+scope_in:
+  - extract.js DOM walker — geometry, fills, per-edge strokes, radii, shadows,
+    typography, SVG-as-markup
+  - Playwright driver structure with declarative states and per-state settle time
+  - Figma plugin that rebuilds layers and BINDS fills to local paint styles by
+    hex
+  - Sibling plugin that generates design-system tokens into Figma as styles and
+    variables from a stylesheet :root block
+  - "Figma plugin gotchas already paid for: widget-vs-plugin import error,
+    dynamic-page async page switch, orphan pages from failed runs, styles
+    stacking duplicates unless upserted by name"
+scope_out:
+  - The plasiv STATES array — route names, proto path default, default Figma
+    page name (config, not logic)
+  - Auto-layout inference. Placement is absolute on purpose; that is what holds
+    fidelity. Captured flex properties are retained for a later inference pass.
+  - Bitmap round-tripping — the bytes do not survive, so images become dashed
+    placeholders
+  - Gradients — flattened to the colour underneath, with a warning per occurrence
+  - canvas / WebGL — nothing to walk
+acceptance:
+  - A human has run the Figma import and accepted the rebuilt layers. NOT YET
+    DONE — see risks.
+  - Capture and import both run against a prototype from a second, non-plasiv
+    project
+  - The STATES array is external config rather than a source edit
+  - "Style binding verified: change a bound paint style, confirm imported
+    screens follow"
+risks:
+  - "NOT PROVEN END TO END. The capture side ran today and six states were
+    verified against reference PNGs. The Figma import has NOT been run by a
+    human — the rebuild is untested. Treat exactly as the Zoom puller was
+    treated: a specification, not a proven implementation. The peer will confirm
+    when it has actually landed layers."
+  - Lifting it before it renders something a designer accepts risks porting a
+    design that does not survive contact with Figma. The plasiv peer's
+    recommendation, which I agree with, is to prove it in plasiv first and lift
+    it once it works.
+  - Ben has said a new repo for this is fine, so the destination is open —
+    decibel-tools-mcp facade, or its own repo. Deciding that before it works
+    would be premature.
+insight: >-
+  Flagged by the plasiv peer with no ask attached, purely so the kit side knows
+  it exists before it grows roots in a client repo. That is the right instinct
+  and the same path EPIC-0036 took: capability built for one client, recognised
+  as general, ported once understood.
+
+
+  Both plugins are written up in decibel-corpus as
+  field-notes/2026-09-04-html-proto-to-figma-generator.md, which carries the
+  Figma gotchas that each cost a run.
+
+
+  Deliberately NOT filed as an epic. An epic would imply committing to build it;
+  the recommendation on the table is to defer until the Figma side is proven.
+  Revisit when the peer confirms layers have landed.

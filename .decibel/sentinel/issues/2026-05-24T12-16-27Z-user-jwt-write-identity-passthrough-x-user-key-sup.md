@@ -1,9 +1,11 @@
 ---
+uid: 019e59ea-4c67-7f1b-973a-8c397311b138
+id: 2026-05-24T12-16-27Z-user-jwt-write-identity-passthrough-x-user-key-sup
 projectId: decibel-tools-mcp
 severity: high
 status: open
-created_at: 2026-05-24T12:16:27.751Z
 epic_id: EPIC-0033
+created_at: 2026-05-24T12:16:27.751Z
 ---
 
 # User-JWT write-identity passthrough (X-User-Key → Supabase) so RLS holds end-to-end

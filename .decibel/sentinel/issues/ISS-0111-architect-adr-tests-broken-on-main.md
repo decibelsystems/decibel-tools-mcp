@@ -1,18 +1,23 @@
 ---
+uid: 019e89d6-a898-701f-997a-5a42a633927c
 id: ISS-0111
 projectId: decibel-tools-mcp
 severity: high
 status: closed
+tags:
+  - tests
+  - architect
+  - regression
+  - ci-blocker
+created_at: 2026-06-02T19:36:47.000Z
 closed_at: 2026-06-02T19:58:12.000Z
 closed_reason: "fixed: tests realigned to .md ADR format via parseAdrContent uniform reader; legacy .yml round-trip covered"
-created_at: 2026-06-02T19:36:47.000Z
-tags: [tests, architect, regression, ci-blocker]
 ---
 
 # 8 tests broken in tests/unit/architectAdrs.test.ts on main
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 
 ## Symptom
 

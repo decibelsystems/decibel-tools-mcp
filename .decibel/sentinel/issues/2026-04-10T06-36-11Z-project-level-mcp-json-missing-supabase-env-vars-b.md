@@ -1,17 +1,18 @@
 ---
+uid: 019d761a-f4b0-7681-b710-6967b302d1b4
 id: ISS-0102
 projectId: decibel-tools-mcp
 severity: high
 status: closed
+created_at: 2026-04-10T06:36:11.312Z
 closed_at: 2026-06-02T19:33:21.000Z
 closed_reason: "fixed: .mcp.json env block with ${VAR:-} substitution + .env.example documents all backend env vars"
-created_at: 2026-04-10T06:36:11.312Z
 ---
 
 # Project-level .mcp.json missing Supabase env vars — breaks session init for all Claudes in this repo
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 
 ## Details
 

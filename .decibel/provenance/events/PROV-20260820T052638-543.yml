@@ -1,0 +1,11 @@
+event_id: PROV-20260820T052638-543
+timestamp: 2026-08-20T05:26:38.543Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0132-verify-chatgpt-connector-auth-opaque-bearer-vs-oau.md
+reason_code: initial_creation
+summary: "Created issue: Verify ChatGPT connector auth (opaque bearer vs OAuth) before building the EPIC-0037 post office"
+fingerprint_before: null
+fingerprint_after: sha256:0c77b2e8002c0e15

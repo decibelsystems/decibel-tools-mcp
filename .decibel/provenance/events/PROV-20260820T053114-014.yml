@@ -1,0 +1,11 @@
+event_id: PROV-20260820T053114-014
+timestamp: 2026-08-20T05:31:14.014Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0133-import-store-ts-skipped-every-yml-issue-hq-sentine.md
+reason_code: initial_creation
+summary: "Created issue: import-store.ts skipped every .yml issue — hq.sentinel_issues undercounted for months (code fixed, re-import not run)"
+fingerprint_before: null
+fingerprint_after: sha256:a2cfde537e7b8d67

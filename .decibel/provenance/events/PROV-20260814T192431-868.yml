@@ -1,0 +1,11 @@
+event_id: PROV-20260814T192431-868
+timestamp: 2026-08-14T19:24:31.868Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0121-port-the-zoom-summary-puller-to-a-typescript-pro-t.md
+reason_code: initial_creation
+summary: "Created issue: Port the Zoom summary puller to a TypeScript pro-tier `zoom` facade"
+fingerprint_before: null
+fingerprint_after: sha256:820d4c962d2da4ee

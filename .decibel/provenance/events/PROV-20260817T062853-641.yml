@@ -1,0 +1,24 @@
+event_id: PROV-20260817T062853-641
+timestamp: 2026-08-17T06:28:53.641Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - friction:log:2026-08-17T06-28-53Z-sentinel-create-issue-allocates-colliding-iss-nnnn
+reason_code: initial_creation
+summary: |-
+  Logged friction: sentinel create_issue allocates colliding ISS-NNNN ids — duplicate ids land silently and are only noticed later by a human. Reported by the machina peer; reproduced independently in decibel-tools-mcp, so it is a tool defect, not user error.
+
+  CONFIRMED ON DISK (decibel-tools-mcp/.decibel/sentinel/issues, 158 files): three duplicated numbers — ISS-0015 (2 .yml), ISS-0028 (2 .yml), ISS-0112 (2 .md). `sentinel list_issues` returns ISS-0112 twice with different titles. A committed file also records ISS-0120 as "renumbered from duplicate ISS-0118", i.e. this has been hand-patched before.
+
+  WHY COLLISIONS SURVIVE: the id is only a filename PREFIX and the slug differs, so two files with the same number never collide at the filesystem or git level. Nothing fails loudly — not the write, not a merge, not CI.
+
+  CONTRIBUTING MECHANISMS (multiple, not one):
+  1. Allocator blind spot — getNextIssueNumber (src/tools/sentinel.ts:294-322) matches `^ISS-(\d+)` on the filename, then at line 304 does `if (!file.endsWith('.md')) continue;` before reading frontmatter. Any .yml whose filename is NOT ISS-prefixed but whose frontmatter id IS ISS-NNNN is invisible to the max scan. 58 .yml files live in this dir.
+  2. No locking — the dir is read, max+1 computed, then the file is written. Two concurrent/burst create_issue calls both read the same max and both write. No atomic reserve.
+  3. Two parallel stores — sentinel.ts writes timestamp+slug .md while sentinelIssues.ts writes ISS-NNNN .yml, with independent allocators (already tracked as ISS-0105).
+  4. Deferred/remote writes — ISS-0112 "one-click installer" has created_at 2026-06-25 but only entered git on 2026-08-02 via an unrelated commit. Ids allocated on another clone, another machine, or replayed later by `agentic queue_sync` cannot see each other's uncommitted state.
+
+  IMPACT: ids are the primary key humans and agents use to reference work. Duplicates make read_issue/update_issue/close_issue ambiguous — they resolve to whichever file matches first — so an update or a close can silently hit the wrong issue.
+fingerprint_before: null
+fingerprint_after: sha256:42058d88138fd4b5

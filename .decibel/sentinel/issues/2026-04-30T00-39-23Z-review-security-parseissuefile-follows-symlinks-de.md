@@ -1,4 +1,6 @@
 ---
+uid: 019ddbd3-7adb-7d79-8bff-514b297e089f
+id: 2026-04-30T00-39-23Z-review-security-parseissuefile-follows-symlinks-de
 projectId: decibel-tools-mcp
 severity: low
 status: open

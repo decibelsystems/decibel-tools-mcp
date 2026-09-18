@@ -5,11 +5,27 @@
 // config file overrides defaults. SIGHUP reloads hot-reloadable fields.
 // ============================================================================
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
 import { homedir } from 'os';
-import YAML from 'yaml';
+import { createRequire } from 'module';
+import type * as YAMLNs from 'yaml';
 import { log } from './config.js';
+
+// `yaml` costs ~12 MB resident to import, and this module is loaded by every
+// process that reads a port number — including the thin stdio client, which
+// owns no runtime. loadConfig() returns defaults without parsing anything when
+// ~/.decibel/config.yaml is absent, which is the common case, so the parser is
+// pulled in on first actual parse rather than at module load. Kept sync via
+// createRequire because both callers are sync and making them async would
+// ripple into daemon startup ordering.
+let yamlModule: typeof YAMLNs | null = null;
+function yaml(): typeof YAMLNs {
+  if (!yamlModule) {
+    yamlModule = createRequire(import.meta.url)('yaml') as typeof YAMLNs;
+  }
+  return yamlModule;
+}
 
 // ============================================================================
 // Config Schema
@@ -31,8 +47,32 @@ export interface DaemonConfig {
     rate_limit_rpm: number;
     gc_interval_secs: number;
   };
+  /** AgentHQ post office (EPIC-0037). The token is a secret — see tools/postoffice.ts. */
+  hq?: {
+    url?: string;
+    token?: string;
+  };
   license?: {
     key?: string;
+  };
+  /**
+   * Zoom AI Companion ingestion (EPIC-0036). Server-to-Server OAuth credentials.
+   * These are ACCOUNT-WIDE ADMIN scope — meeting_summary:read:admin reads every
+   * meeting in the account, not only client ones. See ISS-0123.
+   */
+  zoom?: {
+    account_id?: string;
+    client_id?: string;
+    client_secret?: string;
+  };
+  /**
+   * Private facades loaded at boot (EPIC-0038 Phase 7). `allow` holds absolute
+   * paths to extension modules; anything else is rejected by the loader. This
+   * lives in config rather than the environment on purpose — see the trust
+   * boundary note in runtime/extensions.ts.
+   */
+  extensions?: {
+    allow?: string[];
   };
   agents?: Record<string, AgentConfig>;
 }
@@ -52,7 +92,15 @@ const DEFAULT_CONFIG: DaemonConfig = {
 // Config Path
 // ============================================================================
 
-const CONFIG_PATH = join(homedir(), '.decibel', 'config.yaml');
+/**
+ * Resolved per call rather than captured at import. os.homedir() tracks $HOME,
+ * and a module-level constant freezes whatever HOME was when the module first
+ * loaded — which is wrong for a daemon that reloads config on SIGHUP, and
+ * untestable for anything that needs to point at a different home.
+ */
+function configPath(): string {
+  return join(homedir(), '.decibel', 'config.yaml');
+}
 
 // ============================================================================
 // Load & Parse
@@ -63,13 +111,13 @@ const CONFIG_PATH = join(homedir(), '.decibel', 'config.yaml');
  * Returns defaults if file doesn't exist or is invalid.
  */
 export function loadConfig(): DaemonConfig {
-  if (!existsSync(CONFIG_PATH)) {
+  if (!existsSync(configPath())) {
     return { ...DEFAULT_CONFIG };
   }
 
   try {
-    const raw = readFileSync(CONFIG_PATH, 'utf-8');
-    const parsed = YAML.parse(raw) as Partial<DaemonConfig> | null;
+    const raw = readFileSync(configPath(), 'utf-8');
+    const parsed = yaml().parse(raw) as Partial<DaemonConfig> | null;
 
     if (!parsed) return { ...DEFAULT_CONFIG };
 
@@ -83,13 +131,25 @@ export function loadConfig(): DaemonConfig {
         rate_limit_rpm: parsed.daemon?.rate_limit_rpm ?? DEFAULT_CONFIG.daemon.rate_limit_rpm,
         gc_interval_secs: parsed.daemon?.gc_interval_secs ?? DEFAULT_CONFIG.daemon.gc_interval_secs,
       },
+      hq: parsed.hq ? {
+        url: parsed.hq.url,
+        token: parsed.hq.token,
+      } : undefined,
       license: parsed.license ? {
         key: parsed.license.key,
+      } : undefined,
+      zoom: parsed.zoom ? {
+        account_id: parsed.zoom.account_id,
+        client_id: parsed.zoom.client_id,
+        client_secret: parsed.zoom.client_secret,
+      } : undefined,
+      extensions: parsed.extensions ? {
+        allow: parsed.extensions.allow,
       } : undefined,
       agents: (parsed as Record<string, unknown>).agents as Record<string, AgentConfig> | undefined,
     };
   } catch (err) {
-    log(`Config: Failed to parse ${CONFIG_PATH}: ${err}`);
+    log(`Config: Failed to parse ${configPath()}: ${err}`);
     return { ...DEFAULT_CONFIG };
   }
 }
@@ -98,7 +158,23 @@ export function loadConfig(): DaemonConfig {
  * Get the config file path (for display purposes).
  */
 export function getConfigPath(): string {
-  return CONFIG_PATH;
+  return configPath();
+}
+
+/**
+ * Write a license key into ~/.decibel/config.yaml, creating the file if
+ * needed. Uses parseDocument so existing comments and formatting survive —
+ * this file is hand-edited by users.
+ */
+export function writeLicenseKey(key: string): void {
+  mkdirSync(dirname(configPath()), { recursive: true });
+
+  const doc = existsSync(configPath())
+    ? yaml().parseDocument(readFileSync(configPath(), 'utf-8'))
+    : new (yaml().Document)({});
+
+  doc.setIn(['license', 'key'], key);
+  writeFileSync(configPath(), doc.toString(), 'utf-8');
 }
 
 /**

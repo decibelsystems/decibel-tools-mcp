@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
-import { toolSuccess, toolError, requireFields, withRunTracking, summaryGenerators } from '../shared/index.js';
+import { toolSuccess, toolError, toolFailure, isErrorPayload, requireFields, withRunTracking, summaryGenerators } from '../shared/index.js';
 import {
   recordDesignDecision,
   RecordDesignDecisionInput,
@@ -524,7 +524,8 @@ export const designerTokensLookupTool: ToolSpec = {
       const input = rawInput as unknown as TokensLookupInput;
 
       const result = await tokensLookup(input);
-      return toolSuccess(result);
+      // A NO_TOKENS payload is a failure, and must carry the marker that says so.
+      return isErrorPayload(result) ? toolFailure(result) : toolSuccess(result);
     } catch (err) {
       return toolError(err instanceof Error ? err.message : String(err));
     }
@@ -561,7 +562,7 @@ export const designerDriftTool: ToolSpec = {
       const input = rawInput as unknown as DriftDetectionInput;
 
       const result = await driftDetection(input);
-      return toolSuccess(result);
+      return isErrorPayload(result) ? toolFailure(result) : toolSuccess(result);
     } catch (err) {
       return toolError(err instanceof Error ? err.message : String(err));
     }

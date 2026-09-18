@@ -1,6 +1,6 @@
 {
   "name": "@decibelsystems/tools",
-  "version": "2.1.2",
+  "version": "3.0.0",
   "bin": {
     "decibel-tools": "dist/server.js"
   },
@@ -9,12 +9,14 @@
   "type": "module",
   "exports": {
     ".": "./dist/server.js",
-    "./client": "./dist/client/index.js"
+    "./client": "./dist/client/index.js",
+    "./hq": "./dist/hq/index.js"
   },
   "files": [
     "dist",
     "templates",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "publishConfig": {
@@ -22,6 +24,9 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:dist": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "npm run build:dist",
+    "postpack": "npm run build",
     "dev": "tsx src/server.ts",
     "start": "node dist/server.js",
     "start:http": "node dist/server.js --http",
@@ -39,7 +44,8 @@
     "ext:build": "cd extension && npm run build",
     "ext:watch": "cd extension && npm run watch",
     "ext:package": "cd extension && npm run package",
-    "ext:install": "cd extension && npm run install-ext"
+    "ext:install": "cd extension && npm run install-ext",
+    "test:torture": "vitest run tests/torture --testTimeout=1800000"
   },
   "keywords": [
     "mcp",
@@ -56,13 +62,14 @@
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@supabase/supabase-js": "^2.89.0",
     "express": "^5.2.1",
-    "pg": "^8.16.3",
-    "yaml": "^2.8.2"
+    "yaml": "^2.8.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/pg": "^8.16.0",
     "@vitest/coverage-v8": "^2.1.0",
+    "pg": "^8.16.3",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
     "vitest": "^2.1.0"

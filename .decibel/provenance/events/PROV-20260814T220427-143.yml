@@ -1,0 +1,11 @@
+event_id: PROV-20260814T220427-143
+timestamp: 2026-08-14T22:04:27.143Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0128-rejoined-zoom-meetings-produce-two-uuids-for-one-s.md
+reason_code: initial_creation
+summary: "Created issue: Rejoined Zoom meetings produce two uuids for one session — uuid dedup cannot merge them"
+fingerprint_before: null
+fingerprint_after: sha256:77112b59014da3cc

@@ -1,0 +1,27 @@
+---
+uid: 019b6bb8-55e5-79ee-a579-57d0db2b4ba3
+id: ISS-0028
+projectId: decibel-tools-mcp
+status: closed
+priority: medium
+tags:
+  - sentinel
+  - scan
+  - packages
+  - health
+created_at: 2025-12-29T20:06:41.381Z
+updated_at: 2026-08-29T16:18:24.817Z
+closed_at: 2026-08-29T16:18:24.817Z
+resolution: Implemented package health scanning in sentinel scan. Added support for npm (package.json), Python (requirements.txt, pyproject.toml), Rust (Cargo.toml), and Go (go.mod) package manifests.
+---
+# Add package health scanning to sentinel scan
+
+**Status:** closed
+
+## Details
+
+Add package health checks to sentinel_scan and sentinel_scanData tools. Detect outdated, vulnerable, or problematic dependencies from package.json, requirements.txt, pyproject.toml, etc. Promoted from WISH-0004.
+
+## Resolution
+
+Implemented package health scanning in sentinel scan. Added support for npm (package.json), Python (requirements.txt, pyproject.toml), Rust (Cargo.toml), and Go (go.mod) package manifests.

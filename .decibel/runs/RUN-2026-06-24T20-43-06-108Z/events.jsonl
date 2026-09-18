@@ -1,0 +1,4 @@
+{"ts":"2026-06-24T20:43:06.109Z","run_id":"RUN-2026-06-24T20-43-06-108Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-06-24T20:42:13Z","run_id":"RUN-2026-06-24T20-43-06-108Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-06-24T20:43:00Z","run_id":"RUN-2026-06-24T20-43-06-108Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-06-24T20:43:06.460Z","run_id":"RUN-2026-06-24T20-43-06-108Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"friction_log","result":"success","summary":"friction_log completed"}}

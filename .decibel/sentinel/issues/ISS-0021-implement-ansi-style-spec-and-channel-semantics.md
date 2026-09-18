@@ -1,0 +1,22 @@
+---
+uid: 019b47a6-5600-71ec-860d-199988b763a7
+id: ISS-0021
+projectId: decibel-tools-mcp
+status: open
+priority: high
+epic_id: EPIC-0020
+tags:
+  - agentic
+  - ansi
+  - styles
+created_at: 2025-12-22T20:00:41.984Z
+updated_at: 2025-12-22T20:00:41.984Z
+---
+# Implement ANSI style spec and channel semantics
+
+**Status:** open
+**Epic:** EPIC-0020
+
+## Details
+
+Create src/agentic/styles/ansi.ts with ANSI color codes and Channel semantics. Colors indicate meaning, not emotion. Channels: TOOL (amber), EVIDENCE (cyan), DECISION (green), BLOCK/VETO (red), MISSING (dim yellow), META (dim). Include LoadEmoji map and styled() helper. See AGENTIC_PACK_V1_DIRECTIVE.md section 1.3.

@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { ToolSpec } from '../types.js';
-import { toolSuccess, toolError, requireFields, withRunTracking, summaryGenerators } from '../shared/index.js';
+import { toolSuccess, toolError, toolFailure, isErrorPayload, requireFields, withRunTracking, summaryGenerators } from '../shared/index.js';
 import {
   startSession,
   type StartSessionInput,
@@ -72,7 +72,9 @@ export const designerLateralSessionTool: ToolSpec = {
         const input = rawInput as unknown as StartSessionInput;
 
         const result = await startSession(input);
-        return toolSuccess(result);
+        // MISSING_PROBLEM is a caller error; without the marker it reads as a
+        // successful session start to anything branching on isError.
+        return isErrorPayload(result) ? toolFailure(result) : toolSuccess(result);
       } catch (err) {
         return toolError(err instanceof Error ? err.message : String(err));
       }

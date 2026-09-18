@@ -1,0 +1,21 @@
+---
+uid: 019bb913-5922-7f26-a064-2c0788e0caee
+id: ISS-0041
+projectId: decibel-tools-mcp
+status: open
+priority: medium
+tags:
+  - vector
+  - api
+created_at: 2026-01-13T20:36:51.618Z
+updated_at: 2026-01-13T20:36:51.618Z
+---
+# Vector: Add pagination to list_runs
+
+**Status:** open
+
+## Details
+
+vector_list_runs currently has a limit param but no cursor/offset for pagination. For projects with many runs, need proper cursor-based pagination.
+
+Add: cursor param that accepts run_id to paginate from.

@@ -102,7 +102,15 @@ interface VectorEvent {
 
 interface RunAnalysis {
   runId: string;
-  success: boolean;
+  /**
+   * Undefined when the run carries no terminal event — which today is EVERY
+   * run (ISS-0148: 0 of 150 have ever completed). This used to default to
+   * `true` with the comment "Assume success unless we find otherwise", so
+   * every run in history was counted as a success and `failedRuns` was
+   * structurally 0. A clean bill of health that was never measured is worse
+   * than no measurement, because it reads as evidence.
+   */
+  success?: boolean;
   filesTouched: string[];
   hasBacktracks: boolean;
   hasErrors: boolean;
@@ -135,7 +143,8 @@ function analyzeRun(runDir: string): RunAnalysis | null {
   let hasBacktracks = false;
   let hasErrors = false;
   let hasCorrections = false;
-  let success = true; // Assume success unless we find otherwise
+  // Unknown until a terminal event says otherwise. Not `true` — see RunAnalysis.
+  let success: boolean | undefined;
 
   for (const event of events) {
     switch (event.type) {
@@ -209,6 +218,8 @@ function loadRunHistory(runsDir: string, limit: number): RunAnalysis[] {
 interface FileStats {
   totalRuns: number;
   failedRuns: number;
+  /** Runs whose outcome was never recorded. Today that is all of them (ISS-0148). */
+  unknownRuns: number;
   runsWithBacktracks: number;
   runsWithErrors: number;
   runsWithCorrections: number;
@@ -223,6 +234,7 @@ function calculateFileStats(runs: RunAnalysis[]): Map<string, FileStats> {
         stats.set(file, {
           totalRuns: 0,
           failedRuns: 0,
+          unknownRuns: 0,
           runsWithBacktracks: 0,
           runsWithErrors: 0,
           runsWithCorrections: 0,
@@ -232,7 +244,10 @@ function calculateFileStats(runs: RunAnalysis[]): Map<string, FileStats> {
       const fileStats = stats.get(file)!;
       fileStats.totalRuns++;
 
-      if (!run.success) fileStats.failedRuns++;
+      // Only an explicit failure counts as one. An unknown outcome is counted
+      // separately rather than folded into either column.
+      if (run.success === false) fileStats.failedRuns++;
+      else if (run.success === undefined) fileStats.unknownRuns++;
       if (run.hasBacktracks) fileStats.runsWithBacktracks++;
       if (run.hasErrors) fileStats.runsWithErrors++;
       if (run.hasCorrections) fileStats.runsWithCorrections++;

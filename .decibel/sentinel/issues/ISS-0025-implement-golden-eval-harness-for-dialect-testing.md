@@ -1,0 +1,22 @@
+---
+uid: 019b47a7-2920-7e87-b484-7ce7f22202ec
+id: ISS-0025
+projectId: decibel-tools-mcp
+status: open
+priority: medium
+epic_id: EPIC-0020
+tags:
+  - agentic
+  - testing
+  - golden
+created_at: 2025-12-22T20:01:36.032Z
+updated_at: 2025-12-22T20:01:36.032Z
+---
+# Implement golden eval harness for dialect testing
+
+**Status:** open
+**Epic:** EPIC-0020
+
+## Details
+
+Create golden eval harness in src/agentic/__tests__/golden/. Include weekend_trap.payload.json as canonical test payload, expected outputs for each dialect (.sensor.txt, .overmind.txt, .guardian.txt), and runGolden.ts test runner. Runner compares rendered output (ANSI disabled) against expected files. Should be runnable as npm script and in CI. See AGENTIC_PACK_V1_DIRECTIVE.md section 3.

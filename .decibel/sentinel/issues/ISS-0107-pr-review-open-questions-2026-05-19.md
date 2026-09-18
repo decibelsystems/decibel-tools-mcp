@@ -1,10 +1,14 @@
 ---
+uid: 019e4240-bf00-79e0-80b2-2b96cc3912f9
 id: ISS-0107
 projectId: decibel-tools-mcp
 severity: med
 status: open
+tags:
+  - pr-review
+  - governance
+  - follow-up
 created_at: 2026-05-19T22:00:00.000Z
-tags: [pr-review, governance, follow-up]
 ---
 
 # PR review open questions — 2026-05-19 batch

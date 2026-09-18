@@ -34,7 +34,11 @@ const DOMAINS: Record<string, DomainCfg> = {
   issues: {
     subdir: 'sentinel/issues',
     table: 'sentinel_issues',
-    exts: ['.md'],
+    // Issue records exist as both fenced `.md` and bare `.yml`/`.yaml`. This
+    // was `['.md']` while the architect domain below already listed all three,
+    // so every .yml issue was silently skipped at import — ~530 files across
+    // 15 projects never reached hq.sentinel_issues.
+    exts: ['.md', '.yml', '.yaml'],
     parse: (f, c) => parseIssueMarkdown(f, c),
     toRow: (i, { orgId, projectId }) => ({
       org_id: orgId,

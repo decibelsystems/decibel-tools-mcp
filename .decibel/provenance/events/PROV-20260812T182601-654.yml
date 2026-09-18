@@ -1,0 +1,11 @@
+event_id: PROV-20260812T182601-654
+timestamp: 2026-08-12T18:26:01.654Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0120-readme-documented-the-wrong-global-mcp-config-path.md
+reason_code: initial_creation
+summary: "Created issue: README documented the wrong global MCP config path for Claude Code"
+fingerprint_before: null
+fingerprint_after: sha256:1f1362a4b5d69b5c

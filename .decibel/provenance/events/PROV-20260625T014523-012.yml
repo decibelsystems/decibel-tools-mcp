@@ -1,0 +1,11 @@
+event_id: PROV-20260625T014523-012
+timestamp: 2026-06-25T01:45:23.012Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0112-one-click-mac-pc-installer-for-decibel-tools-non-t.md
+reason_code: initial_creation
+summary: "Created issue: One-click Mac/PC installer for Decibel tools (non-technical onboarding)"
+fingerprint_before: null
+fingerprint_after: sha256:a42030dde9d31c88

@@ -40,7 +40,8 @@ export class BridgeAdapter implements TransportAdapter {
     this.daemonUrl = daemonUrl;
   }
 
-  async start(kernel: ToolKernel, _config: TransportConfig): Promise<void> {
+  async start(kernel: ToolKernel | null, _config: TransportConfig): Promise<void> {
+    if (!kernel) throw new Error(`${this.name} adapter requires a local kernel`);
     // Probe daemon at startup
     this.daemonAlive = await this.probeDaemon();
 

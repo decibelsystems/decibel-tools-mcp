@@ -15,6 +15,7 @@ import { log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
 import { emitCreateProvenance } from './provenance.js';
+import { listDirOrThrow, isStoreUnreadable, countedStoreMeta, type StoreMetaFields } from './shared/storeRead.js';
 
 // ============================================================================
 // Types
@@ -71,7 +72,7 @@ export interface TestSpecSummary {
   tags: string[];
 }
 
-export interface ListTestSpecsOutput {
+export interface ListTestSpecsOutput extends StoreMetaFields {
   test_specs: TestSpecSummary[];
   total: number;
 }
@@ -104,7 +105,7 @@ export interface PolicyComplianceItem {
   message?: string;
 }
 
-export interface AuditPoliciesOutput {
+export interface AuditPoliciesOutput extends StoreMetaFields {
   timestamp: string;
   policies_checked: number;
   compliance: PolicyComplianceItem[];
@@ -142,7 +143,7 @@ function slugify(text: string): string {
 
 async function getNextTestId(testSpecsDir: string): Promise<string> {
   try {
-    const files = await fs.readdir(testSpecsDir);
+    const files = await listDirOrThrow(testSpecsDir);
     const ids = files
       .filter(f => f.startsWith('TEST-') && f.endsWith('.yaml'))
       .map(f => {
@@ -152,7 +153,10 @@ async function getNextTestId(testSpecsDir: string): Promise<string> {
       .filter(n => !isNaN(n));
     const maxId = ids.length > 0 ? Math.max(...ids) : 0;
     return `TEST-${String(maxId + 1).padStart(4, '0')}`;
-  } catch {
+  } catch (err) {
+    // See policy.ts: allocating TEST-0001 into a store we could not read would
+    // collide with whatever is already in it.
+    if (isStoreUnreadable(err)) throw err;
     return 'TEST-0001';
   }
 }
@@ -303,15 +307,21 @@ export async function listTestSpecs(
 
   const testSpecsDir = resolved.subPath('sentinel', 'test_specs');
   const testSpecs: TestSpecSummary[] = [];
+  // A spec on disk that did not parse is a spec missing from this list, and a
+  // silently short list of what the project promises to test is exactly the
+  // kind of absence this codebase has shipped before.
+  let parsed = 0;
+  let unreadable = 0;
 
   try {
-    const files = await fs.readdir(testSpecsDir);
+    const files = await listDirOrThrow(testSpecsDir);
     for (const file of files) {
       if (!file.endsWith('.yaml')) continue;
 
       const filePath = path.join(testSpecsDir, file);
       const spec = await parseTestSpecFile(filePath);
-      if (!spec) continue;
+      if (!spec) { unreadable++; continue; }
+      parsed++;
 
       // Apply filters
       if (input.type && spec.type !== input.type) continue;
@@ -333,7 +343,8 @@ export async function listTestSpecs(
         tags: spec.tags,
       });
     }
-  } catch {
+  } catch (err) {
+    if (isStoreUnreadable(err)) throw err;
     // Directory doesn't exist yet - return empty
   }
 
@@ -343,6 +354,7 @@ export async function listTestSpecs(
   return {
     test_specs: testSpecs,
     total: testSpecs.length,
+    ...countedStoreMeta(parsed, unreadable),
   };
 }
 
@@ -369,7 +381,7 @@ export async function compileTests(
   let totalCases = 0;
 
   try {
-    const files = await fs.readdir(testSpecsDir);
+    const files = await listDirOrThrow(testSpecsDir);
     for (const file of files) {
       if (!file.endsWith('.yaml')) continue;
       const filePath = path.join(testSpecsDir, file);
@@ -380,7 +392,8 @@ export async function compileTests(
         totalCases += spec.test_cases.length;
       }
     }
-  } catch {
+  } catch (err) {
+    if (isStoreUnreadable(err)) throw err;
     // No test specs yet
   }
 
@@ -477,7 +490,7 @@ export async function auditPolicies(
       const docStat = await fs.stat(policiesDocPath);
       freshness.last_compiled_policies = docStat.mtime.toISOString();
 
-      const policyFiles = await fs.readdir(policiesDir);
+      const policyFiles = await listDirOrThrow(policiesDir);
       for (const file of policyFiles) {
         if (!file.endsWith('.yaml')) continue;
         const fileStat = await fs.stat(path.join(policiesDir, file));
@@ -498,7 +511,7 @@ export async function auditPolicies(
       const docStat = await fs.stat(testsDocPath);
       freshness.last_compiled_tests = docStat.mtime.toISOString();
 
-      const testFiles = await fs.readdir(testSpecsDir);
+      const testFiles = await listDirOrThrow(testSpecsDir);
       for (const file of testFiles) {
         if (!file.endsWith('.yaml')) continue;
         const fileStat = await fs.stat(path.join(testSpecsDir, file));
@@ -514,15 +527,29 @@ export async function auditPolicies(
 
   // Load all policies for compliance check
   const policiesDir = resolved.subPath('architect', 'policies');
+  // An audit that cannot read a policy has not audited it. Skipping it and
+  // reporting `summary.fail: 0` says the project is compliant with a rule
+  // nobody checked, which is worse than reporting no audit at all.
+  let policiesParsed = 0;
+  let policiesUnreadable = 0;
   try {
-    const files = await fs.readdir(policiesDir);
+    const files = await listDirOrThrow(policiesDir);
     for (const file of files) {
       if (!file.endsWith('.yaml')) continue;
       const filePath = path.join(policiesDir, file);
-      const content = await fs.readFile(filePath, 'utf-8');
-      const policy = YAML.parse(content);
 
-      if (!policy || !policy.id) continue;
+      // Per record: one corrupt policy must not abort the audit of the rest,
+      // and must not vanish from it either.
+      let policy: Record<string, any> | undefined;
+      try {
+        policy = YAML.parse(await fs.readFile(filePath, 'utf-8'));
+      } catch {
+        policiesUnreadable++;
+        continue;
+      }
+
+      if (!policy || !policy.id) { policiesUnreadable++; continue; }
+      policiesParsed++;
 
       // Basic compliance check - verify policy has required fields
       let status: 'pass' | 'fail' | 'warn' | 'skip' = 'pass';
@@ -560,7 +587,8 @@ export async function auditPolicies(
 
       summary[status]++;
     }
-  } catch {
+  } catch (err) {
+    if (isStoreUnreadable(err)) throw err;
     // No policies yet
   }
 
@@ -593,6 +621,7 @@ export async function auditPolicies(
     compliance,
     freshness,
     summary,
+    ...countedStoreMeta(policiesParsed, policiesUnreadable),
   };
 }
 

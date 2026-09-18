@@ -1,4 +1,6 @@
 ---
+uid: 019de0ab-a800-7888-a581-22864b85e3f8
+id: 2026-04-30T23-13-59Z-review-code-bulk-sentinel-operations-should-accept
 projectId: decibel-tools-mcp
 severity: low
 status: open

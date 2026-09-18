@@ -1069,3 +1069,52 @@ export const terminalTools: ToolSpec[] = [
   terminalDepositEth,
   terminalWithdrawEth,
 ];
+
+// ============================================================================
+// Extension manifest (EPIC-0038 Phase 7)
+// ============================================================================
+// This module is excluded from the published build (tsconfig.build.json) and
+// is loaded only when its absolute path appears in `extensions.allow` in
+// ~/.decibel/config.yaml. The facade spec lives here rather than in
+// facades/definitions.ts so the public package does not carry a description of
+// a private tool it can never call.
+
+import type { DecibelExtension } from '../runtime/extensions.js';
+import { RUNTIME_PROTOCOL_VERSION } from '../runtime/protocol.js';
+
+export const extension: DecibelExtension = {
+  manifest: {
+    name: 'terminal',
+    version: '1.0.0',
+    protocolVersion: RUNTIME_PROTOCOL_VERSION,
+    tier: 'apps',
+  },
+  facades: [
+    {
+      name: 'terminal',
+      description: 'DX Terminal Pro vault management: market data, portfolio, competitor intelligence, strategy writing. Read actions use REST (no auth); write actions use cast (requires wallet). get_strategies works on ANY vault (public on-chain) — use to scout competitors. Always get_strategies before add_strategy to check slot count (max 8). disable_strategy expired ones before adding new. Writes are on-chain transactions on Base L2. Actions: get_tokens, get_portfolio, get_strategies, get_leaderboard, get_swaps, get_inference_logs, get_holders, get_candles, get_pnl_history, get_vault_settings, get_deposits_withdrawals, add_strategy, disable_strategy, update_settings, deposit_eth, withdraw_eth',
+      compactDescription: 'DX Terminal Pro vault + strategies',
+      microEligible: false,
+      tier: 'apps',
+      actions: {
+        get_tokens: 'terminal_get_tokens',
+        get_portfolio: 'terminal_get_portfolio',
+        get_strategies: 'terminal_get_strategies',
+        get_leaderboard: 'terminal_get_leaderboard',
+        get_swaps: 'terminal_get_swaps',
+        get_inference_logs: 'terminal_get_inference_logs',
+        get_holders: 'terminal_get_holders',
+        get_candles: 'terminal_get_candles',
+        get_pnl_history: 'terminal_get_pnl_history',
+        get_vault_settings: 'terminal_get_vault_settings',
+        get_deposits_withdrawals: 'terminal_get_deposits_withdrawals',
+        add_strategy: 'terminal_add_strategy',
+        disable_strategy: 'terminal_disable_strategy',
+        update_settings: 'terminal_update_settings',
+        deposit_eth: 'terminal_deposit_eth',
+        withdraw_eth: 'terminal_withdraw_eth',
+      },
+    },
+  ],
+  tools: terminalTools,
+};

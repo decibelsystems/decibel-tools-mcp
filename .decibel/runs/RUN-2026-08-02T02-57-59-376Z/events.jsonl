@@ -1,0 +1,28 @@
+{"ts":"2026-08-02T02:57:59.377Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-08-02T02:53:13Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:53:19Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Read","source":"hook_import"}}
+{"ts":"2026-08-02T02:53:20Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Read","source":"hook_import"}}
+{"ts":"2026-08-02T02:53:41Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:53:44Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:53:52Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Write","source":"hook_import"}}
+{"ts":"2026-08-02T02:54:01Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:54:12Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Write","source":"hook_import"}}
+{"ts":"2026-08-02T02:54:18Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:54:22Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:54:27Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Write","source":"hook_import"}}
+{"ts":"2026-08-02T02:54:34Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:54:45Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:54:58Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:55:26Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:55:38Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:55:44Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:56:00Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:56:07Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:56:11Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Write","source":"hook_import"}}
+{"ts":"2026-08-02T02:56:18Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:56:27Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:57:07Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:57:22Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:57:29Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-02T02:57:41Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-08-02T02:57:59.739Z","run_id":"RUN-2026-08-02T02-57-59-376Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"sentinel_create_issue","result":"success","summary":"Created issue ISS-0117: guardian scan_deps counts devDependency advisories, so the pre-push gate blocks on vulns that never ship"}}

@@ -3,7 +3,8 @@
 // ============================================================================
 
 export type { FacadeSpec, DetailTier, McpToolDefinition } from './types.js';
-export { coreFacades, proFacades, appFacades, allFacadeDefinitions } from './definitions.js';
+export { coreFacades, proFacades, allFacadeDefinitions } from './definitions.js';
+export type { DecibelExtension, DecibelExtensionManifest } from '../runtime/extensions.js';
 
 import type { FacadeSpec, DetailTier, McpToolDefinition } from './types.js';
 import type { ToolSpec } from '../tools/types.js';

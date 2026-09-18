@@ -1,9 +1,11 @@
 ---
+uid: 019e59ea-36c4-7adf-a116-112db36115a4
+id: 2026-05-24T12-16-22Z-store-abstraction-interface-fsstore-supabasestore-
 projectId: decibel-tools-mcp
 severity: high
 status: open
-created_at: 2026-05-24T12:16:22.212Z
 epic_id: EPIC-0033
+created_at: 2026-05-24T12:16:22.212Z
 ---
 
 # Store abstraction interface (FsStore | SupabaseStore) for project-intel domains

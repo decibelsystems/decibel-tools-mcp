@@ -17,7 +17,7 @@ import type { FacadeSpec } from './types.js';
 export const coreFacades: FacadeSpec[] = [
   {
     name: 'sentinel',
-    description: 'Work tracking: epics, issues, test specs, code scanning. Use this instead of creating markdown files for task tracking. Always read_issue before update_issue. Pass project_id when filing cross-repo issues. For large features use log_epic first, then create_issue for sub-tasks. Actions: create_issue, read_issue, update_issue, close_issue, list_issues, log_epic, list_epics, read_epic, resolve_epic, list_epic_issues, create_test_spec, list_test_specs, compile_tests, audit_policies, scan, scan_data, scan_codebase, scan_config, scan_coverage, auto_link, link_commit, list_linked_commits',
+    description: 'Work tracking: epics, issues, test specs, code scanning. Use this instead of creating markdown files for task tracking. Always read_issue before update_issue. Pass project_id when filing cross-repo issues. For large features use log_epic first, then create_issue for sub-tasks. Actions: create_issue, read_issue, update_issue, close_issue, list_issues, log_epic, list_epics, read_epic, update_epic, resolve_epic, list_epic_issues, create_test_spec, list_test_specs, compile_tests, audit_policies, scan, scan_data, scan_codebase, scan_config, scan_coverage, auto_link, link_commit, list_linked_commits',
     compactDescription: 'Track epics, issues, test specs, and scan code',
     microEligible: true,
     tier: 'core',
@@ -30,6 +30,7 @@ export const coreFacades: FacadeSpec[] = [
       log_epic: 'sentinel_log_epic',
       list_epics: 'sentinel_list_epics',
       read_epic: 'sentinel_read_epic',
+      update_epic: 'sentinel_update_epic',
       resolve_epic: 'sentinel_resolve_epic',
       list_epic_issues: 'sentinel_list_epic_issues',
       create_test_spec: 'sentinel_createTestSpec',
@@ -432,7 +433,34 @@ export const coreFacades: FacadeSpec[] = [
       shelve: 'concepts_shelve',
     },
   },
-
+  {
+    name: 'decibel',
+    description: 'Decibel Systems — public discovery and capabilities. Learn what Decibel builds, see live case studies, explore service offerings, or start a design sprint. about returns company overview and philosophy. capabilities lists MCP servers, AI design sprints, and agent infrastructure offerings. case_studies shows live production projects with links. start_sprint submits your product info to begin a discovery engagement. Actions: about, capabilities, case_studies, start_sprint',
+    compactDescription: 'Decibel Systems discovery and services',
+    microEligible: true,
+    tier: 'core',
+    actions: {
+      about: 'decibel_about',
+      capabilities: 'decibel_capabilities',
+      case_studies: 'decibel_case_studies',
+      start_sprint: 'decibel_start_sprint',
+    },
+  },
+  {
+    name: 'conductor',
+    description: 'Sovereign, observable orchestrator. run a request end-to-end (classify → egress gate → route → verify) returning an answer + auditable trace_id; dryrun previews routing and what would egress WITHOUT executing; trace shows the full routing ledger for a request; cost summarises steps/egress/cost over a window; egress and routing view the deterministic policies (view-only). Proprietary/personal tasks never leave local hardware. Actions: run, dryrun, trace, cost, egress, routing',
+    compactDescription: 'Orchestrate requests with egress-gated, audited routing',
+    microEligible: false,
+    tier: 'core',
+    actions: {
+      run: 'conductor_run',
+      dryrun: 'conductor_dryrun',
+      trace: 'conductor_trace',
+      cost: 'conductor_cost',
+      egress: 'conductor_egress',
+      routing: 'conductor_routing',
+    },
+  },
 ];
 
 // ============================================================================
@@ -452,6 +480,23 @@ export const proFacades: FacadeSpec[] = [
       inbox_process: 'voice_inbox_process',
       inbox_sync: 'voice_inbox_sync',
       command: 'voice_command',
+    },
+  },
+
+  {
+    name: 'postoffice',
+    description: "Agent-to-agent messaging through AgentHQ (EPIC-0037). Open a thread, send into it, read your mail, ack what you have acted on, and hand work over. Reading does NOT ack — they are separate on purpose, so a reader that dies before acting re-reads rather than silently losing the message. Do not poll messages_read with status='sent'. Actions: agents_list, threads_open, messages_send, messages_read, messages_ack, handoff_request, handoff_respond",
+    compactDescription: 'Agent-to-agent messaging via AgentHQ',
+    microEligible: false,
+    tier: 'pro',
+    actions: {
+      agents_list: 'postoffice_agents_list',
+      threads_open: 'postoffice_threads_open',
+      messages_send: 'postoffice_messages_send',
+      messages_read: 'postoffice_messages_read',
+      messages_ack: 'postoffice_messages_ack',
+      handoff_request: 'postoffice_handoff_request',
+      handoff_respond: 'postoffice_handoff_respond',
     },
   },
 
@@ -513,130 +558,64 @@ export const proFacades: FacadeSpec[] = [
       cancel_job: 'agentic_cancel_job',
     },
   },
+
+  // EPIC-0036. Registered ONLY when DECIBEL_ZOOM=1 — see the spread below.
+  //
+  // localOnly because the credential behind it is account-wide admin scope:
+  // meeting_summary:read:admin reads every meeting in the account, personal as
+  // well as client. ISS-0123 is explicit that tier gating alone is not the
+  // boundary here, since the DECIBEL_PRO bypass (ISS-0101) is still open and
+  // senken.pro serves this repo's /call, /batch and /tools unauthenticated.
+  ...(process.env.DECIBEL_ZOOM === '1' ? [{
+    name: 'zoom',
+    description:
+      "Zoom AI Companion meeting summaries, pulled into Decibel projects as markdown. sync writes them; list is the dry run; routes shows which project claims which meeting; status checks credentials without calling Zoom. Routing is by meeting-topic substring, longest needle first. A meeting matching no rule has its identity recorded in the unrouted bucket and its BODY DELIBERATELY NOT FETCHED — add a zoom.match rule to the project and re-run to claim it. Dedup is on meeting_uuid + start, so re-running is safe. Local/stdio only. Actions: sync, list, routes, status",
+    compactDescription: 'Pull Zoom meeting summaries into projects',
+    microEligible: false,
+    tier: 'pro' as const,
+    localOnly: true,
+    actions: {
+      sync: 'zoom_sync',
+      list: 'zoom_list',
+      routes: 'zoom_routes',
+      status: 'zoom_status',
+    },
+  }] : []),
 ];
 
 // ============================================================================
 // App Facades (Decibel internal — gated by DECIBEL_APPS)
 // ============================================================================
+// Private to the owner: they read a live trading Postgres (senken, mother), a
+// personal Supabase (deck), or hold wallet credentials (terminal). They are not
+// built into the published package at all — see tsconfig.build.json — so for
+// public users these facades do not exist rather than existing-but-refusing.
+//
+// This array is therefore the single source of truth for "private", and every
+// member must be tier:'apps'. It briefly was not: `decibel` and `conductor` sat
+// here while declared tier:'core', and since the kernel loads this array only
+// when DECIBEL_APPS=1, two core facades were unreachable for every public user
+// — including `decibel` itself, whose entire purpose is public discovery.
+// facadeTiers.test.ts now fails if array and tier ever disagree again.
 
-export const appFacades: FacadeSpec[] = [
-  {
-    name: 'senken',
-    description: 'Trade analysis: strategy summaries, giveback reports, grading. Reads from Postgres (requires SENKEN_DATABASE_URL). trade_summary for aggregate stats by strategy; trade_review for individual trade grades (A-F by MFE capture); giveback_report for unrealized profit analysis. apply_override is a WRITE — it modifies live strategy parameters. Actions: trade_summary, giveback_report, trade_review, list_overrides, apply_override',
-    compactDescription: 'Trading strategy analysis (Postgres)',
-    microEligible: false,
-    tier: 'apps',
-    actions: {
-      trade_summary: 'senken_trade_summary',
-      giveback_report: 'senken_giveback_report',
-      trade_review: 'senken_trade_review',
-      list_overrides: 'senken_list_overrides',
-      apply_override: 'senken_apply_override',
-    },
-  },
-
-  {
-    name: 'deck',
-    description: 'MTG card database and Arena gameplay tracking. Card tools: search by name; list for top movers; stores for data summary; history for price trends; format_deals for budget cards; type_search for tribal/archetype; price_bracket for multi-filter queries; set_analysis for set EV; volatility for price stability; reprints for cross-printing arbitrage. Gameplay tools: match_history for recent Arena matches; win_rate for format-level stats; card_performance for best/worst cards by win rate; deck_record for per-deck W/L; player_summary for combined dashboard; draft_stats for draft history and trophy tracking. Actions: search, list, stores, history, format_deals, type_search, price_bracket, set_analysis, volatility, reprints, match_history, win_rate, card_performance, deck_record, player_summary, draft_stats',
-    compactDescription: 'MTG card prices, deals, gameplay stats, and Arena tracking',
-    microEligible: false,
-    tier: 'apps',
-    actions: {
-      search: 'deck_search',
-      list: 'deck_list',
-      stores: 'deck_summary',
-      history: 'deck_history',
-      format_deals: 'deck_format_deals',
-      type_search: 'deck_type_search',
-      price_bracket: 'deck_price_bracket',
-      set_analysis: 'deck_set_analysis',
-      volatility: 'deck_volatility',
-      reprints: 'deck_reprints',
-      match_history: 'deck_match_history',
-      win_rate: 'deck_win_rate',
-      card_performance: 'deck_card_performance',
-      deck_record: 'deck_record',
-      player_summary: 'deck_player_summary',
-      draft_stats: 'deck_draft_stats',
-      intel_write: 'deck_intel_write',
-      intel_reports: 'deck_intel_reports',
-      intel_publish: 'deck_intel_publish',
-    },
-  },
-
-  {
-    name: 'mother',
-    description: 'Mother daemon: advice snapshots, policy patches, and incidents. Reads from Postgres (requires MOTHER_DATABASE_URL). write_advice_snapshot validates verdict + multiplier bounds before inserting. propose_policy_patch auto-computes revert_at from TTL. publish_incident for structured postmortems. get_advice_snapshot reads latest non-expired for symbol×strategy. list_incidents queries by symbol/strategy/type/date range. Actions: write_advice_snapshot, propose_policy_patch, publish_incident, get_advice_snapshot, list_incidents',
-    compactDescription: 'Mother daemon advice and incidents (Postgres)',
-    microEligible: false,
-    tier: 'apps',
-    actions: {
-      write_advice_snapshot: 'mother_write_advice_snapshot',
-      propose_policy_patch: 'mother_propose_policy_patch',
-      publish_incident: 'mother_publish_incident',
-      get_advice_snapshot: 'mother_get_advice_snapshot',
-      list_incidents: 'mother_list_incidents',
-    },
-  },
-
-  {
-    name: 'terminal',
-    description: 'DX Terminal Pro vault management: market data, portfolio, competitor intelligence, strategy writing. Read actions use REST (no auth); write actions use cast (requires wallet). get_strategies works on ANY vault (public on-chain) — use to scout competitors. Always get_strategies before add_strategy to check slot count (max 8). disable_strategy expired ones before adding new. Writes are on-chain transactions on Base L2. Actions: get_tokens, get_portfolio, get_strategies, get_leaderboard, get_swaps, get_inference_logs, get_holders, get_candles, get_pnl_history, get_vault_settings, get_deposits_withdrawals, add_strategy, disable_strategy, update_settings, deposit_eth, withdraw_eth',
-    compactDescription: 'DX Terminal Pro vault + strategies',
-    microEligible: false,
-    tier: 'apps',
-    actions: {
-      get_tokens: 'terminal_get_tokens',
-      get_portfolio: 'terminal_get_portfolio',
-      get_strategies: 'terminal_get_strategies',
-      get_leaderboard: 'terminal_get_leaderboard',
-      get_swaps: 'terminal_get_swaps',
-      get_inference_logs: 'terminal_get_inference_logs',
-      get_holders: 'terminal_get_holders',
-      get_candles: 'terminal_get_candles',
-      get_pnl_history: 'terminal_get_pnl_history',
-      get_vault_settings: 'terminal_get_vault_settings',
-      get_deposits_withdrawals: 'terminal_get_deposits_withdrawals',
-      add_strategy: 'terminal_add_strategy',
-      disable_strategy: 'terminal_disable_strategy',
-      update_settings: 'terminal_update_settings',
-      deposit_eth: 'terminal_deposit_eth',
-      withdraw_eth: 'terminal_withdraw_eth',
-    },
-  },
-
-  {
-    name: 'decibel',
-    description: 'Decibel Systems — public discovery and capabilities. Learn what Decibel builds, see live case studies, explore service offerings, or start a design sprint. about returns company overview and philosophy. capabilities lists MCP servers, AI design sprints, and agent infrastructure offerings. case_studies shows live production projects with links. start_sprint submits your product info to begin a discovery engagement. Actions: about, capabilities, case_studies, start_sprint',
-    compactDescription: 'Decibel Systems discovery and services',
-    microEligible: true,
-    tier: 'core',
-    actions: {
-      about: 'decibel_about',
-      capabilities: 'decibel_capabilities',
-      case_studies: 'decibel_case_studies',
-      start_sprint: 'decibel_start_sprint',
-    },
-  },
-  {
-    name: 'conductor',
-    description: 'Sovereign, observable orchestrator. run a request end-to-end (classify → egress gate → route → verify) returning an answer + auditable trace_id; dryrun previews routing and what would egress WITHOUT executing; trace shows the full routing ledger for a request; cost summarises steps/egress/cost over a window; egress and routing view the deterministic policies (view-only). Proprietary/personal tasks never leave local hardware. Actions: run, dryrun, trace, cost, egress, routing',
-    compactDescription: 'Orchestrate requests with egress-gated, audited routing',
-    microEligible: false,
-    tier: 'core',
-    actions: {
-      run: 'conductor_run',
-      dryrun: 'conductor_dryrun',
-      trace: 'conductor_trace',
-      cost: 'conductor_cost',
-      egress: 'conductor_egress',
-      routing: 'conductor_routing',
-    },
-  },
-];
+// ============================================================================
+// App Facades — MOVED (EPIC-0038 Phase 7)
+// ============================================================================
+// senken, deck, mother and terminal used to be declared here. They now live
+// beside their implementations in src/tools/<name>.ts, exported as a
+// DecibelExtension and loaded at boot from the absolute-path allowlist in
+// ~/.decibel/config.yaml. See src/runtime/extensions.ts.
+//
+// The move is the point: those four modules were already excluded from the
+// published build, but their facade specs were not — so a public install
+// carried a paragraph describing a live trading Postgres and a wallet-credential
+// tool it had no way to reach. Registration, not description, is the boundary.
 
 // ============================================================================
 // All Facades
 // ============================================================================
 
-export const allFacadeDefinitions: FacadeSpec[] = [...coreFacades, ...proFacades, ...appFacades];
+// Extension facades are deliberately absent: they are machine-dependent, so a
+// static "all facades" list cannot include them. Callers that need the live set
+// must ask the kernel.
+export const allFacadeDefinitions: FacadeSpec[] = [...coreFacades, ...proFacades];

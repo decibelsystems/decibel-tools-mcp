@@ -1,4 +1,5 @@
 ---
+uid: 019c607a-63b6-727d-a127-12acd72a62b0
 id: ISS-0093
 projectId: decibel-tools-mcp
 severity: med

@@ -9,6 +9,7 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport as McpStdioTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { envelopeFailed } from '../lib/envelope.js';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DAEMON_PROBE_TIMEOUT_MS = 3_000;
@@ -177,15 +178,23 @@ export class HttpTransport implements ClientTransport {
 
       const data = await res.json() as Record<string, unknown>;
 
-      if (data.status === 'error') {
+      // `ok` is the authoritative marker — no tool payload can overwrite it.
+      // Fall back to the old negative test when talking to a runtime that
+      // predates it; `status === 'executed'` was never a usable success test
+      // because domain payloads overwrite it.
+      if (envelopeFailed(data)) {
         throw Object.assign(
           new Error((data.error as string) || 'Daemon returned error'),
           { isCallError: true, code: data.code, raw: JSON.stringify(data) }
         );
       }
 
-      // Strip status envelope, return the payload
-      const { status: _status, ...result } = data;
+      // Strip the envelope, keep the payload. `status` needs care: this used to
+      // drop it unconditionally, which silently deleted the domain value from
+      // every record that has one — a `read_issue` over HTTP came back with no
+      // `status` field at all. Only the literal envelope marker is envelope.
+      const { ok: _ok, ...result } = data;
+      if (result.status === 'executed') delete result.status;
       return result;
     } finally {
       clearTimeout(timeout);

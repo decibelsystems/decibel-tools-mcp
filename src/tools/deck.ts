@@ -1901,3 +1901,55 @@ export const deckTools: ToolSpec[] = [
   deckIntelReports,
   deckIntelPublish,
 ];
+
+// ============================================================================
+// Extension manifest (EPIC-0038 Phase 7)
+// ============================================================================
+// This module is excluded from the published build (tsconfig.build.json) and
+// is loaded only when its absolute path appears in `extensions.allow` in
+// ~/.decibel/config.yaml. The facade spec lives here rather than in
+// facades/definitions.ts so the public package does not carry a description of
+// a private tool it can never call.
+
+import type { DecibelExtension } from '../runtime/extensions.js';
+import { RUNTIME_PROTOCOL_VERSION } from '../runtime/protocol.js';
+
+export const extension: DecibelExtension = {
+  manifest: {
+    name: 'deck',
+    version: '1.0.0',
+    protocolVersion: RUNTIME_PROTOCOL_VERSION,
+    tier: 'apps',
+  },
+  facades: [
+    {
+      name: 'deck',
+      description: 'MTG card database and Arena gameplay tracking. Card tools: search by name; list for top movers; stores for data summary; history for price trends; format_deals for budget cards; type_search for tribal/archetype; price_bracket for multi-filter queries; set_analysis for set EV; volatility for price stability; reprints for cross-printing arbitrage. Gameplay tools: match_history for recent Arena matches; win_rate for format-level stats; card_performance for best/worst cards by win rate; deck_record for per-deck W/L; player_summary for combined dashboard; draft_stats for draft history and trophy tracking. Actions: search, list, stores, history, format_deals, type_search, price_bracket, set_analysis, volatility, reprints, match_history, win_rate, card_performance, deck_record, player_summary, draft_stats',
+      compactDescription: 'MTG card prices, deals, gameplay stats, and Arena tracking',
+      microEligible: false,
+      tier: 'apps',
+      actions: {
+        search: 'deck_search',
+        list: 'deck_list',
+        stores: 'deck_summary',
+        history: 'deck_history',
+        format_deals: 'deck_format_deals',
+        type_search: 'deck_type_search',
+        price_bracket: 'deck_price_bracket',
+        set_analysis: 'deck_set_analysis',
+        volatility: 'deck_volatility',
+        reprints: 'deck_reprints',
+        match_history: 'deck_match_history',
+        win_rate: 'deck_win_rate',
+        card_performance: 'deck_card_performance',
+        deck_record: 'deck_record',
+        player_summary: 'deck_player_summary',
+        draft_stats: 'deck_draft_stats',
+        intel_write: 'deck_intel_write',
+        intel_reports: 'deck_intel_reports',
+        intel_publish: 'deck_intel_publish',
+      },
+    },
+  ],
+  tools: deckTools,
+};

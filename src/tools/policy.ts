@@ -15,6 +15,7 @@ import { log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
 import { emitCreateProvenance } from './provenance.js';
+import { listDirOrThrow, isStoreUnreadable, countedStoreMeta, type StoreMetaFields } from './shared/storeRead.js';
 
 // ============================================================================
 // Types
@@ -75,7 +76,7 @@ export interface PolicySummary {
   tags: string[];
 }
 
-export interface ListPoliciesOutput {
+export interface ListPoliciesOutput extends StoreMetaFields {
   policies: PolicySummary[];
   total: number;
 }
@@ -140,7 +141,7 @@ function slugify(text: string): string {
 
 async function getNextPolicyId(policiesDir: string): Promise<string> {
   try {
-    const files = await fs.readdir(policiesDir);
+    const files = await listDirOrThrow(policiesDir);
     const ids = files
       .filter(f => f.startsWith('POL-') && f.endsWith('.yaml'))
       .map(f => {
@@ -150,7 +151,10 @@ async function getNextPolicyId(policiesDir: string): Promise<string> {
       .filter(n => !isNaN(n));
     const maxId = ids.length > 0 ? Math.max(...ids) : 0;
     return `POL-${String(maxId + 1).padStart(4, '0')}`;
-  } catch {
+  } catch (err) {
+    // An unopenable directory is not an empty one: allocating POL-0001 into a
+    // store that already holds policies would collide silently.
+    if (isStoreUnreadable(err)) throw err;
     return 'POL-0001';
   }
 }
@@ -294,15 +298,20 @@ export async function listPolicies(
 
   const policiesDir = resolved.subPath('architect', 'policies');
   const policies: PolicySummary[] = [];
+  // A policy that did not parse is a rule the caller is about to be told does
+  // not exist.
+  let parsed = 0;
+  let unreadable = 0;
 
   try {
-    const files = await fs.readdir(policiesDir);
+    const files = await listDirOrThrow(policiesDir);
     for (const file of files) {
       if (!file.endsWith('.yaml')) continue;
 
       const filePath = path.join(policiesDir, file);
       const policy = await parsePolicyFile(filePath);
-      if (!policy) continue;
+      if (!policy) { unreadable++; continue; }
+      parsed++;
 
       // Apply filters
       if (input.severity && policy.severity !== input.severity) continue;
@@ -320,7 +329,8 @@ export async function listPolicies(
         tags: policy.tags,
       });
     }
-  } catch {
+  } catch (err) {
+    if (isStoreUnreadable(err)) throw err;
     // Directory doesn't exist yet - return empty
   }
 
@@ -330,6 +340,7 @@ export async function listPolicies(
   return {
     policies,
     total: policies.length,
+    ...countedStoreMeta(parsed, unreadable),
   };
 }
 
@@ -349,7 +360,7 @@ export async function getPolicy(
   const policiesDir = resolved.subPath('architect', 'policies');
 
   try {
-    const files = await fs.readdir(policiesDir);
+    const files = await listDirOrThrow(policiesDir);
     const policyFile = files.find(f => f.startsWith(input.policy_id));
 
     if (!policyFile) {
@@ -373,7 +384,8 @@ export async function getPolicy(
       policy,
       path: filePath,
     };
-  } catch {
+  } catch (err) {
+    if (isStoreUnreadable(err)) throw err;
     return {
       policy: null,
       error: `Policy not found: ${input.policy_id}`,
@@ -404,14 +416,15 @@ export async function compileOversight(
   const profilesResolved: string[] = ['local'];
 
   try {
-    const files = await fs.readdir(policiesDir);
+    const files = await listDirOrThrow(policiesDir);
     for (const file of files) {
       if (!file.endsWith('.yaml')) continue;
       const filePath = path.join(policiesDir, file);
       const policy = await parsePolicyFile(filePath);
       if (policy) policies.push(policy);
     }
-  } catch {
+  } catch (err) {
+    if (isStoreUnreadable(err)) throw err;
     // No policies yet
   }
 

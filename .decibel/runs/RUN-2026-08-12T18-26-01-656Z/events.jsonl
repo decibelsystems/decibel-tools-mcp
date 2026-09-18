@@ -1,0 +1,24 @@
+{"ts":"2026-08-12T18:26:01.657Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"prompt_received","payload":{"prompt":"[Auto-tracked session via MCP tool calls]"}}
+{"ts":"2026-08-12T18:22:32Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Write","source":"hook_import"}}
+{"ts":"2026-08-12T18:22:52Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Write","source":"hook_import"}}
+{"ts":"2026-08-12T18:23:02Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-08-12T18:23:12Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-08-12T18:23:16Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-08-12T18:23:25Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-08-12T18:23:28Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-08-12T18:23:36Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-08-12T18:23:45Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-12T18:24:17Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Write","source":"hook_import"}}
+{"ts":"2026-08-12T18:24:29Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-12T18:24:33Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-12T18:24:43Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-12T18:24:54Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-12T18:25:02Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-08-12T18:25:09Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-08-12T18:25:19Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-08-12T18:25:32Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-12T18:25:41Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-12T18:25:48Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"Bash","source":"hook_import"}}
+{"ts":"2026-08-12T18:25:56Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"file_touched","payload":{"tool":"Edit","source":"hook_import"}}
+{"ts":"2026-08-12T18:26:02.015Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"sentinel_create_issue","result":"success","summary":"Created issue ISS-0120: README documented the wrong global MCP config path for Claude Code"}}
+{"ts":"2026-08-12T18:26:47.076Z","run_id":"RUN-2026-08-12T18-26-01-656Z","agent":{"type":"claude-code","version":"auto-tracked"},"type":"command_ran","payload":{"tool":"sentinel_close_issue","result":"success","summary":"Closed issue ISS-0120: closed"}}

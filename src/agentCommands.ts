@@ -30,12 +30,16 @@
 //   - poll every 5s (robust; realtime is HQ's status view, not our pickup path).
 // ============================================================================
 
-import os from 'os';
 import { createClient } from '@supabase/supabase-js';
 import { log } from './config.js';
+import { withRetryResult } from './supabaseRetry.js';
+import { enqueueCommand } from './agentInbox.js';
+import { resolveHost } from './agentPresence.js';
 
 const BROKER_URL = `http://127.0.0.1:${process.env.CLAUDE_PEERS_PORT ?? '7899'}`;
-const ORG_ID = process.env.DECIBEL_ORG_ID || '1cb79e24-e06f-46c9-8a22-5ee025ffb0f4';
+// Exported so the HTTP inbox endpoints (httpServer.ts) org-scope drainCommands to
+// the same org this daemon serves — keeps the org-id-first invariant on the read path.
+export const ORG_ID = process.env.DECIBEL_ORG_ID || '1cb79e24-e06f-46c9-8a22-5ee025ffb0f4';
 const POLL_MS = 5_000;
 const ALLOWED_KINDS = new Set(['message', 'request_status']);
 // Ben-scoped staged rollout: the FIRST run dispatches request_status ONLY so he can
@@ -124,7 +128,12 @@ async function settle(client: DbClient, id: string, patch: Record<string, unknow
   if (error) log(`Commands: settle ${id} failed: ${error.message}`);
 }
 
-async function dispatchOne(client: DbClient, cmd: CommandRow, peers: BrokerPeer[]): Promise<void> {
+async function dispatchOne(
+  client: DbClient,
+  cmd: CommandRow,
+  peers: BrokerPeer[],
+  sdkSessions: Set<string>,
+): Promise<void> {
   // Defensive expiry + kind allowlist (DB also enforces, belt-and-suspenders).
   if (cmd.expires_at && Date.parse(cmd.expires_at) < Date.now()) return;
   if (!ALLOWED_KINDS.has(cmd.kind)) {
@@ -137,19 +146,42 @@ async function dispatchOne(client: DbClient, cmd: CommandRow, peers: BrokerPeer[
   // messages are enabled before it expires.
   if (cmd.kind === 'message' && !MESSAGES_ENABLED) return;
 
-  // Mark delivered (picked up by this daemon).
+  const peer = peers.find((p) => p.id === cmd.target_session_key);
+  const isSdkSession = !peer && sdkSessions.has(cmd.target_session_key);
+
+  // Target not (yet) resolvable as either a broker peer OR a known SDK session.
+  // DON'T permanently fail it — a session that registers in the split-second after
+  // the command was issued would otherwise be lost on the first tick. Leave it
+  // 'pending' so the next tick re-checks; the DB expiry sweep terminates it (→
+  // 'expired') if the target never appears. (Race fix found via SDK e2e 2026-06-15.)
+  if (!peer && !isSdkSession) {
+    return; // leave pending; retried next tick, expires if truly absent
+  }
+
+  // SDK-runtime target (registered via /agents/register, NOT a claude-peers peer):
+  // it has no broker transport, so we don't resolve/deliver here. Enqueue it for the
+  // SDK to poll + ack (which settles the Core row). Mark 'delivered' so HQ sees
+  // pickup; the SDK ack flips it to done/failed. (request_status is treated the same
+  // way for SDK sessions — the SDK answers it via onCommand and acks with a result.)
+  if (isSdkSession) {
+    await settle(client, cmd.id, { status: 'delivered', delivered_at: new Date().toISOString() });
+    enqueueCommand(cmd.target_session_key, {
+      id: cmd.id,
+      org_id: cmd.org_id,
+      kind: cmd.kind,
+      payload: (cmd.payload as Record<string, unknown>) ?? {},
+      enqueued_at: Date.now(),
+    });
+    return;
+  }
+
+  // From here, peer is a live broker session. Mark delivered (picked up).
   await settle(client, cmd.id, { status: 'delivered', delivered_at: new Date().toISOString() });
 
-  const peer = peers.find((p) => p.id === cmd.target_session_key);
-
   if (cmd.kind === 'request_status') {
-    if (!peer) {
-      await settle(client, cmd.id, { status: 'failed', error: 'target session not found in live registry' });
-      return;
-    }
     await settle(client, cmd.id, {
       status: 'done',
-      result: { summary: peer.summary || null, cwd: peer.cwd || null, last_seen: peer.last_seen, status: 'active' },
+      result: { summary: peer!.summary || null, cwd: peer!.cwd || null, last_seen: peer!.last_seen, status: 'active' },
     });
     return;
   }
@@ -158,10 +190,6 @@ async function dispatchOne(client: DbClient, cmd: CommandRow, peers: BrokerPeer[
   const text = cmd.payload?.text;
   if (!text) {
     await settle(client, cmd.id, { status: 'failed', error: 'message payload missing text' });
-    return;
-  }
-  if (!peer) {
-    await settle(client, cmd.id, { status: 'failed', error: 'target session not found in live registry' });
     return;
   }
   const label = cmd.payload?.from_label ? `${cmd.payload.from_label}: ` : '';
@@ -174,7 +202,7 @@ async function dispatchOne(client: DbClient, cmd: CommandRow, peers: BrokerPeer[
 }
 
 async function tick(client: DbClient): Promise<void> {
-  const host = os.hostname();
+  const host = resolveHost();
 
   // DB-side sweep: flip pending->expired where past expiry (idempotent, service_role).
   try {
@@ -182,13 +210,17 @@ async function tick(client: DbClient): Promise<void> {
   } catch { /* RPC optional/non-fatal */ }
 
   // Pending commands for OUR org (primary cross-org filter — see invariant above),
-  // targeted at sessions THIS daemon hosts.
-  const { data, error } = await client
-    .from('agent_commands')
-    .select('id,org_id,target_session_key,target_host,kind,payload,expires_at,status')
-    .eq('org_id', ORG_ID)
-    .eq('status', 'pending')
-    .eq('target_host', host);
+  // targeted at sessions THIS daemon hosts. withRetryResult smooths transient
+  // "fetch failed" blips (issue 2026-06-13) before giving up for this tick.
+  const { data, error } = await withRetryResult(
+    () => client
+      .from('agent_commands')
+      .select('id,org_id,target_session_key,target_host,kind,payload,expires_at,status')
+      .eq('org_id', ORG_ID)
+      .eq('status', 'pending')
+      .eq('target_host', host),
+    'commands.poll',
+  );
   if (error) {
     log(`Commands: poll failed: ${error.message}`);
     return;
@@ -196,15 +228,65 @@ async function tick(client: DbClient): Promise<void> {
   const pending = (data ?? []) as CommandRow[];
   if (pending.length === 0) return;
 
+  // SDK runtimes hosting on this box (live, non-claude-code sessions): commands
+  // targeting these route to the in-daemon inbox for the SDK to poll+ack, instead
+  // of failing as "not found in live registry". org-id-first + host-match preserved.
+  const sdkSessions = await loadSdkSessions(client, host);
+
   const peers = await brokerListPeers();
   for (const cmd of pending) {
     try {
-      await dispatchOne(client, cmd, peers);
+      await dispatchOne(client, cmd, peers, sdkSessions);
     } catch (e) {
       log(`Commands: dispatch ${cmd.id} error: ${e instanceof Error ? e.message : String(e)}`);
       await settle(client, cmd.id, { status: 'failed', error: 'dispatch exception' }).catch(() => {});
     }
   }
+}
+
+/**
+ * Live SDK-runtime session_keys this daemon hosts (org + host scoped, runtime not
+ * claude-code, status active). These receive commands via the inbox, not the broker.
+ */
+async function loadSdkSessions(client: DbClient, host: string): Promise<Set<string>> {
+  const { data, error } = await withRetryResult(
+    () => client
+      .from('agent_sessions')
+      .select('session_key,runtime,status')
+      .eq('org_id', ORG_ID)
+      .eq('host', host)
+      .eq('status', 'active')
+      .neq('runtime', 'claude-code'),
+    'commands.sdkSessions',
+  );
+  const set = new Set<string>();
+  if (error) log(`Commands: loadSdkSessions query error: ${error.message}`);
+  if (!error && data) {
+    for (const r of data as Array<{ session_key: string }>) set.add(r.session_key);
+  }
+  return set;
+}
+
+/**
+ * Settle a command from an SDK ack (POST /agents/commands/ack). The SDK ran
+ * onCommand and reports done|failed (+ optional result/error). We write it back to
+ * Core via service_role, org-scoped. Returns false if Supabase is unconfigured.
+ * Only 'done'|'failed' are accepted from an ack (the SDK can't set other states).
+ */
+export async function settleCommandFromAck(
+  id: string,
+  status: 'done' | 'failed',
+  result?: Record<string, unknown> | null,
+  error?: string | null,
+): Promise<boolean> {
+  const client = serviceClient();
+  if (!client) return false;
+  if (status !== 'done' && status !== 'failed') return false;
+  const patch: Record<string, unknown> = { status };
+  if (result !== undefined && result !== null) patch.result = result;
+  if (error !== undefined && error !== null) patch.error = error;
+  await settle(client, id, patch);
+  return true;
 }
 
 /** Start the command dispatcher loop. Returns a stop function. No-ops if Supabase unconfigured. */
@@ -214,7 +296,7 @@ export function startCommandDispatcher(): () => void {
     log('Commands: SUPABASE_URL/SERVICE_KEY not set — agent-command dispatcher disabled.');
     return () => {};
   }
-  log(`Commands: dispatcher started (5s poll of hq.agent_commands, host ${os.hostname()}, org ${ORG_ID}).`);
+  log(`Commands: dispatcher started (5s poll of hq.agent_commands, host ${resolveHost()}, org ${ORG_ID}).`);
   const run = () => {
     tick(client).catch((e) => log(`Commands: tick error: ${e instanceof Error ? e.message : String(e)}`));
   };

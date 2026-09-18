@@ -8,6 +8,9 @@
     <key>ProgramArguments</key>
     <array>
         <string>{{NODE_PATH}}</string>
+        <!-- launchd does not inherit the login shell, so anything the daemon
+             needs from the environment (SUPABASE_*, etc.) comes from here. -->
+        <string>--env-file-if-exists={{ENV_FILE}}</string>
         <string>{{SERVER_PATH}}</string>
         <string>--daemon</string>
         <string>--port</string>
@@ -38,7 +41,9 @@
     <dict>
         <key>NODE_ENV</key>
         <string>production</string>
-    </dict>
+        <key>HOME</key>
+        <string>{{HOME}}</string>
+{{TIER_ENV}}    </dict>
 
     <!-- Working directory -->
     <key>WorkingDirectory</key>

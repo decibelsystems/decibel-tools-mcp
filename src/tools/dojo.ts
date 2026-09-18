@@ -26,6 +26,7 @@ import { getDefaultProject, listProjects, ProjectEntry } from '../projectRegistr
 import { CallerRole, enforceToolAccess, getSandboxPolicy, expandSandboxPaths, isExecAllowed } from './dojoPolicy.js';
 import { emitCreateProvenance } from './provenance.js';
 import { checkRateLimit, recordRequestStart, recordRequestEnd } from './rateLimiter.js';
+import { listDirOrThrow, countedStoreMeta, type StoreMetaFields } from './shared/storeRead.js';
 
 // ============================================================================
 // Types
@@ -106,7 +107,7 @@ export interface WishSummary {
   resolved_by?: string;
 }
 
-export interface ListDojoOutput {
+export interface ListDojoOutput extends StoreMetaFields {
   proposals: ProposalSummary[];
   experiments: ExperimentSummary[];
   wishes: WishSummary[];
@@ -189,7 +190,7 @@ export interface ListWishesInput extends DojoBaseInput {
   unresolved_only?: boolean;
 }
 
-export interface ListWishesOutput {
+export interface ListWishesOutput extends StoreMetaFields {
   wishes: WishSummary[];
   total: number;
   unresolved: number;
@@ -229,7 +230,7 @@ async function getNextSequentialId(
   extension: string = '.yaml'
 ): Promise<string> {
   try {
-    const files = await fs.readdir(dir);
+    const files = await listDirOrThrow(dir);
     const pattern = new RegExp(`^${prefix}-(\\d+)${extension.replace('.', '\\.')}$`);
     const ids = files
       .map(f => {
@@ -239,7 +240,9 @@ async function getNextSequentialId(
       .filter(n => !isNaN(n));
     const maxId = ids.length > 0 ? Math.max(...ids) : 0;
     return `${prefix}-${String(maxId + 1).padStart(4, '0')}`;
-  } catch {
+  } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
     return `${prefix}-0001`;
   }
 }
@@ -604,12 +607,16 @@ export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | D
     const experiments: ExperimentSummary[] = [];
     const wishes: WishSummary[] = [];
     let enabledCount = 0;
+    // One counter across all three stores: this answer is a single view of the
+    // dojo, so "some of what you are looking at is missing" is one fact about
+    // it, not three.
+    let unreadable = 0;
 
     // Read proposals
     if (filter === 'all' || filter === 'proposals') {
       const proposalDir = path.join(ctx.dojoRoot, 'proposals');
       try {
-        const files = await fs.readdir(proposalDir);
+        const files = await listDirOrThrow(proposalDir);
         for (const file of files) {
           if (!file.endsWith('.yaml')) continue;
           try {
@@ -622,10 +629,12 @@ export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | D
               state: data.state || 'draft',
             });
           } catch {
-            // Skip malformed files
+            unreadable++;
           }
         }
-      } catch {
+      } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
         // Directory doesn't exist
       }
     }
@@ -634,7 +643,7 @@ export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | D
     if (filter === 'all' || filter === 'experiments') {
       const experimentsDir = path.join(ctx.dojoRoot, 'experiments');
       try {
-        const dirs = await fs.readdir(experimentsDir);
+        const dirs = await listDirOrThrow(experimentsDir);
         for (const dir of dirs) {
           const manifestPath = path.join(experimentsDir, dir, 'manifest.yaml');
           try {
@@ -650,10 +659,15 @@ export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | D
               enabled: isEnabled,
             });
           } catch {
-            // Skip directories without manifest
+            // A directory with no manifest at all and one whose manifest is
+            // corrupt are both counted: from here they are the same fact —
+            // an experiment on disk that is not in this list.
+            unreadable++;
           }
         }
-      } catch {
+      } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
         // Directory doesn't exist
       }
     }
@@ -662,7 +676,7 @@ export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | D
     if (filter === 'all' || filter === 'wishes') {
       const wishDir = path.join(ctx.dojoRoot, 'wishes');
       try {
-        const files = await fs.readdir(wishDir);
+        const files = await listDirOrThrow(wishDir);
         for (const file of files) {
           if (!file.endsWith('.yaml')) continue;
           try {
@@ -675,10 +689,12 @@ export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | D
               resolved_by: data.resolved_by,
             });
           } catch {
-            // Skip malformed files
+            unreadable++;
           }
         }
-      } catch {
+      } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
         // Directory doesn't exist
       }
     }
@@ -693,6 +709,7 @@ export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | D
         total_wishes: wishes.length,
         enabled_count: enabledCount,
       },
+      ...countedStoreMeta(proposals.length + experiments.length + wishes.length, unreadable),
     };
   } finally {
     finishDojoRequest(callerRole);
@@ -836,9 +853,11 @@ export async function runExperiment(
     // Scan results directory for artifacts
     let artifacts: string[] = [];
     try {
-      const files = await fs.readdir(resultsDir);
+      const files = await listDirOrThrow(resultsDir);
       artifacts = files.filter(f => !f.startsWith('.'));
-    } catch {
+    } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
       log(`dojo: Could not read results dir: ${resultsDir}`);
     }
 
@@ -882,7 +901,7 @@ export async function getExperimentResults(
     if (!runId) {
       // Find the latest run by listing directories and sorting
       try {
-        const runs = await fs.readdir(experimentResultsDir);
+        const runs = await listDirOrThrow(experimentResultsDir);
         const sortedRuns = runs.filter(r => !r.startsWith('.')).sort().reverse();
         if (sortedRuns.length === 0) {
           return {
@@ -892,7 +911,9 @@ export async function getExperimentResults(
           };
         }
         runId = sortedRuns[0];
-      } catch {
+      } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
         return {
           error: `No results found for experiment: ${input.experiment_id}`,
           exitCode: 1,
@@ -932,9 +953,11 @@ export async function getExperimentResults(
     // Scan results directory for artifacts
     let artifacts: string[] = [];
     try {
-      const files = await fs.readdir(resultsDir);
+      const files = await listDirOrThrow(resultsDir);
       artifacts = files.filter(f => !f.startsWith('.'));
-    } catch {
+    } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
       log(`dojo: Could not read results dir: ${resultsDir}`);
     }
 
@@ -1047,9 +1070,10 @@ export async function listWishes(input: ListWishesInput): Promise<ListWishesOutp
     const wishDir = path.join(ctx.dojoRoot, 'wishes');
     const wishes: WishSummary[] = [];
     let unresolvedCount = 0;
+    let unreadable = 0;
 
     try {
-      const files = await fs.readdir(wishDir);
+      const files = await listDirOrThrow(wishDir);
       for (const file of files) {
         if (!file.endsWith('.yaml')) continue;
 
@@ -1072,11 +1096,17 @@ export async function listWishes(input: ListWishesInput): Promise<ListWishesOutp
             resolved_by: data.resolved_by,
           });
         } catch {
-          // Skip malformed files
+          // Logged AND counted. The log line went to the server's stdout, where
+          // the caller who is about to be told there are no wishes cannot see
+          // it — which is the difference between recording a loss and
+          // reporting one.
+          unreadable++;
           log(`dojo: Could not parse wish file: ${wishPath}`);
         }
       }
-    } catch {
+    } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
       // Directory doesn't exist yet - return empty
     }
 
@@ -1084,6 +1114,7 @@ export async function listWishes(input: ListWishesInput): Promise<ListWishesOutp
       wishes,
       total: wishes.length,
       unresolved: unresolvedCount,
+      ...countedStoreMeta(wishes.length, unreadable),
     };
   } finally {
     finishDojoRequest(callerRole);
@@ -1129,7 +1160,7 @@ export async function canGraduate(
     let hasSuccessfulRun = false;
     const resultsDir = path.join(ctx.dojoRoot, 'results', input.experiment_id);
     try {
-      const runs = await fs.readdir(resultsDir);
+      const runs = await listDirOrThrow(resultsDir);
       for (const run of runs) {
         const resultPath = path.join(resultsDir, run, 'result.yaml');
         try {
@@ -1143,7 +1174,9 @@ export async function canGraduate(
           // Skip runs without result files
         }
       }
-    } catch {
+    } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
       // No results directory
     }
 

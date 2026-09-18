@@ -184,7 +184,7 @@ function resolveRole(roleName: string, policy: DojoPolicy): RolePolicy | null {
       return {
         ...parent,
         ...role,
-        allowed_tools: role.allowed_tools.length > 0 ? role.allowed_tools : parent.allowed_tools,
+        allowed_tools: role.allowed_tools?.length ? role.allowed_tools : parent.allowed_tools,
         denied_tools: [...(parent.denied_tools || []), ...(role.denied_tools || [])],
         sandbox: {
           ...parent.sandbox,

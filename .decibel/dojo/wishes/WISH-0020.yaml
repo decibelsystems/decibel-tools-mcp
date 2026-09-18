@@ -1,0 +1,19 @@
+id: WISH-0020
+capability: Source-tiering helper — resolve an AI-search snippet to its primary
+  source automatically
+reason: Chasing primary sources is the researcher's biggest per-claim time cost;
+  automating snippet-to-primary resolution would speed every brief
+inputs:
+  - snippet text
+  - secondary source URL
+outputs: Primary source URL + confidence + tier classification
+  (primary/secondary/aggregator)
+created_at: 2026-08-04T01:29:02.349Z
+status: open
+project_id: decibel-tools-mcp
+integration_point: Standalone tool usable inside a /research skill pipeline
+context:
+  requested_by: researcher-peer-am86
+  via: claude-peers
+  date: 2026-08-03
+  note: skill-wishlist poll

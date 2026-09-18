@@ -1,0 +1,11 @@
+event_id: PROV-20260711T152831-628
+timestamp: 2026-07-11T15:28:31.628Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - friction:log:2026-07-11T15-28-31Z-onboarding-a-new-pro-user-is-clunky-and-manual-ins
+reason_code: initial_creation
+summary: "Logged friction: Onboarding a new pro user is clunky and manual. Installing @decibelsystems/tools creates no config — no postinstall hook, and loadConfig() returns defaults without writing a file. The user must hand-create ~/.decibel/config.yaml and paste the license key. On top of that, provisioning the key itself is manual (insert a row into the Core Supabase licenses table), and the license validation ref was stale/hardcoded. We need a one-click / single-command setup (e.g. `decibel setup <key>` or an interactive init) that provisions the key and writes the config in one step."
+fingerprint_before: null
+fingerprint_after: sha256:5726821320a497f7

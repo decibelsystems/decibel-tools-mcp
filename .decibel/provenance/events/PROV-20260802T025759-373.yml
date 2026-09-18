@@ -1,0 +1,11 @@
+event_id: PROV-20260802T025759-373
+timestamp: 2026-08-02T02:57:59.373Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0117-guardian-scan-deps-counts-devdependency-advisories.md
+reason_code: initial_creation
+summary: "Created issue: guardian scan_deps counts devDependency advisories, so the pre-push gate blocks on vulns that never ship"
+fingerprint_before: null
+fingerprint_after: sha256:8699b7d14153e346

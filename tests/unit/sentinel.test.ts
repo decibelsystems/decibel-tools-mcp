@@ -4,6 +4,7 @@ import path from 'path';
 import { parse as parseYaml } from 'yaml';
 import {
   createIssue,
+  closeIssue,
   listRepoIssues,
   logEpic,
   listEpics,
@@ -490,7 +491,211 @@ describe('Sentinel Tool', () => {
   // both-formats parsing + the richer IssueSummary fields.
   // ──────────────────────────────────────────────────────────────────────────
 
+  describe('closeIssue on bare-YAML records', () => {
+    async function writeBareIssue(ctx: TestContext, name: string, body: string) {
+      const issuesDir = path.join(ctx.rootDir, '.decibel', 'sentinel', 'issues');
+      await fs.mkdir(issuesDir, { recursive: true });
+      const file = path.join(issuesDir, name);
+      await fs.writeFile(file, body, 'utf-8');
+      return file;
+    }
+
+    it('flips status and records closed_at on a bare-YAML record', async () => {
+      // Regression: every frontmatter rewrite in closeIssue was anchored on a
+      // leading `---`, so on bare YAML the status rewrite silently no-opped —
+      // close_issue returned success while the record stayed `open`. Across
+      // the corpus, every resolved-but-unclosed record was a bare-YAML one.
+      const file = await writeBareIssue(
+        ctx,
+        'ISS-0300-bare-record.yml',
+        'id: ISS-0300\ntitle: Bare record\nstatus: open\nseverity: high\n',
+      );
+
+      const result = await closeIssue({
+        issue_id: 'ISS-0300',
+        resolution: 'Fixed by bypassing the governed queue.',
+      });
+      expect('error' in result).toBe(false);
+
+      const parsed = parseYaml(await fs.readFile(file, 'utf-8'));
+      expect(parsed.status).toBe('closed');
+      expect(parsed.closed_at).toBeTruthy();
+      expect(parsed.resolution).toBe('Fixed by bypassing the governed queue.');
+
+      // And the record must still be readable through the list path.
+      const listed = await listRepoIssues({});
+      expect(listed.issues).toHaveLength(1);
+      expect(listed.issues[0].status).toBe('closed');
+      expect(listed.degraded ?? 0).toBe(0);
+      expect(listed.malformed ?? 0).toBe(0);
+    });
+
+    it('writes the resolution as YAML, leaving the record parseable', async () => {
+      // The old writer appended `## Resolution` + prose to bare YAML, which is
+      // not valid YAML — the prose broke the parse and the issue vanished.
+      const file = await writeBareIssue(
+        ctx,
+        'ISS-0301-bare-record.yml',
+        'id: ISS-0301\ntitle: Another bare record\nstatus: open\n',
+      );
+
+      await closeIssue({
+        issue_id: 'ISS-0301',
+        resolution: 'Already fixed per description - cached position data passed to close_position() bypassing the governed queue.',
+      });
+
+      const raw = await fs.readFile(file, 'utf-8');
+      expect(raw).not.toContain('## Resolution');
+      // Parses cleanly — no salvage required.
+      expect(() => parseYaml(raw)).not.toThrow();
+      expect(parseYaml(raw).status).toBe('closed');
+    });
+
+    it('still uses markdown sections for fenced records', async () => {
+      const file = await writeBareIssue(
+        ctx,
+        'ISS-0302-fenced-record.md',
+        '---\nid: ISS-0302\ntitle: Fenced record\nstatus: open\n---\n\n# Fenced record\n',
+      );
+
+      await closeIssue({ issue_id: 'ISS-0302', resolution: 'Done.' });
+
+      const raw = await fs.readFile(file, 'utf-8');
+      expect(raw).toContain('## Resolution');
+      expect(raw).toMatch(/^---\nid: ISS-0302/);
+      const listed = await listRepoIssues({});
+      expect(listed.issues[0].status).toBe('closed');
+    });
+  });
+
   describe('parseIssueFile (via listRepoIssues / getEpicIssues)', () => {
+    it('lists .yml and .yaml issue records, not just .md', async () => {
+      // Regression: every directory scan filtered on `.md`, so `.yml` issue
+      // records were silently omitted from list_issues while read_issue and
+      // update_issue resolved them fine. ~530 records across 15 projects were
+      // invisible, including a live-trading repo where .yml outnumbered .md.
+      const issuesDir = path.join(ctx.rootDir, '.decibel', 'sentinel', 'issues');
+      await fs.mkdir(issuesDir, { recursive: true });
+
+      await fs.writeFile(
+        path.join(issuesDir, 'ISS-0001-md-record.md'),
+        '---\nid: ISS-0001\ntitle: Markdown record\nstatus: open\nseverity: low\n---\n',
+        'utf-8',
+      );
+      await fs.writeFile(
+        path.join(issuesDir, 'ISS-0002-yml-record.yml'),
+        'id: ISS-0002\ntitle: YAML record\nstatus: open\nseverity: high\n',
+        'utf-8',
+      );
+      await fs.writeFile(
+        path.join(issuesDir, 'ISS-0003-yaml-record.yaml'),
+        'id: ISS-0003\ntitle: YAML long-ext record\nstatus: open\nseverity: med\n',
+        'utf-8',
+      );
+
+      const result = await listRepoIssues({});
+      expect(result.issues.map((i) => i.id).sort()).toEqual([
+        'ISS-0001',
+        'ISS-0002',
+        'ISS-0003',
+      ]);
+      expect(result.issues.find((i) => i.id === 'ISS-0002')?.title).toBe('YAML record');
+      expect(result.issues.find((i) => i.id === 'ISS-0003')?.severity).toBe('med');
+    });
+
+    it('salvages bare-YAML records corrupted by an appended markdown section', async () => {
+      // close_issue appends `## Resolution` + prose to bare-YAML records. The
+      // prose is not valid YAML, so the whole record failed to parse and the
+      // issue vanished from list_issues entirely. Salvage the region above the
+      // first markdown heading and flag the record as degraded.
+      const issuesDir = path.join(ctx.rootDir, '.decibel', 'sentinel', 'issues');
+      await fs.mkdir(issuesDir, { recursive: true });
+
+      const corrupted = `id: ISS-0105
+title: Governor timeout on close_position
+status: open
+severity: high
+description: |-
+  Root cause: governed call -> timeout
+
+## Resolution
+
+Already fixed per description - cached position data passed to close_position() bypassing the governed queue.
+`;
+      await fs.writeFile(
+        path.join(issuesDir, 'ISS-0105-governor-timeout.yml'),
+        corrupted,
+        'utf-8',
+      );
+
+      const result = await listRepoIssues({});
+      expect(result.issues).toHaveLength(1);
+      expect(result.issues[0].id).toBe('ISS-0105');
+      expect(result.issues[0].title).toBe('Governor timeout on close_position');
+      expect(result.issues[0].degraded).toBe(true);
+      // Salvaged records are surfaced as degraded so the corruption stays visible.
+      expect(result.degraded).toBe(1);
+      expect(result.degraded_files).toEqual(['ISS-0105-governor-timeout.yml']);
+      expect(result.malformed ?? 0).toBe(0);
+    });
+
+    it('does not salvage-truncate markdown living inside a description block scalar', async () => {
+      // Boundary case from senken's ISS-0105 pair: a well-formed bare-YAML
+      // record whose description block legitimately contains markdown headings.
+      // Salvage must anchor at column 0 — an indented `## Fix Applied` is
+      // description content, not appended corruption. A looser pattern would
+      // silently truncate the body of a healthy record.
+      const issuesDir = path.join(ctx.rootDir, '.decibel', 'sentinel', 'issues');
+      await fs.mkdir(issuesDir, { recursive: true });
+
+      const record = `id: ISS-0105
+title: V3 Bot Engine never updated position_risks DB on close
+status: open
+severity: high
+description: |-
+  The engine closed on the exchange without writing position_risks.
+
+  ## Fix Applied
+
+  Write the row before acknowledging the close.
+`;
+      await fs.writeFile(path.join(issuesDir, 'ISS-0105-v3-bot-engine.yml'), record, 'utf-8');
+
+      const result = await listRepoIssues({});
+      expect(result.issues).toHaveLength(1);
+      expect(result.issues[0].id).toBe('ISS-0105');
+      // Parsed on the first pass — no salvage, so not flagged degraded.
+      expect(result.issues[0].degraded).toBeUndefined();
+      expect(result.degraded ?? 0).toBe(0);
+      expect(result.malformed ?? 0).toBe(0);
+    });
+
+    it('reports unparseable records instead of silently shrinking the list', async () => {
+      // A record that cannot be salvaged (duplicate YAML keys from a double
+      // write) must be counted, not dropped — a tool that under-reports gets
+      // trusted.
+      const issuesDir = path.join(ctx.rootDir, '.decibel', 'sentinel', 'issues');
+      await fs.mkdir(issuesDir, { recursive: true });
+
+      await fs.writeFile(
+        path.join(issuesDir, 'ISS-0010-good.yml'),
+        'id: ISS-0010\ntitle: Good record\nstatus: open\n',
+        'utf-8',
+      );
+      await fs.writeFile(
+        path.join(issuesDir, 'EPIC-0004-double-written.yml'),
+        'id: ISS-0180\nid: EPIC-0004\ntitle: Startup hardening\nstatus: open\n',
+        'utf-8',
+      );
+
+      const result = await listRepoIssues({});
+      expect(result.issues).toHaveLength(1);
+      expect(result.malformed).toBe(1);
+      expect(result.malformed_files).toEqual(['EPIC-0004-double-written.yml']);
+      // Every file on disk is either returned or reported — never dropped.
+      expect(result.issues.length + (result.malformed ?? 0)).toBe(2);
+    });
+
     it('lists issues stored in YAML-only format (no --- markers)', async () => {
       // Simulate what updateIssue writes after stringifyYaml: pure YAML, no
       // frontmatter delimiters, multi-line description as `|-` literal block.

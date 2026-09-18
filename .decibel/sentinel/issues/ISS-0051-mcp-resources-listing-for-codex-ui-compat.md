@@ -1,0 +1,43 @@
+---
+uid: 019c77ea-c300-7760-ac2b-cec9a7d28927
+id: ISS-0051
+projectId: decibel-tools-mcp
+status: open
+priority: medium
+epic_id: EPIC-0024
+tags:
+  - codex
+  - mcp
+  - ux
+created_at: 2026-02-19T22:00:00.000Z
+updated_at: 2026-02-19T22:00:00.000Z
+---
+# MCP resources listing for Codex UI compatibility
+
+**Status:** open
+**Epic:** EPIC-0024
+
+## Details
+
+## MCP Resources Listing
+
+### Context
+Codex has a UI bug (GitHub issue #11264) where an empty `list_mcp_resources`
+response shows "no MCP access" even though tools work fine. We currently
+expose tools only, not resources.
+
+### Options
+1. **Add a minimal resource** — e.g. expose project health or config as an
+   MCP resource so the list isn't empty
+2. **Wait for Codex fix** — this is a known bug on their side
+3. **Document the workaround** — tell users to ignore the UI warning
+
+### Recommendation
+Option 1 is low-effort and also useful for other clients. Exposing the
+project registry or daemon health as an MCP resource gives clients
+discoverability without changing our tool architecture.
+
+### Acceptance Criteria
+- [ ] Codex UI shows "MCP connected" (not "no MCP access")
+- [ ] Resource listing doesn't break other clients (Claude, Cursor)
+- [ ] Minimal implementation — don't over-engineer

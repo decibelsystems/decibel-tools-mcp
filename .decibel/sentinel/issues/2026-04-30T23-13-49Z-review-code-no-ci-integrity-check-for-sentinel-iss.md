@@ -1,4 +1,6 @@
 ---
+uid: 019de0ab-83a2-75c7-83ca-ac37ac33cdae
+id: 2026-04-30T23-13-49Z-review-code-no-ci-integrity-check-for-sentinel-iss
 projectId: decibel-tools-mcp
 severity: med
 status: open

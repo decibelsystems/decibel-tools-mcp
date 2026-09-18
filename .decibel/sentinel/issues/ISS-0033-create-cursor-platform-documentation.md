@@ -1,0 +1,47 @@
+---
+uid: 019b855a-b579-75bc-b27a-a9978fa37ec3
+id: ISS-0033
+projectId: decibel-tools-mcp
+status: closed
+priority: medium
+epic_id: EPIC-0024
+tags:
+  - cursor
+  - docs
+created_at: 2026-01-03T19:34:33.081Z
+updated_at: 2026-08-29T16:18:24.837Z
+closed_at: 2026-08-29T16:18:24.837Z
+resolution: Shipped with Cursor integration
+---
+# Create Cursor platform documentation
+
+**Status:** closed
+**Epic:** EPIC-0024
+
+## Details
+
+Create platform-specific documentation for Cursor integration.
+
+Location: `docs/platforms/cursor.md`
+
+Contents:
+1. Quick Start (one-click button)
+2. Manual Setup
+   - Global config (~/.cursor/mcp.json)
+   - Project config (.cursor/mcp.json)
+3. Verifying Connection
+   - Green indicator in MCP panel
+   - Tool count visible
+4. Using in Agent Mode
+   - Example prompts
+   - Tool invocation patterns
+5. Troubleshooting
+   - Common errors
+   - npx cache issues
+   - Node version requirements
+
+Add link from main README and docs index.
+
+## Resolution
+
+Shipped with Cursor integration

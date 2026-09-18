@@ -1,0 +1,11 @@
+event_id: PROV-20260804T012913-064
+timestamp: 2026-08-04T01:29:13.064Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0118-dojo-calls-with-caller-role-ai-crash-resolverole-r.md
+reason_code: initial_creation
+summary: "Created issue: dojo calls with caller_role 'ai' crash: resolveRole reads allowed_tools.length on inheriting role without guard"
+fingerprint_before: null
+fingerprint_after: sha256:fbdb1f5ae4e6b040

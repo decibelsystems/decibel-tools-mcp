@@ -1,0 +1,15 @@
+{
+  "meeting_host_id": "hostid_placeholder_0001",
+  "meeting_host_email": "host@example.com",
+  "meeting_uuid": "lgoqel38SxWZZ6kiYgSYlw==",
+  "meeting_id": 81234567890,
+  "meeting_topic": "Ben / Pete",
+  "meeting_start_time": "2026-08-12T17:04:21Z",
+  "meeting_end_time": "2026-08-12T17:38:02Z",
+  "summary_start_time": "2026-08-12T17:04:21Z",
+  "summary_end_time": "2026-08-12T17:38:02Z",
+  "summary_created_time": "2026-08-12T17:39:10Z",
+  "summary_last_modified_time": "2026-08-12T17:39:10Z",
+  "summary_title": "Ben / Pete",
+  "summary_content": "## Quick recap\n\nThe team walked through the current state of the integration work, agreed on the sequencing for the next two weeks, and settled an open question about where configuration should live. Follow-ups were assigned before the call ended.\n\n## Next steps\n\n### Alex\n\n- Draft the migration note and circulate it before Thursday.[https://tasks.zoom.us?meetingId=lgoqel38SxWZZ6kiYgSYlw%3D%3D&stepId=4449e631-7ef3-11f1-a9d1-7a2eb2efc9a9](https://tasks.zoom.us?meetingId=lgoqel38SxWZZ6kiYgSYlw%3D%3D&stepId=4449e631-7ef3-11f1-a9d1-7a2eb2efc9a9)\n- Confirm whether the staging credentials still rotate nightly.[https://tasks.zoom.us?meetingId=lgoqel38SxWZZ6kiYgSYlw%3D%3D&stepId=4449df32-7ef3-11f1-b825-7a2eb2efc9a9](https://tasks.zoom.us?meetingId=lgoqel38SxWZZ6kiYgSYlw%3D%3D&stepId=4449df32-7ef3-11f1-b825-7a2eb2efc9a9)\n\n### Sam\n\n- Write up the rollback path and add it to the runbook.[https://tasks.zoom.us?meetingId=lgoqel38SxWZZ6kiYgSYlw%3D%3D&stepId=4449eabe-7ef3-11f1-9536-7a2eb2efc9a9](https://tasks.zoom.us?meetingId=lgoqel38SxWZZ6kiYgSYlw%3D%3D&stepId=4449eabe-7ef3-11f1-9536-7a2eb2efc9a9)\n\n### Collaboration\n\n- Alex, Sam: pair on the config cutover once the migration note lands.[https://tasks.zoom.us?meetingId=lgoqel38SxWZZ6kiYgSYlw%3D%3D&stepId=4449f5db-7ef3-11f1-ba07-7a2eb2efc9a9](https://tasks.zoom.us?meetingId=lgoqel38SxWZZ6kiYgSYlw%3D%3D&stepId=4449f5db-7ef3-11f1-ba07-7a2eb2efc9a9)\n\n## Summary\n\n### Integration status review\n\nAlex walked through what is currently wired up and what remains stubbed. The group agreed the remaining stubs are safe to leave until the migration note is circulated, since nothing downstream reads them yet.\n\n### Configuration ownership\n\nSam raised that configuration is currently split between two places, which has caused drift twice. The team agreed to consolidate on a single source and to treat the second location as read-only until it can be removed.\n\n### Sequencing for the next two weeks\n\nThe group settled on doing the migration note first, the config cutover second, and leaving the runbook update to follow both so it documents the end state rather than an intermediate one.\n"
+}

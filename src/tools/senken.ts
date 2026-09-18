@@ -531,3 +531,41 @@ export const senkenTools: ToolSpec[] = [
   senkenListOverrides,
   senkenApplyOverride,
 ];
+
+// ============================================================================
+// Extension manifest (EPIC-0038 Phase 7)
+// ============================================================================
+// This module is excluded from the published build (tsconfig.build.json) and
+// is loaded only when its absolute path appears in `extensions.allow` in
+// ~/.decibel/config.yaml. The facade spec lives here rather than in
+// facades/definitions.ts so the public package does not carry a description of
+// a private tool it can never call.
+
+import type { DecibelExtension } from '../runtime/extensions.js';
+import { RUNTIME_PROTOCOL_VERSION } from '../runtime/protocol.js';
+
+export const extension: DecibelExtension = {
+  manifest: {
+    name: 'senken',
+    version: '1.0.0',
+    protocolVersion: RUNTIME_PROTOCOL_VERSION,
+    tier: 'apps',
+  },
+  facades: [
+    {
+      name: 'senken',
+      description: 'Trade analysis: strategy summaries, giveback reports, grading. Reads from Postgres (requires SENKEN_DATABASE_URL). trade_summary for aggregate stats by strategy; trade_review for individual trade grades (A-F by MFE capture); giveback_report for unrealized profit analysis. apply_override is a WRITE — it modifies live strategy parameters. Actions: trade_summary, giveback_report, trade_review, list_overrides, apply_override',
+      compactDescription: 'Trading strategy analysis (Postgres)',
+      microEligible: false,
+      tier: 'apps',
+      actions: {
+        trade_summary: 'senken_trade_summary',
+        giveback_report: 'senken_giveback_report',
+        trade_review: 'senken_trade_review',
+        list_overrides: 'senken_list_overrides',
+        apply_override: 'senken_apply_override',
+      },
+    },
+  ],
+  tools: senkenTools,
+};

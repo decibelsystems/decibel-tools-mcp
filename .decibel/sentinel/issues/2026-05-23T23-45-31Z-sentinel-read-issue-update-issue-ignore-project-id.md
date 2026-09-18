@@ -1,4 +1,6 @@
 ---
+uid: 019e573a-cc28-7844-bec6-a57d1ae90edb
+id: 2026-05-23T23-45-31Z-sentinel-read-issue-update-issue-ignore-project-id
 projectId: decibel-tools-mcp
 severity: med
 status: open

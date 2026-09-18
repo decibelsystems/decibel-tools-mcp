@@ -26,7 +26,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { timingSafeEqual } from 'crypto';
+import { timingSafeEqual, randomBytes } from 'crypto';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { readFileSync, existsSync } from 'fs';
@@ -34,14 +34,33 @@ import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 import { log } from './config.js';
 import { writeLocalAgentSession } from './agentPresence.js';
+import {
+  drainCommands,
+  setSessionToken,
+  getSessionToken,
+  dropSessionToken,
+  ackOwnerOf,
+  clearAckOwner,
+} from './agentInbox.js';
+import { settleCommandFromAck, ORG_ID } from './agentCommands.js';
 import { isSupabaseConfigured, getSupabaseServiceClient } from './lib/supabase.js';
 import { shouldQueueForAgent, parseToolCall } from './httpQueueDetection.js';
 import type { ToolKernel, DispatchContext, DispatchEvent } from './kernel.js';
+import { getExtensionDiagnostics } from './kernel.js';
 import { getLicenseValidator } from './license.js';
 import { listProjects } from './projectRegistry.js';
 import type { AgentRegistry } from './daemon.js';
 import { setDaemonPort } from './daemon.js';
 import type { DaemonConfig } from './daemonConfig.js';
+import { RUNTIME_PROTOCOL_VERSION } from './runtime/protocol.js';
+import type { DetailTier } from './facades/types.js';
+import {
+  wrapSuccess,
+  wrapError,
+  envelopeHttpStatus,
+  type StatusEnvelope,
+  type ErrorEnvelope,
+} from './lib/envelope.js';
 import {
   listEpics,
   listRepoIssues,
@@ -158,6 +177,34 @@ function timingSafeTokenCompare(provided: string, expected: string): boolean {
 }
 
 /**
+ * The connection's trust boundary for the /agents/* endpoints: ONLY a process on
+ * this machine may register/poll/ack a local runtime (the 127.0.0.1 bind is the
+ * principal — confused-deputy rule). We check the real socket peer address (not a
+ * spoofable header). An EMPTY remoteAddress is rejected (was previously allowed) —
+ * a genuine TCP loopback connection always presents 127.0.0.1/::1, so empty only
+ * arises from a destroyed/odd socket and must not be treated as local.
+ */
+function isLocalAgentPeer(req: IncomingMessage): boolean {
+  const peer = (req.socket.remoteAddress || '').replace('::ffff:', '');
+  return peer === '127.0.0.1' || peer === '::1';
+}
+
+/**
+ * Mint-or-return the per-session capability token (proof-of-possession the SDK must
+ * present on poll/ack). Idempotent per session_key so a heartbeat keeps the token
+ * stable; after a daemon restart the in-memory store is empty, so the next
+ * register/heartbeat mints a fresh one and the SDK adopts it from the response.
+ */
+function ensureSessionToken(sessionKey: string): string {
+  let token = getSessionToken(sessionKey);
+  if (!token) {
+    token = randomBytes(32).toString('hex');
+    setSessionToken(sessionKey, token);
+  }
+  return token;
+}
+
+/**
  * True only for genuine localhost origins. Parses the Origin URL and compares the
  * HOST exactly (localhost / 127.0.0.1 / [::1]) — NOT a startsWith prefix, which
  * `https://localhost.evil.com` and `http://127.0.0.1.evil.com` both defeat.
@@ -212,21 +259,6 @@ function buildLandingPageHtml(_facades: { name: string; description: string; act
 }
 
 // ============================================================================
-// Status Envelope Types
-// ============================================================================
-
-interface StatusEnvelope {
-  status: 'executed' | 'error' | 'unavailable' | 'queued';
-  [key: string]: unknown;
-}
-
-interface ErrorEnvelope extends StatusEnvelope {
-  status: 'error';
-  error: string;
-  code?: string;
-}
-
-// ============================================================================
 // Response Helpers
 // ============================================================================
 
@@ -243,54 +275,6 @@ function formatUptime(ms: number): string {
   if (hours > 0) return `${hours}h ${minutes % 60}m`;
   if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
   return `${seconds}s`;
-}
-
-/**
- * Wrap a successful result in status envelope
- */
-function wrapSuccess(data: Record<string, unknown>): StatusEnvelope {
-  return { status: 'executed', ...data };
-}
-
-/**
- * Wrap an error in status envelope
- */
-/**
- * Sanitize error messages to prevent information disclosure.
- * Removes absolute file paths and replaces with generic placeholders.
- * Preserves URLs and relative paths.
- */
-function sanitizeErrorMessage(message: string): string {
-  let sanitized = message;
-
-  // Step 1: Preserve paths containing .decibel (keep the .decibel part, strip prefix)
-  // /home/user/project/.decibel/foo -> .decibel/foo
-  sanitized = sanitized.replace(/(?:\/[^\s:'"]+)?\/\.decibel\//g, '.decibel/');
-  sanitized = sanitized.replace(/(?:[A-Z]:\\[^\s:'"]+)?\\\.decibel\\/gi, '.decibel\\');
-
-  // Step 2: Remove absolute Unix paths (must start with / and have at least one more /)
-  // But exclude URLs (http://, https://, file://)
-  // Match: /home/user/file.txt, /var/log/app.log
-  // Don't match: http://example.com, ./relative/path
-  sanitized = sanitized.replace(
-    /(?<!:)\/(?:home|Users|var|tmp|opt|usr|etc|media|mnt)\/[^\s:'"]+/g,
-    '[path]'
-  );
-
-  // Step 3: Remove Windows absolute paths (C:\, D:\, etc.)
-  sanitized = sanitized.replace(/[A-Z]:\\[^\s:'"]+/gi, '[path]');
-
-  // Step 4: Sanitize any remaining usernames in paths that weren't caught
-  sanitized = sanitized.replace(/\/home\/[^\/\s]+\//g, '/home/[user]/');
-  sanitized = sanitized.replace(/\/Users\/[^\/\s]+\//g, '/Users/[user]/');
-  sanitized = sanitized.replace(/C:\\Users\\[^\\]+\\/gi, 'C:\\Users\\[user]\\');
-
-  return sanitized;
-}
-
-function wrapError(error: string, code?: string): ErrorEnvelope {
-  const sanitized = sanitizeErrorMessage(error);
-  return { status: 'error', error: sanitized, ...(code && { code }) };
 }
 
 /**
@@ -404,7 +388,8 @@ async function executeTool(
       requestId: req.headers['x-request-id'] as string | undefined,
       tier: tierOverride,
       allowedFacades,
-    } : tierOverride ? { tier: tierOverride } : undefined;
+      transport: 'http',
+    } : tierOverride ? { tier: tierOverride, transport: 'http' } : { transport: 'http' };
 
     const toolResult = await kernel.dispatch(tool, args, context);
     const text = toolResult.content[0]?.text;
@@ -413,13 +398,22 @@ async function executeTool(
       return wrapError(text || 'Tool execution failed', 'TOOL_ERROR');
     }
 
-    // Parse JSON result or wrap as message
+    // Parse the tool's payload, or carry it as prose when it isn't JSON.
+    //
+    // The prose branch is legitimate — some tools return markdown — but it used
+    // to be indistinguishable from a data response that failed to parse. A
+    // caller expecting `events` got an object with no `events` key, `ok: true`,
+    // and no indication that anything unusual happened. That is how a
+    // concatenated feedback prompt (fixed in tools/shared/response.ts) turned
+    // one call in fifteen into a silent empty result for every HTTP consumer.
+    // `payload_format` makes the two cases tellable apart.
     let result: Record<string, unknown>;
     if (text) {
       try {
         result = JSON.parse(text);
       } catch {
-        result = { message: text };
+        log(`HTTP: tool ${tool} returned non-JSON text (${text.length} bytes) — carrying it as prose`);
+        result = { message: text, payload_format: 'text' };
       }
     } else {
       result = { success: true };
@@ -478,6 +472,7 @@ async function queueForAgent(
 
   return {
     status: 'queued',
+    ok: true,
     queue_id: data.id,
     message: 'Queued for local sync. Use agentic queue_status to check result.',
   };
@@ -514,7 +509,7 @@ interface OpenAIFunction {
  * Get tools in OpenAI function calling format (facade-based)
  */
 function getOpenAITools(): OpenAIFunction[] {
-  return kernel.getMcpToolDefinitions('full').map(def => ({
+  return kernel.getMcpToolDefinitions('full', { transport: 'http' }).map(def => ({
     type: 'function' as const,
     function: {
       name: def.name,
@@ -784,6 +779,10 @@ export async function startHttpServer(
         status: 'ok',
         version: PKG.version,
         api_version: 'v1',
+        // Wire-contract version, negotiated by ensureRuntime(). Distinct from
+        // `version` — a long-lived daemon can outlive the clients connecting to
+        // it, and most releases do not change the contract. See runtime/protocol.ts.
+        protocol_version: RUNTIME_PROTOCOL_VERSION,
         uptime_ms: uptimeMs,
         uptime_human: formatUptime(uptimeMs),
         pid: process.pid,
@@ -796,6 +795,17 @@ export async function startHttpServer(
         pro: licenseTier !== 'core',
         license_tier: licenseTier,
         supabase_configured: isSupabaseConfigured(),
+        // Facades whose dependency is failing. `{}` is the healthy case — a
+        // non-empty object means calls to those facades are being refused fast
+        // rather than left to time out. See runtime/circuitBreaker.ts.
+        circuits: kernel.circuitSnapshot(),
+        // Private facades loaded from the allowlist, and every entry refused.
+        // Reported because the alternative is silence: an extension that failed
+        // to load looks exactly like one that was never configured, and this
+        // daemon has already shipped one bug of that shape — a broken voice
+        // inbox that read as "0 messages" for five hours. See
+        // runtime/extensions.ts.
+        extensions: getExtensionDiagnostics(),
       }));
       return;
     }
@@ -960,6 +970,24 @@ export async function startHttpServer(
     // ========================================================================
 
     // GET /tools - List available tools
+    // MCP tool definitions, verbatim — the shape a `tools/list` response needs.
+    //
+    // This is what lets a stdio client stop building its own kernel. /tools
+    // above is a human/OpenAI-shaped summary; this one is the exact array the
+    // MCP handler returns, so a thin adapter can serve tools/list by forwarding
+    // it rather than loading 195 tool modules to produce the same bytes.
+    if (path === '/mcp/tools' && req.method === 'GET') {
+      const tierParam = url.searchParams.get('tier');
+      const tier = (tierParam === 'compact' || tierParam === 'micro' ? tierParam : 'full') as DetailTier;
+      sendJson(res, 200, wrapSuccess({
+        version: PKG.version,
+        protocol_version: RUNTIME_PROTOCOL_VERSION,
+        tier,
+        tools: kernel.getMcpToolDefinitions(tier, { transport: 'http' }),
+      }));
+      return;
+    }
+
     if (path === '/tools' && req.method === 'GET') {
       sendJson(res, 200, wrapSuccess({
         version: PKG.version,
@@ -1055,9 +1083,7 @@ export async function startHttpServer(
     // from a trusted-LOCATION caller — fine for a local presence write. The hosted/BYO
     // path uses an agent-token instead (P4), which is not this endpoint.
     if ((path === '/agents/register' || path === '/agents/heartbeat') && req.method === 'POST') {
-      const peer = (req.socket.remoteAddress || '').replace('::ffff:', '');
-      const isLocal = peer === '127.0.0.1' || peer === '::1' || peer === '';
-      if (!isLocal) {
+      if (!isLocalAgentPeer(req)) {
         sendJson(res, 403, wrapError(
           'agents.register is local-only (the 127.0.0.1 bind is the principal). Hosted/BYO agents use the agent-token ingest path.',
           'LOCAL_ONLY',
@@ -1072,6 +1098,7 @@ export async function startHttpServer(
           sendJson(res, 400, wrapError('Missing "session_key" and/or "runtime"', 'MISSING_FIELDS'));
           return;
         }
+        const reqStatus = body.status === 'ended' ? 'ended' : 'active';
         const ok = await writeLocalAgentSession({
           session_key,
           runtime,
@@ -1079,6 +1106,7 @@ export async function startHttpServer(
           cwd: (body.cwd as string) ?? null,
           summary: (body.summary as string) ?? null,
           meta: (body.meta as Record<string, unknown>) ?? undefined,
+          status: reqStatus,
         });
         if (!ok) {
           sendJson(res, 503, wrapError(
@@ -1087,11 +1115,97 @@ export async function startHttpServer(
           ));
           return;
         }
+        // Capability token: on 'ended' forget it; otherwise mint-or-return the
+        // session's token and hand it back so the SDK can authorize poll/ack. The
+        // token is the secret that distinguishes THIS registrant from any other
+        // co-resident local process guessing the (public) session_key.
+        let token: string | undefined;
+        if (reqStatus === 'ended') {
+          dropSessionToken(session_key);
+        } else {
+          token = ensureSessionToken(session_key);
+        }
         log(`HTTP: /agents/${path.endsWith('register') ? 'register' : 'heartbeat'} runtime=${runtime} session=${session_key}`);
-        sendJson(res, 200, wrapSuccess({ session_key, runtime, ok: true }));
+        sendJson(res, 200, wrapSuccess({ session_key, runtime, ok: true, ...(token && { token }) }));
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'REGISTER_ERROR'));
+      }
+      return;
+    }
+
+    // GET /agents/commands?session_key=... — SDK command inbox poll (swarm onCommand).
+    // A local SDK runtime polls for HQ commands the dispatcher enqueued for it, runs
+    // onCommand, then acks via POST /agents/commands/ack. LOCALHOST-ONLY (same
+    // principal as register): the daemon holds the service_role; the SDK never does.
+    if (path === '/agents/commands' && req.method === 'GET') {
+      if (!isLocalAgentPeer(req)) {
+        sendJson(res, 403, wrapError('agent command inbox is local-only', 'LOCAL_ONLY'));
+        return;
+      }
+      const sessionKey = url.searchParams.get('session_key');
+      if (!sessionKey) {
+        sendJson(res, 400, wrapError('Missing "session_key" query param', 'MISSING_SESSION_KEY'));
+        return;
+      }
+      // Capability check: session_key is a guessable label, so a co-resident local
+      // process could otherwise drain another runtime's inbox. The token proves the
+      // caller is the registrant. Timing-safe compare; unknown session → no token →
+      // reject. (drainCommands also org-scopes — defense-in-depth on cross-org.)
+      const token = url.searchParams.get('token') || '';
+      const expected = getSessionToken(sessionKey);
+      if (!expected || !timingSafeTokenCompare(token, expected)) {
+        sendJson(res, 403, wrapError('Invalid or missing session token', 'BAD_SESSION_TOKEN'));
+        return;
+      }
+      const commands = drainCommands(sessionKey, ORG_ID);
+      sendJson(res, 200, wrapSuccess({ session_key: sessionKey, commands, count: commands.length }));
+      return;
+    }
+
+    // POST /agents/commands/ack — SDK reports a command's outcome; daemon settles the
+    // hq.agent_commands row in Core (service_role). LOCALHOST-ONLY. Only done|failed.
+    if (path === '/agents/commands/ack' && req.method === 'POST') {
+      if (!isLocalAgentPeer(req)) {
+        sendJson(res, 403, wrapError('agent command ack is local-only', 'LOCAL_ONLY'));
+        return;
+      }
+      try {
+        const body = await parseBody(req);
+        const id = body.id as string;
+        const status = body.status as string;
+        if (!id || (status !== 'done' && status !== 'failed')) {
+          sendJson(res, 400, wrapError('Require "id" and "status" in {done|failed}', 'INVALID_ACK'));
+          return;
+        }
+        // Capability check: only the session this command was enqueued for may ack
+        // it (else any local process could forge a 'done' + arbitrary result for
+        // another runtime's command). Map id→owning session, verify its token.
+        const owner = ackOwnerOf(id);
+        const expected = owner ? getSessionToken(owner) : undefined;
+        const token = typeof body.token === 'string' ? body.token : '';
+        if (!owner || !expected || !timingSafeTokenCompare(token, expected)) {
+          sendJson(res, 403, wrapError('Ack not authorized for this command', 'BAD_SESSION_TOKEN'));
+          return;
+        }
+        // Defense-in-depth: cap the forged-able result blob (1MB body limit already
+        // applies; this bounds a single field written to Core under service_role).
+        const result = (body.result as Record<string, unknown>) ?? null;
+        if (result && Buffer.byteLength(JSON.stringify(result)) > 64 * 1024) {
+          sendJson(res, 400, wrapError('Ack "result" too large (max 64KB)', 'RESULT_TOO_LARGE'));
+          return;
+        }
+        const errStr = typeof body.error === 'string' ? body.error : null;
+        const ok = await settleCommandFromAck(id, status, result, errStr);
+        if (!ok) {
+          sendJson(res, 503, wrapError('Command store unavailable (Supabase not configured)', 'STORE_UNAVAILABLE'));
+          return;
+        }
+        clearAckOwner(id);
+        sendJson(res, 200, wrapSuccess({ id, status, ok: true }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, wrapError(message, 'ACK_ERROR'));
       }
       return;
     }
@@ -1240,7 +1354,7 @@ export async function startHttpServer(
         const tier = await resolveTier(req, configLicenseKey);
         log(`HTTP: /call tool=${tool} tier=${tier}`);
         const result = await executeTool(tool, args, req, tier);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (message.includes('too large')) {
@@ -1283,11 +1397,32 @@ export async function startHttpServer(
           requestId: (req.headers['x-request-id'] as string) || bodyContext.requestId,
           allowedFacades: bodyContext.allowedFacades as unknown as string[] | undefined,
           tier,
+          // Set here, never read from the request: a caller that could name its
+          // own transport could name 'stdio' and walk straight through the
+          // local-only gate.
+          transport: 'http',
         };
 
         log(`HTTP: /batch — ${calls.length} calls (agent=${context.agentId || 'anonymous'}, tier=${tier})`);
         const results = await kernel.batch(calls, context);
-        sendJson(res, 200, { status: 'executed', results });
+
+        // `ok` reflects STRUCTURAL validity: did every call name something this
+        // runtime actually has. A call that ran and returned isError leaves ok
+        // true — partial failure is a normal batch outcome and callers depend on
+        // that. A call naming a facade that is not registered does not.
+        //
+        // The status stays 200 because the body still carries real results for
+        // the other calls in the batch, and throwing those away behind a 4xx
+        // would trade one silent failure for another.
+        const unknown = results.filter(r => r.code === 'UNKNOWN_FACADE');
+        if (unknown.length > 0) {
+          log(`HTTP: /batch — ${unknown.length} unknown facade(s): ${unknown.map(r => r.facade).join(', ')}`);
+        }
+        sendJson(res, 200, {
+          status: unknown.length > 0 ? 'error' : 'executed',
+          ok: unknown.length === 0,
+          results,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'BATCH_ERROR'));
@@ -1320,7 +1455,7 @@ export async function startHttpServer(
         log(`HTTP: /api/tools/${toolName}`);
 
         const result = await executeTool(toolName, body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'EXECUTION_ERROR'));
@@ -1338,7 +1473,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/wish');
         const result = await executeTool('dojo_add_wish', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1352,7 +1487,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/propose');
         const result = await executeTool('dojo_create_proposal', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1366,7 +1501,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/scaffold');
         const result = await executeTool('dojo_scaffold_experiment', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1380,7 +1515,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/run');
         const result = await executeTool('dojo_run_experiment', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1394,7 +1529,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/results');
         const result = await executeTool('dojo_read_results', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1415,7 +1550,7 @@ export async function startHttpServer(
         }
         log('HTTP: /dojo/list');
         const result = await executeTool('dojo_list', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1435,7 +1570,7 @@ export async function startHttpServer(
         }
         log('HTTP: /dojo/wishes');
         const result = await executeTool('dojo_list_wishes', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1449,7 +1584,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/can-graduate');
         const result = await executeTool('dojo_can_graduate', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1463,7 +1598,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/artifact');
         const result = await executeTool('dojo_read_artifact', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1477,7 +1612,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /dojo/bench');
         const result = await executeTool('dojo_bench', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1495,7 +1630,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /bench/run');
         const result = await executeTool('decibel_bench', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1509,7 +1644,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /bench/compare');
         const result = await executeTool('decibel_bench_compare', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1527,7 +1662,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /context/refresh');
         const result = await executeTool('decibel_context_refresh', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1541,7 +1676,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /context/pin');
         const result = await executeTool('decibel_context_pin', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1555,7 +1690,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /context/unpin');
         const result = await executeTool('decibel_context_unpin', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1575,7 +1710,7 @@ export async function startHttpServer(
         }
         log('HTTP: /context/list');
         const result = await executeTool('decibel_context_list', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1589,7 +1724,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /event/append');
         const result = await executeTool('decibel_event_append', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1617,7 +1752,7 @@ export async function startHttpServer(
         }
         log('HTTP: /event/search');
         const result = await executeTool('decibel_event_search', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1631,7 +1766,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /artifact/list');
         const result = await executeTool('decibel_artifact_list', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -1645,7 +1780,7 @@ export async function startHttpServer(
         const body = await parseBody(req);
         log('HTTP: /artifact/read');
         const result = await executeTool('decibel_artifact_read', body);
-        sendJson(res, result.status === 'error' ? 400 : 200, result);
+        sendJson(res, envelopeHttpStatus(result), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         sendJson(res, 400, wrapError(message, 'PARSE_ERROR'));
@@ -2396,49 +2531,7 @@ ${authToken ? '║  Auth:     Bearer token required                             
   };
 }
 
-/**
- * Parse command line arguments for HTTP mode
- */
-export function parseHttpArgs(args: string[]): {
-  httpMode: boolean;
-  port?: number;
-  authToken?: string;
-  host?: string;
-  sseKeepaliveMs?: number;
-  timeoutMs?: number;
-  retryIntervalMs?: number;
-} {
-  const httpMode = args.includes('--http');
-  const portIndex = args.indexOf('--port');
-  // --port flag wins; else honor PORT env (Render sets it); else leave undefined
-  // so daemonConfig's default (4888) applies downstream instead of being
-  // short-circuited by a baked-in default here. See server.ts port/host resolution.
-  const port = portIndex !== -1
-    ? parseInt(args[portIndex + 1], 10)
-    : process.env.PORT
-      ? parseInt(process.env.PORT, 10)
-      : undefined;
-
-  // SECURITY: Prefer env var for auth token (CLI args visible in ps/history)
-  // Fall back to --auth-token for backwards compatibility
-  const authIndex = args.indexOf('--auth-token');
-  const authToken = process.env.DECIBEL_AUTH_TOKEN ||
-    (authIndex !== -1 ? args[authIndex + 1] : undefined);
-
-  const hostIndex = args.indexOf('--host');
-  // --host flag wins; else leave undefined so daemonConfig host (127.0.0.1, daemon
-  // mode) or the transport default applies instead of being short-circuited here.
-  const host = hostIndex !== -1 ? args[hostIndex + 1] : undefined;
-
-  // SSE/Connection tuning arguments
-  const keepaliveIndex = args.indexOf('--sse-keepalive');
-  const sseKeepaliveMs = keepaliveIndex !== -1 ? parseInt(args[keepaliveIndex + 1], 10) : undefined;
-
-  const timeoutIndex = args.indexOf('--timeout');
-  const timeoutMs = timeoutIndex !== -1 ? parseInt(args[timeoutIndex + 1], 10) : undefined;
-
-  const retryIndex = args.indexOf('--sse-retry');
-  const retryIntervalMs = retryIndex !== -1 ? parseInt(args[retryIndex + 1], 10) : undefined;
-
-  return { httpMode, port, authToken, host, sseKeepaliveMs, timeoutMs, retryIntervalMs };
-}
+// parseHttpArgs moved to ./httpArgs.js so that argv parsing carries no
+// dependencies. Re-exported here because it has always been part of this
+// module's surface.
+export { parseHttpArgs, type HttpArgs } from './httpArgs.js';

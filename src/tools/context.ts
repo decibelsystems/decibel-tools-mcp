@@ -8,6 +8,16 @@
  * - List/read artifacts (experiment outputs)
  *
  * Based on ADR-002: Context Pack
+ *
+ * NO `status: 'executed'` IN A PAYLOAD. It used to appear on five outputs here
+ * as a constant — a literal type with one value, saying only that the call ran,
+ * which `isError` and the wire envelope's `ok` already say. And it collided:
+ * /call wraps a payload as {status: 'executed', ...payload, ok: true}, so the
+ * field was indistinguishable from the envelope's own marker, and the thin
+ * client (which strips that marker) deleted it outright. The same call answered
+ * differently on stdio and over HTTP — S4 found it. The meaningful statuses here
+ * ('pinned', 'unpinned', 'appended') stay: they carry domain information, and
+ * `ok` is what tells a caller the call succeeded.
  */
 
 import fs from 'fs/promises';
@@ -17,6 +27,7 @@ import { resolveProjectPaths, ResolvedProjectPaths } from '../projectRegistry.js
 import { ensureDir } from '../dataRoot.js';
 import { CallerRole, enforceToolAccess } from './dojoPolicy.js';
 import { checkRateLimit, recordRequestStart, recordRequestEnd } from './rateLimiter.js';
+import { listDirOrThrow, readStoreFile, storeUnparseable } from './shared/storeRead.js';
 
 // ============================================================================
 // Types
@@ -36,7 +47,6 @@ export interface ContextRefreshInput extends ContextBaseInput {
 }
 
 export interface ContextRefreshOutput {
-  status: 'executed';
   context_pack: Record<string, unknown>;
 }
 
@@ -73,7 +83,6 @@ export interface PinnedFact {
 }
 
 export interface ContextListOutput {
-  status: 'executed';
   facts: PinnedFact[];
 }
 
@@ -103,7 +112,6 @@ export interface EventRecord {
 }
 
 export interface EventSearchOutput {
-  status: 'executed';
   results: EventRecord[];
 }
 
@@ -119,7 +127,6 @@ export interface ArtifactInfo {
 }
 
 export interface ArtifactListOutput {
-  status: 'executed';
   run_id: string;
   artifacts: ArtifactInfo[];
 }
@@ -130,7 +137,6 @@ export interface ArtifactReadInput extends ContextBaseInput {
 }
 
 export interface ArtifactReadOutput {
-  status: 'executed';
   run_id: string;
   name: string;
   content: string;
@@ -213,11 +219,15 @@ async function getFactsPath(resolved: ResolvedProjectPaths): Promise<string> {
 
 async function loadFacts(resolved: ResolvedProjectPaths): Promise<StoredFact[]> {
   const factsPath = await getFactsPath(resolved);
+  // The whole store is one file, so a parse failure is not one lost record —
+  // it is every fact this project has pinned, reported as none pinned. There
+  // is no partial answer to give here, so this fails loudly instead.
+  const content = await readStoreFile(factsPath);
+  if (content === null) return [];
   try {
-    const content = await fs.readFile(factsPath, 'utf-8');
     return JSON.parse(content);
-  } catch {
-    return [];
+  } catch (err) {
+    throw storeUnparseable(factsPath, err);
   }
 }
 
@@ -238,11 +248,14 @@ async function getEventsPath(resolved: ResolvedProjectPaths): Promise<string> {
 
 async function loadEvents(resolved: ResolvedProjectPaths): Promise<StoredEvent[]> {
   const eventsPath = await getEventsPath(resolved);
+  // Same contract as loadFacts: one file, so a parse failure loses the whole
+  // journal and must not read as an empty one.
+  const content = await readStoreFile(eventsPath);
+  if (content === null) return [];
   try {
-    const content = await fs.readFile(eventsPath, 'utf-8');
     return JSON.parse(content);
-  } catch {
-    return [];
+  } catch (err) {
+    throw storeUnparseable(eventsPath, err);
   }
 }
 
@@ -282,12 +295,12 @@ async function compileContextPack(
     const designerDir = resolved.subPath('designer');
     const decisions: Array<{ area: string; file: string; summary?: string }> = [];
     try {
-      const areas = await fs.readdir(designerDir);
+      const areas = await listDirOrThrow(designerDir);
       for (const area of areas.slice(0, 5)) {
         const areaPath = path.join(designerDir, area);
         const stat = await fs.stat(areaPath);
         if (stat.isDirectory()) {
-          const files = await fs.readdir(areaPath);
+          const files = await listDirOrThrow(areaPath);
           for (const file of files.slice(-3)) {
             if (file.endsWith('.md')) {
               decisions.push({ area, file });
@@ -295,7 +308,9 @@ async function compileContextPack(
           }
         }
       }
-    } catch {
+    } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
       // Directory doesn't exist yet
     }
     pack.decisions = decisions;
@@ -306,13 +321,15 @@ async function compileContextPack(
     const issuesDir = resolved.subPath('sentinel', 'issues');
     const issues: Array<{ file: string; severity?: string }> = [];
     try {
-      const files = await fs.readdir(issuesDir);
+      const files = await listDirOrThrow(issuesDir);
       for (const file of files.slice(-10)) {
         if (file.endsWith('.md')) {
           issues.push({ file });
         }
       }
-    } catch {
+    } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
       // Directory doesn't exist yet
     }
     pack.issues = issues;
@@ -345,7 +362,6 @@ export async function contextRefresh(
     const contextPack = await compileContextPack(resolved, input.sections);
 
     return {
-      status: 'executed',
       context_pack: contextPack,
     };
   } catch (err) {
@@ -484,7 +500,6 @@ export async function contextList(
     }));
 
     return {
-      status: 'executed',
       facts: mappedFacts,
     };
   } catch (err) {
@@ -591,7 +606,6 @@ export async function eventSearch(
     }));
 
     return {
-      status: 'executed',
       results: mappedResults,
     };
   } catch (err) {
@@ -629,7 +643,7 @@ export async function artifactList(
     const artifacts: ArtifactInfo[] = [];
 
     try {
-      const files = await fs.readdir(runDir);
+      const files = await listDirOrThrow(runDir);
       for (const file of files) {
         const filePath = path.join(runDir, file);
         const stat = await fs.stat(filePath);
@@ -641,7 +655,9 @@ export async function artifactList(
           });
         }
       }
-    } catch {
+    } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
       return {
         status: 'error',
         error: `Run ${input.run_id} not found`,
@@ -650,11 +666,12 @@ export async function artifactList(
     }
 
     return {
-      status: 'executed',
       run_id: input.run_id,
       artifacts,
     };
   } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
     const message = err instanceof Error ? err.message : String(err);
     log(`context: Error listing artifacts: ${message}`);
     return {
@@ -705,7 +722,6 @@ export async function artifactRead(
       const mimeType = mimeTypes[ext] || 'application/octet-stream';
 
       return {
-        status: 'executed',
         run_id: input.run_id,
         name: input.name,
         content,

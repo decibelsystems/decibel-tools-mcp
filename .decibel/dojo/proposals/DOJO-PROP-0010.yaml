@@ -1,0 +1,71 @@
+id: DOJO-PROP-0010
+title: Obsidian plugin as a client surface for Decibel project intelligence
+problem: "Decibel's human-facing knowledge layer is ~200 markdown files with
+  YAML frontmatter sitting in .decibel/, but there is no good way to browse it
+  as a knowledge graph. The VS Code extension renders it as flat tree views,
+  which is a poor fit for interlinked epics/issues/ADRs/decisions, and it is
+  aimed at engineers — non-technical users (see ISS-0115) will not open VS Code.
+  Meanwhile the data already carries the structure a graph tool needs: epic_id
+  backlinks, tags, status/severity/priority frontmatter, timestamps."
+hypothesis: Obsidian is a materially better host for the human-facing half of
+  Decibel than a bespoke tree view, because the mapping is 1:1 with primitives
+  it already has (frontmatter to Properties, epic_id to backlinks, Dataview to
+  the queries oracle next_actions runs by hand, graph view to the epic/issue/ADR
+  web that is currently invisible). If that holds, a thin plugin that keeps
+  writes flowing through the kernel gets a knowledge-graph UI for a fraction of
+  what building one costs.
+owner: human
+state: draft
+created_at: 2026-08-25T04:28:56.624Z
+project_id: decibel-tools-mcp
+target_module: clients
+scope_in:
+  - "Empirical test: open .decibel/ directly as an Obsidian vault root and
+    assess whether the graph/Dataview view is revelatory or noise (zero code)"
+  - "Evaluate three architectures: A vault-native reader, B daemon client via
+    requestUrl to 127.0.0.1:4888/call, C hybrid read-vault/write-daemon"
+  - Confirm or falsify the dot-folder constraint (Obsidian hard-ignores folders
+    starting with . inside a vault, so repo-root-as-vault cannot see .decibel/)
+  - Decide whether the Obsidian surface supersedes, complements, or replaces the
+    VS Code extension
+scope_out:
+  - Mobile/iOS support — the daemon is localhost-only and mobile plugins get no
+    Node/fs; mobile routes through HQ/Supabase (EPIC-0033), which is a separate
+    and much larger lift
+  - Publishing to the Obsidian community plugin directory
+  - Exposing provenance (159 .yml) or runs (256 .json) in the vault — machine
+    data, does not belong in a knowledge graph
+  - Any write path that bypasses the kernel and writes .decibel/ files directly
+    — that breaks provenance and violates the tool-priority tenet in CLAUDE.md
+acceptance:
+  - The dot-folder assumption is empirically confirmed or falsified against a
+    real Obsidian install
+  - A judgment is recorded on whether the graph view of real Decibel data is
+    actually useful, based on looking at it rather than reasoning about it
+  - One of architectures A/B/C is selected with a written rationale, or the
+    proposal is explicitly declined
+  - If B or C is selected, the sequencing question against the VS Code extension
+    drift is resolved first
+risks:
+  - "Second stale client: the VS Code extension has been untouched since Feb 15
+    while the server shipped 30+ commits, with three remediation options offered
+    and none picked. Shipping another client surface before the first is
+    maintained yields two stale clients instead of one."
+  - Architecture A is blocked on ISS-0105 (converge sentinel issue stores on
+    .md). Dojo is 31 .yml / 1 .md, so wishes, proposals and experiments would be
+    entirely invisible in a vault-native reader. Sentinel is split 143 .md / 58
+    .yml.
+  - Vault-native writes bypass the kernel, losing provenance and schema
+    validation — the same failure mode already logged as friction (agents
+    writing raw files instead of calling tools).
+  - Making .decibel/ the vault root drops .obsidian/ inside the repo (needs
+    gitignore) and binds one vault to one project, which does not fit
+    multi-project users.
+  - Obsidian is not currently installed on the dev machine, so nothing here has
+    been tested against the real app.
+insight: "The strongest finding is that this can be evaluated for roughly ten
+  minutes of effort and zero code: install Obsidian, open .decibel/ as a vault,
+  look at the graph. That single test resolves the linchpin constraint and the
+  core value question at once, and it should happen before any plugin work is
+  scoped. Recommendation on record: run the test, hold the build, and sequence
+  any plugin work after the VS Code extension drift decision."

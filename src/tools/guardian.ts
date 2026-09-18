@@ -14,6 +14,7 @@ import { log } from '../config.js';
 import { resolveProjectPaths, ResolvedProjectPaths } from '../projectRegistry.js';
 import { loadConfig } from '../daemonConfig.js';
 import YAML from 'yaml';
+import { listDirEntriesOrThrow } from './shared/storeRead.js';
 
 // ============================================================================
 // Types
@@ -23,16 +24,35 @@ export interface ScanDepsInput {
   project_id?: string;
 }
 
+export interface DepAdvisory {
+  name: string;
+  severity: string;
+  title: string;
+  url: string;
+  fix_available: boolean;
+}
+
 export interface ScanDepsOutput {
+  /**
+   * Advisories affecting *production* dependencies — the set the overall grade
+   * is computed from, because this is what actually reaches a consumer.
+   */
   total_advisories: number;
   by_severity: Record<string, number>;
-  advisories: Array<{
-    name: string;
-    severity: string;
-    title: string;
-    url: string;
-    fix_available: boolean;
-  }>;
+  advisories: DepAdvisory[];
+  /**
+   * Advisories that only affect devDependencies. Reported, never graded: these
+   * packages are excluded from the published tarball by package.json `files`,
+   * so a vite dev-server CVE cannot reach anyone who installs this package.
+   *
+   * Grading them would make the pre-push gate unsatisfiable by any change to
+   * the repository, which trains people to bypass the gate entirely.
+   */
+  dev_advisories: {
+    total: number;
+    by_severity: Record<string, number>;
+    advisories: DepAdvisory[];
+  };
 }
 
 export interface ScanSecretsInput {
@@ -114,22 +134,28 @@ const SECRET_PATTERNS = [
 // ============================================================================
 
 function loadAllowlist(projectId?: string): string[] {
+  // Resolve unconditionally, mirroring scanSecrets: resolveProjectPaths falls back
+  // to a cwd-walk when projectId is undefined. Branching on `if (projectId)` here
+  // meant callers that omit it (the pre-push hook) skipped the project allowlist
+  // entirely and read only the global one. Project-local wins; global is fallback.
+  const candidates: string[] = [];
   try {
-    let allowlistPath: string;
-    if (projectId) {
-      const resolved = resolveProjectPaths(projectId);
-      allowlistPath = resolved.subPath('guardian/allowlist.yaml');
-    } else {
-      allowlistPath = path.join(homedir(), '.decibel', 'guardian', 'allowlist.yaml');
-    }
-
-    if (!existsSync(allowlistPath)) return [];
-    const content = readFileSync(allowlistPath, 'utf-8');
-    const parsed = YAML.parse(content);
-    return Array.isArray(parsed?.entries) ? parsed.entries : [];
+    candidates.push(resolveProjectPaths(projectId).subPath('guardian/allowlist.yaml'));
   } catch {
-    return [];
+    // Unresolvable project — the global allowlist is still worth trying.
   }
+  candidates.push(path.join(homedir(), '.decibel', 'guardian', 'allowlist.yaml'));
+
+  for (const allowlistPath of candidates) {
+    try {
+      if (!existsSync(allowlistPath)) continue;
+      const parsed = YAML.parse(readFileSync(allowlistPath, 'utf-8'));
+      if (Array.isArray(parsed?.entries)) return parsed.entries;
+    } catch {
+      // Missing or malformed — fall through to the next candidate.
+    }
+  }
+  return [];
 }
 
 function gradeFromScore(score: number, total: number): string {
@@ -145,6 +171,58 @@ function gradeFromScore(score: number, total: number): string {
 // Scan Functions
 // ============================================================================
 
+/** Turn `npm audit --json` output into a flat advisory list. Exported for tests. */
+export function parseAuditJson(raw: string): DepAdvisory[] {
+  const audit = JSON.parse(raw);
+  const vulnerabilities = audit.vulnerabilities || {};
+  const advisories: DepAdvisory[] = [];
+
+  for (const [name, vuln] of Object.entries(vulnerabilities) as [string, any][]) {
+    advisories.push({
+      name,
+      severity: vuln.severity || 'unknown',
+      title: vuln.via?.[0]?.title || vuln.via?.[0] || 'Unknown',
+      url: vuln.via?.[0]?.url || '',
+      fix_available: !!vuln.fixAvailable,
+    });
+  }
+
+  return advisories;
+}
+
+/**
+ * Run `npm audit` in one scope. Returns null when the audit could not be run or
+ * parsed at all, which the caller distinguishes from a genuine clean result.
+ */
+function runAudit(projectPath: string, omitDev: boolean): DepAdvisory[] | null {
+  const cmd = omitDev
+    ? 'npm audit --json --omit=dev 2>/dev/null'
+    : 'npm audit --json 2>/dev/null';
+
+  try {
+    return parseAuditJson(execSync(cmd, { cwd: projectPath, encoding: 'utf-8', timeout: 30_000 }));
+  } catch (err: any) {
+    // npm audit exits non-zero when vulnerabilities are found — the JSON is still on stdout
+    if (err.stdout) {
+      try {
+        return parseAuditJson(err.stdout);
+      } catch {
+        // Couldn't parse output
+      }
+    }
+    return null;
+  }
+}
+
+/** Exported for tests. */
+export function countBySeverity(advisories: DepAdvisory[]): Record<string, number> {
+  const bySeverity: Record<string, number> = {};
+  for (const a of advisories) {
+    bySeverity[a.severity] = (bySeverity[a.severity] || 0) + 1;
+  }
+  return bySeverity;
+}
+
 export async function scanDeps(input: ScanDepsInput): Promise<ScanDepsOutput> {
   let projectPath: string;
   try {
@@ -154,72 +232,27 @@ export async function scanDeps(input: ScanDepsInput): Promise<ScanDepsOutput> {
     projectPath = process.cwd();
   }
 
-  try {
-    const output = execSync('npm audit --json 2>/dev/null', {
-      cwd: projectPath,
-      encoding: 'utf-8',
-      timeout: 30_000,
-    });
+  const prod = runAudit(projectPath, true);
+  const all = runAudit(projectPath, false);
 
-    const audit = JSON.parse(output);
-    const vulnerabilities = audit.vulnerabilities || {};
-    const bySeverity: Record<string, number> = {};
-    const advisories: ScanDepsOutput['advisories'] = [];
+  // Fail closed: if the production-scoped audit is unavailable, grade everything
+  // rather than silently reporting a clean production tree.
+  const graded = prod ?? all ?? [];
 
-    for (const [name, vuln] of Object.entries(vulnerabilities) as [string, any][]) {
-      const severity = vuln.severity || 'unknown';
-      bySeverity[severity] = (bySeverity[severity] || 0) + 1;
-      advisories.push({
-        name,
-        severity,
-        title: vuln.via?.[0]?.title || vuln.via?.[0] || 'Unknown',
-        url: vuln.via?.[0]?.url || '',
-        fix_available: !!vuln.fixAvailable,
-      });
-    }
+  // Anything in the full audit but not the production one is dev-only.
+  const gradedNames = new Set(graded.map((a) => a.name));
+  const devOnly = prod ? (all ?? []).filter((a) => !gradedNames.has(a.name)) : [];
 
-    return {
-      total_advisories: advisories.length,
-      by_severity: bySeverity,
-      advisories: advisories.slice(0, 20), // Limit output
-    };
-  } catch (err: any) {
-    // npm audit exits non-zero when vulnerabilities are found — parse the output
-    if (err.stdout) {
-      try {
-        const audit = JSON.parse(err.stdout);
-        const vulnerabilities = audit.vulnerabilities || {};
-        const bySeverity: Record<string, number> = {};
-        const advisories: ScanDepsOutput['advisories'] = [];
-
-        for (const [name, vuln] of Object.entries(vulnerabilities) as [string, any][]) {
-          const severity = vuln.severity || 'unknown';
-          bySeverity[severity] = (bySeverity[severity] || 0) + 1;
-          advisories.push({
-            name,
-            severity,
-            title: vuln.via?.[0]?.title || vuln.via?.[0] || 'Unknown',
-            url: vuln.via?.[0]?.url || '',
-            fix_available: !!vuln.fixAvailable,
-          });
-        }
-
-        return {
-          total_advisories: advisories.length,
-          by_severity: bySeverity,
-          advisories: advisories.slice(0, 20),
-        };
-      } catch {
-        // Couldn't parse output
-      }
-    }
-
-    return {
-      total_advisories: 0,
-      by_severity: {},
-      advisories: [],
-    };
-  }
+  return {
+    total_advisories: graded.length,
+    by_severity: countBySeverity(graded),
+    advisories: graded.slice(0, 20), // Limit output
+    dev_advisories: {
+      total: devOnly.length,
+      by_severity: countBySeverity(devOnly),
+      advisories: devOnly.slice(0, 20),
+    },
+  };
 }
 
 export async function scanSecrets(input: ScanSecretsInput): Promise<ScanSecretsOutput> {
@@ -262,8 +295,10 @@ async function scanDirectory(
 ): Promise<void> {
   let entries;
   try {
-    entries = await fs.readdir(dir, { withFileTypes: true });
-  } catch {
+    entries = await listDirEntriesOrThrow(dir);
+  } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
     return;
   }
 

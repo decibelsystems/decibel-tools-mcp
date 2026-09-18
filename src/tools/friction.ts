@@ -4,6 +4,7 @@ import { log } from '../config.js';
 import { ensureDir } from '../dataRoot.js';
 import { resolveProjectPaths, validateWritePath, ResolvedProjectPaths } from '../projectRegistry.js';
 import { emitCreateProvenance } from './provenance.js';
+import { listDirOrThrow } from './shared/storeRead.js';
 
 // ============================================================================
 // Project Resolution Error
@@ -185,7 +186,7 @@ async function findFrictionFile(frictionId: string, projectId?: string): Promise
   const frictionDir = resolved.subPath('friction');
 
   try {
-    const files = await fs.readdir(frictionDir);
+    const files = await listDirOrThrow(frictionDir);
 
     // Exact match
     const exact = files.find(f => f === frictionId || f === `${frictionId}.md`);
@@ -196,7 +197,9 @@ async function findFrictionFile(frictionId: string, projectId?: string): Promise
     if (partial) return path.join(frictionDir, partial);
 
     return null;
-  } catch {
+  } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
     return null;
   }
 }
@@ -232,7 +235,7 @@ export async function logFriction(input: LogFrictionInput): Promise<LogFrictionO
   // Check for similar existing friction (same context + similar description)
   let signalStrength = 1;
   try {
-    const existingFiles = await fs.readdir(frictionDir);
+    const existingFiles = await listDirOrThrow(frictionDir);
     for (const file of existingFiles) {
       if (!file.endsWith('.md')) continue;
       const existing = await parseFrictionFile(path.join(frictionDir, file));
@@ -244,7 +247,9 @@ export async function logFriction(input: LogFrictionInput): Promise<LogFrictionO
         signalStrength++;
       }
     }
-  } catch {
+  } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
     // Directory doesn't exist yet
   }
 
@@ -319,7 +324,7 @@ export async function listFriction(input: ListFrictionInput): Promise<ListFricti
   let frictionList: FrictionSummary[] = [];
 
   try {
-    const files = await fs.readdir(frictionDir);
+    const files = await listDirOrThrow(frictionDir);
     
     for (const file of files) {
       if (!file.endsWith('.md')) continue;
@@ -338,7 +343,9 @@ export async function listFriction(input: ListFrictionInput): Promise<ListFricti
 
       frictionList.push(friction);
     }
-  } catch {
+  } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
     // Directory doesn't exist
   }
 

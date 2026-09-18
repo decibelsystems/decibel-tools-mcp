@@ -9,6 +9,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { resolveProjectPaths } from '../projectRegistry.js';
 import { log } from '../config.js';
+import { listDirEntriesOrThrow, countedStoreMeta, type StoreMetaFields } from './shared/storeRead.js';
 
 // ============================================================================
 // Types
@@ -92,6 +93,37 @@ export interface RunInfo {
   run_id: string;
   agent: AgentInfo;
   created_at: string;
+  /**
+   * Always present, so a caller always has something to render.
+   *
+   * This used to be implied by the ABSENCE of `completed_at` / `success` /
+   * `summary` — those are undefined for a run with no terminal event, and
+   * JSON.stringify drops undefined keys, so the row simply arrived without
+   * them. A consumer could not tell "this run never finished" from "these
+   * fields were lost in transit", which is the same absent-versus-empty
+   * ambiguity as ISS-0146 one layer up.
+   *
+   * Deliberately NOT 'running'. Liveness cannot be known from disk — a run
+   * with no terminal event may be in progress or may belong to a process that
+   * exited an hour ago, and today every run on disk is in that state (see
+   * ISS-0148). 'incomplete' claims only what the files actually show.
+   */
+  status: 'completed' | 'incomplete';
+  /**
+   * Timestamp of the most recent event. A FACT read off disk, not a judgement.
+   *
+   * This is deliberately not a `completed` flag derived from silence. Nothing
+   * can observe an agent's session ending — the process just exits — so any
+   * "this run finished" computed from a quiet period is an inference wearing
+   * the costume of a fact, and once a consumer inherits it as truth there is
+   * no way back. Different consumers also want different thresholds: an inbox
+   * cares about minutes, a hygiene report about days. Handing over the input
+   * lets each decide, and commits us to nothing.
+   *
+   * Absent only when the run has no events at all, which `event_count: 0`
+   * already states unambiguously.
+   */
+  last_event_at?: string;
   completed_at?: string;
   event_count: number;
   success?: boolean;
@@ -527,14 +559,25 @@ ${input.summary || 'No summary provided.'}
 /**
  * List runs for a project
  */
-export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] }> {
+export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] } & StoreMetaFields> {
   const projectId = input.projectId || input.project_id;
   const runsDir = getRunsDir(projectId);
 
-  // Ensure runs dir exists
-  await ensureDir(runsDir);
+  // Do NOT create the directory here. This tool is annotated readOnlyHint:true
+  // and callers treat it as a read: creating `.decibel/runs/` as a side effect
+  // of listing meant a mistyped project_id got a directory made for it and an
+  // empty list back, so "wrong project" and "no runs" were indistinguishable
+  // and the mistake left a trace on disk. A missing directory is simply no runs.
+  let entries;
+  try {
+    entries = await listDirEntriesOrThrow(runsDir);
+  } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { runs: [] };
+    throw err;
+  }
 
-  const entries = await fs.readdir(runsDir, { withFileTypes: true });
   const runDirs = entries
     .filter(e => e.isDirectory() && e.name.startsWith('RUN-'))
     .map(e => e.name);
@@ -544,6 +587,10 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
 
   const limit = input.limit || 20;
   const runs: RunInfo[] = [];
+  // A run directory that exists and cannot be read is not an absent run. The
+  // log line below already recorded it — on the server's stdout, where the
+  // caller reading `runs: []` will never see it.
+  let unreadable = 0;
 
   for (const run_id of runDirs.slice(0, limit)) {
     try {
@@ -551,7 +598,7 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
       const promptPath = path.join(runDir, 'prompt.json');
       const eventsPath = path.join(runDir, 'events.jsonl');
 
-      if (!await fileExists(promptPath)) continue;
+      if (!await fileExists(promptPath)) { unreadable++; continue; }
 
       const promptContent = await fs.readFile(promptPath, 'utf-8');
       const promptSpec = JSON.parse(promptContent) as PromptSpec;
@@ -563,6 +610,7 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
 
       // Count events and check for completion
       let eventCount = 0;
+      let last_event_at: string | undefined;
       let completed_at: string | undefined;
       let success: boolean | undefined;
       let summary: string | undefined;
@@ -575,6 +623,7 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
         // Check last event for completion
         if (lines.length > 0) {
           const lastEvent = JSON.parse(lines[lines.length - 1]) as VectorEvent;
+          last_event_at = lastEvent.ts;
           if (lastEvent.type === 'run_completed') {
             completed_at = lastEvent.ts;
             success = lastEvent.payload?.success;
@@ -587,17 +636,20 @@ export async function listRuns(input: ListRunsInput): Promise<{ runs: RunInfo[] 
         run_id,
         agent: promptSpec.agent,
         created_at: promptSpec.created_at,
+        last_event_at,
         completed_at,
         event_count: eventCount,
+        status: completed_at ? 'completed' : 'incomplete',
         success,
         summary,
       });
     } catch (err) {
+      unreadable++;
       log(`Vector: Error reading run ${run_id}: ${err}`);
     }
   }
 
-  return { runs };
+  return { runs, ...countedStoreMeta(runs.length, unreadable) };
 }
 
 /**

@@ -16,9 +16,9 @@ const KEY_PATTERN = /^DCBL-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const OFFLINE_GRACE_MS = 72 * 60 * 60 * 1000; // 72 hours
 
-// Supabase project for license verification (same as extension)
-const SUPABASE_URL = 'https://dfbwpgqvkijogxvxolqe.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRmYndwZ3F2a2lqb2d4dnhvbHFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzc1OTk2OTEsImV4cCI6MjA1MzE3NTY5MX0.AvAXbB6CswWCIKZ0zoVha9JEVFqZSMaV3VEhEEDVqxw';
+// Supabase project for license verification (Core)
+const SUPABASE_URL = 'https://dqftcixhsvcjtyxsxoao.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZnRjaXhoc3ZjanR5eHN4b2FvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcyMTgzMTYsImV4cCI6MjA4Mjc5NDMxNn0.erZq0zJMF-tATX7b0mofGsajFUvcqlZE5PQ4qcggmGc';
 
 // ============================================================================
 // Types

@@ -9,6 +9,7 @@ import { resolveProjectPaths, ResolvedProjectPaths, scanForProjects } from '../p
 // blank/epic-less next_actions (#20). parseIssueFile/parseEpicFile handle both
 // on-disk formats (.md frontmatter + YAML-only) and apply status filtering.
 import { listRepoIssues, listEpics } from './sentinel.js';
+import { listDirEntriesOrThrow } from './shared/storeRead.js';
 
 // ============================================================================
 // Project Resolution Error
@@ -95,7 +96,7 @@ async function getFilesFromDir(
   const files: FileInfo[] = [];
 
   try {
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    const entries = await listDirEntriesOrThrow(dirPath);
 
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry.name);
@@ -151,6 +152,8 @@ async function getFilesFromDir(
       }
     }
   } catch (error) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (error instanceof Error && error.message.startsWith('STORE_UNREADABLE')) throw error;
     // Directory might not exist, that's OK
     log(`Oracle: Could not read ${dirPath}:`, error);
   }
@@ -164,7 +167,7 @@ async function getFrictionFiles(resolved: ResolvedProjectPaths): Promise<Frictio
   const frictionList: FrictionInfo[] = [];
 
   try {
-    const entries = await fs.readdir(frictionDir, { withFileTypes: true });
+    const entries = await listDirEntriesOrThrow(frictionDir);
 
     for (const entry of entries) {
       if (entry.isFile() && entry.name.endsWith('.md')) {
@@ -199,6 +202,8 @@ async function getFrictionFiles(resolved: ResolvedProjectPaths): Promise<Frictio
       }
     }
   } catch (error) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (error instanceof Error && error.message.startsWith('STORE_UNREADABLE')) throw error;
     log(`Oracle: Could not read friction directory:`, error);
   }
 
@@ -684,7 +689,7 @@ async function loadSentinelIssues(resolved: ResolvedProjectPaths): Promise<Senti
   const issues: SentinelIssue[] = [];
 
   try {
-    const entries = await fs.readdir(issuesDir, { withFileTypes: true });
+    const entries = await listDirEntriesOrThrow(issuesDir);
 
     for (const entry of entries) {
       if (entry.isFile() && (entry.name.endsWith('.yaml') || entry.name.endsWith('.yml'))) {
@@ -700,7 +705,9 @@ async function loadSentinelIssues(resolved: ResolvedProjectPaths): Promise<Senti
         });
       }
     }
-  } catch {
+  } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
     // Issues directory might not exist
   }
 
@@ -712,7 +719,7 @@ async function loadEpicStatuses(resolved: ResolvedProjectPaths): Promise<Map<str
   const statuses = new Map<string, string>();
 
   try {
-    const entries = await fs.readdir(epicsDir, { withFileTypes: true });
+    const entries = await listDirEntriesOrThrow(epicsDir);
 
     for (const entry of entries) {
       if (entry.isFile() && (entry.name.endsWith('.yaml') || entry.name.endsWith('.yml') || entry.name.endsWith('.md'))) {
@@ -735,7 +742,9 @@ async function loadEpicStatuses(resolved: ResolvedProjectPaths): Promise<Map<str
         }
       }
     }
-  } catch {
+  } catch (err) {
+      // ISS-0153: "I could not look" must not be swallowed into "nothing found".
+      if (err instanceof Error && err.message.startsWith('STORE_UNREADABLE')) throw err;
     // Epics directory might not exist
   }
 

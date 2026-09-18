@@ -18,10 +18,6 @@ import { contextTools } from './context/index.js';
 import { agenticTools } from './agentic/index.js';
 import { roadmapTools } from './roadmap/index.js';
 import { architectTools } from './architect/index.js';
-import { deckTools } from './deck.js';
-import { senkenTools } from './senken.js';
-import { motherTools } from './mother.js';
-import { terminalTools } from './terminal.js';
 import { gitTools } from './git/index.js';
 import { auditorTools } from './auditor/index.js';
 import { workflowTools } from './workflow/index.js';
@@ -47,9 +43,10 @@ import {
   graduatedToolsToMcpDefinitions,
 } from './dojoGraduated.js';
 
-// Tier gating: explicit opt-in only (fail closed). Local dev: DECIBEL_PRO=1 DECIBEL_APPS=1.
+// Tier gating — require explicit opt-in. See the matching note in kernel.ts:
+// keying off `NODE_ENV !== 'production'` failed open on every install that
+// leaves NODE_ENV unset, which is the default case.
 const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
-const APPS_ENABLED = process.env.DECIBEL_APPS === '1';
 
 // ============================================================================
 // Aggregate All Tools
@@ -89,11 +86,17 @@ const coreTools: ToolSpec[] = [
   ...conductorTools,
 ];
 
-// App tools — Decibel internal (only when DECIBEL_APPS=1)
-function loadAppTools(): ToolSpec[] {
-  if (!APPS_ENABLED) return [];
-  return [...deckTools, ...senkenTools, ...motherTools, ...terminalTools];
-}
+// App tools — REMOVED (EPIC-0038 Phase 7)
+//
+// senken, deck, mother and terminal used to be dynamically imported here behind
+// DECIBEL_APPS=1. They are now extensions: each module exports a
+// DecibelExtension carrying its own manifest, facade spec and tools, and the
+// kernel loads it from the absolute-path allowlist in ~/.decibel/config.yaml.
+// See src/runtime/extensions.ts.
+//
+// Nothing here needs to know they exist, which is the improvement — this file
+// no longer carries a list of private module names that has to be kept in sync
+// with tsconfig.build.json and a launchd plist.
 
 // Pro tools (only when DECIBEL_PRO=1)
 async function loadProTools(): Promise<ToolSpec[]> {
@@ -103,13 +106,20 @@ async function loadProTools(): Promise<ToolSpec[]> {
     { voiceTools },
     { studioTools },
     { corpusTools },
+    { postOfficeTools },
+    { zoomTools },
   ] = await Promise.all([
     import('./voice/index.js'),
     import('./studio/index.js'),
     import('./corpus/index.js'),
+    import('./postoffice/index.js'),
+    import('./zoom/index.js'),
   ]);
 
-  return [...voiceTools, ...studioTools, ...corpusTools];
+  // zoomTools is empty unless DECIBEL_ZOOM=1 — it reaches an account-wide admin
+  // Zoom credential, so it is registered by explicit opt-in rather than gated
+  // after the fact. See ISS-0123.
+  return [...voiceTools, ...studioTools, ...corpusTools, ...postOfficeTools, ...zoomTools];
 }
 
 // Export sync version for backward compat (pro tools loaded async)
@@ -143,12 +153,14 @@ function loadGraduatedToolSpecs(): ToolSpec[] {
   });
 }
 
-// Async loader for full tool set (core + pro + graduated)
+// Async loader for full tool set (core + pro + graduated).
+// Extension tools are NOT included here — the kernel merges them in after
+// loading the allowlist, because whether they exist is a property of this
+// machine's config rather than of this build.
 export async function getAllTools(): Promise<ToolSpec[]> {
   const proTools = await loadProTools();
-  const appTools = loadAppTools();
   const graduatedToolSpecs = loadGraduatedToolSpecs();
-  return [...coreTools, ...proTools, ...appTools, ...graduatedToolSpecs];
+  return [...coreTools, ...proTools, ...graduatedToolSpecs];
 }
 
 // ============================================================================

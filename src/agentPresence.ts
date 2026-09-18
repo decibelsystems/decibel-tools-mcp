@@ -15,9 +15,22 @@ import os from 'os';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { log } from './config.js';
+import { withRetryResult } from './supabaseRetry.js';
 
 const BROKER_URL = `http://127.0.0.1:${process.env.CLAUDE_PEERS_PORT ?? '7899'}`;
 const ORG_ID = process.env.DECIBEL_ORG_ID || '1cb79e24-e06f-46c9-8a22-5ee025ffb0f4';
+
+/**
+ * The daemon's host identity for presence + command targeting. Defaults to
+ * os.hostname() but is overridable via DECIBEL_PRESENCE_HOST — needed where the
+ * OS hostname isn't a stable/unique daemon identity (containers with shared
+ * hostnames, or two daemons on one machine, e.g. a rolling restart or a test
+ * harness). target_host on hq.agent_commands matches this, so it must be the same
+ * value the presence writer stamps. Shared by the dispatcher (agentCommands.ts).
+ */
+export function resolveHost(): string {
+  return process.env.DECIBEL_PRESENCE_HOST || os.hostname();
+}
 const HEARTBEAT_MS = 30_000;
 const IDLE_AFTER_MS = 90_000;
 const ENDED_AFTER_MS = 5 * 60_000;
@@ -75,8 +88,228 @@ async function resolveProjectId(client: DbClient, cwd: string): Promise<string |
   return projectMap.get(key) ?? null;
 }
 
+// ============================================================================
+// Durable agent identity — the agent_id seam (ISS-0134 / EPIC-0037)
+// ============================================================================
+// hq.agent_sessions is EPHEMERAL: session_key dies with the process. hq.agents
+// is DURABLE: "this repo's Claude Code agent", stable across restarts, and it
+// is what a post-office message is addressed to. agent_sessions.agent_id is the
+// resolution edge between them, and HQ cannot populate it — the daemon owns
+// this write path, so the column stays inert until the code below fills it.
+//
+// Without it hq.resolve_agent_session() finds nothing, every message resolves
+// to delivered_session_key = NULL, and the post office records traffic it never
+// delivers. Honest, but inert.
+//
+// CARDINALITY IS MANY SESSIONS : ONE AGENT. That is not an assumption — HQ's
+// resolve_agent_session() ends in `order by last_seen_at desc limit 1`, which
+// only makes sense if several live sessions can share one agent_id. Two Claude
+// Code windows open on the same repo are one addressable agent; delivery goes
+// to whichever is most recently active.
+
+/**
+ * Derive the DURABLE address for a session.
+ *
+ * Must be stable across restarts, so anything process-scoped is disqualified:
+ * not the session key, not a PID, not a TTY. The claude-peers broker id looks
+ * stable but is not — it carries a random suffix (`decibel-hq-nby9`), so a
+ * restart would silently mint a second agent and split the thread history.
+ *
+ * Repo identity + runtime is the stable pair: the same checkout on the same
+ * runtime is the same logical agent, session after session.
+ *
+ * DELIBERATELY NOT caller-supplied. `reg.agent` is an untrusted display label
+ * from a local process, and a local caller that could name its own durable
+ * address could claim an EXISTING agent's name — resolve_agent_session picks
+ * the most recently seen session, so a frequent heartbeater would capture that
+ * agent's inbound mail. That is the principal-not-label gap (EPIC-0007) which
+ * Ben accepted as risk for EPIC-0037; accepting it is not a reason to widen it.
+ * An operator can still set the name explicitly via DECIBEL_AGENT_NAME, which
+ * is daemon-scoped env (trusted) rather than per-request payload.
+ */
+export function deriveAgentName(input: {
+  gitRoot?: string | null;
+  cwd?: string | null;
+  runtime: string;
+  host: string;
+}): string {
+  const explicit = process.env.DECIBEL_AGENT_NAME;
+  if (explicit && explicit.trim()) return explicit.trim().slice(0, 200);
+
+  // basename of the git root, else of the cwd — the repo IS the identity.
+  const root = (input.gitRoot || input.cwd || '').trim();
+  const key = root ? path.basename(root) : '';
+  // No filesystem context at all (a runtime that registered without a cwd):
+  // fall back to the daemon host so the name is still stable, just coarser.
+  const scope = key || input.host;
+  return `${scope}/${input.runtime}`.slice(0, 200);
+}
+
+/**
+ * agent name -> hq.agents.id, memoised for the process. The presence loop runs
+ * every 30s over every peer; without this each tick would re-round-trip the
+ * same handful of names forever.
+ */
+const agentIdCache = new Map<string, string>();
+
+/**
+ * Resolve (or create) the durable hq.agents row for `name` and return its id.
+ *
+ * Returns null rather than throwing when the table is absent — this ships
+ * BEFORE decibel-hq applies the post-office migration, and presence writing
+ * must keep working untouched in the meantime. When the migration lands the
+ * same code starts populating agent_id with no redeploy.
+ *
+ * `runtime` is written as a self-declared LABEL only. HQ's schema comment is
+ * explicit that it is never a trust signal, so nothing here gates on it.
+ */
+export async function resolveAgentId(
+  client: DbClient,
+  name: string,
+  runtime: string
+): Promise<string | null> {
+  const cached = agentIdCache.get(name);
+  if (cached) return cached;
+
+  // Upsert on the (org_id, name) unique key, then read the id back. Doing it as
+  // an upsert rather than select-then-insert keeps two daemons racing on the
+  // same name from both inserting.
+  const { data, error } = await withRetryResult(
+    () =>
+      client
+        .from('agents')
+        .upsert(
+          { org_id: ORG_ID, name, runtime },
+          { onConflict: 'org_id,name', ignoreDuplicates: false }
+        )
+        .select('id')
+        .maybeSingle(),
+    `presence.agent-resolve ${name}`
+  );
+
+  if (error) {
+    // Table not yet created (migration unapplied) is the EXPECTED state today,
+    // so log it once per name at low volume rather than every 30s tick.
+    if (!agentResolveWarned.has(name)) {
+      agentResolveWarned.add(name);
+      log(`Presence: agent identity unavailable for "${name}" (${error.message}) — agent_id left null.`);
+    }
+    return null;
+  }
+
+  const id = (data as { id?: string } | null)?.id;
+  if (!id) return null;
+  agentIdCache.set(name, id);
+  return id;
+}
+
+const agentResolveWarned = new Set<string>();
+
+/** Test seam: drop memoised ids so a test can observe a fresh resolve. */
+export function __resetAgentIdCache(): void {
+  agentIdCache.clear();
+  agentResolveWarned.clear();
+}
+
+/**
+ * Liveness window. MUST match hq.resolve_agent_session's `interval '60 seconds'`
+ * — if these drift, the roster says "online" for an agent the delivery path
+ * will refuse to deliver to, which is worse than either answer alone.
+ */
+const LIVENESS_WINDOW_MS = 60_000;
+
+export interface AgentRosterEntry {
+  id: string;
+  name: string;
+  runtime: string;
+  role: string | null;
+  capabilities: string[];
+  /** Durable lifecycle from hq.agents: 'active' | 'retired'. NOT liveness. */
+  status: string;
+  /** Liveness: does a live session currently resolve for this agent? */
+  online: boolean;
+  /** The session a message would be delivered into right now, or null. */
+  session_key: string | null;
+  last_seen_at: string | null;
+}
+
+/**
+ * The agents.list roster: hq.agents LEFT JOIN liveness.
+ *
+ * The roster is the DURABLE agents, each annotated with whether a live session
+ * resolves. An agent that exists but is offline MUST appear, marked offline,
+ * rather than vanish — a roster built from live sessions would silently drop
+ * exactly the agent you are trying and failing to reach, which is the same
+ * failure class as addressing a dead session.
+ *
+ * Two queries and a join in memory rather than one call to
+ * hq.resolve_agent_session per agent, which would be N round trips to render
+ * one board.
+ *
+ * CLOCK CAVEAT, and it is why this is a DISPLAY path only: the cutoff below is
+ * computed from the daemon's clock, while resolve_agent_session uses the
+ * database's now(). Skew between them can disagree at the 60s boundary. The
+ * authoritative answer at DELIVERY time is HQ's function, never this. Do not
+ * route a message using this roster's `online`.
+ *
+ * Returns null (not an empty roster) when the table is absent, so a caller can
+ * distinguish "no agents" from "post office not deployed yet".
+ */
+export async function listAgentRoster(client: DbClient): Promise<AgentRosterEntry[] | null> {
+  const { data: agents, error: agentsErr } = await withRetryResult(
+    () =>
+      client
+        .from('agents')
+        .select('id,name,runtime,role,capabilities,status')
+        .eq('org_id', ORG_ID),
+    'presence.agent-roster'
+  );
+  if (agentsErr) {
+    log(`Presence: agent roster unavailable (${agentsErr.message}).`);
+    return null;
+  }
+
+  const cutoff = new Date(Date.now() - LIVENESS_WINDOW_MS).toISOString();
+  const { data: sessions } = await withRetryResult(
+    () =>
+      client
+        .from('agent_sessions')
+        .select('agent_id,session_key,last_seen_at')
+        .eq('org_id', ORG_ID)
+        .eq('status', 'active')
+        .gt('last_seen_at', cutoff)
+        .order('last_seen_at', { ascending: false }),
+    'presence.agent-roster-liveness'
+  );
+
+  // Most recent wins, mirroring `order by last_seen_at desc limit 1`. The query
+  // is already sorted, so the first entry seen for an agent is the winner.
+  const live = new Map<string, { session_key: string; last_seen_at: string }>();
+  for (const s of (sessions ?? []) as Array<{
+    agent_id: string | null;
+    session_key: string;
+    last_seen_at: string;
+  }>) {
+    if (!s.agent_id || live.has(s.agent_id)) continue;
+    live.set(s.agent_id, { session_key: s.session_key, last_seen_at: s.last_seen_at });
+  }
+
+  return ((agents ?? []) as Array<Omit<AgentRosterEntry, 'online' | 'session_key' | 'last_seen_at'>>).map(
+    (a) => {
+      const hit = live.get(a.id);
+      return {
+        ...a,
+        capabilities: a.capabilities ?? [],
+        online: Boolean(hit),
+        session_key: hit?.session_key ?? null,
+        last_seen_at: hit?.last_seen_at ?? null,
+      };
+    }
+  );
+}
+
 async function tick(client: DbClient): Promise<void> {
-  const host = os.hostname();
+  const host = resolveHost();
   const nowMs = Date.now();
   const nowIso = new Date(nowMs).toISOString();
 
@@ -84,6 +317,13 @@ async function tick(client: DbClient): Promise<void> {
   for (const p of peers) {
     if (!p.id) continue;
     const project_id = await resolveProjectId(client, p.cwd);
+    // Durable identity for this session. git_root is preferred over cwd: a peer
+    // sitting in a subdirectory of the repo is the same agent as one at the top.
+    const agent_id = await resolveAgentId(
+      client,
+      deriveAgentName({ gitRoot: p.git_root, cwd: p.cwd, runtime: 'claude-code', host }),
+      'claude-code'
+    );
     const row = {
       org_id: ORG_ID,
       host,
@@ -92,6 +332,10 @@ async function tick(client: DbClient): Promise<void> {
       // These are Claude Code sessions read from the claude-peers broker; tag the
       // runtime so HQ's /agents board renders the runtime badge + filter (P1/P5).
       runtime: 'claude-code',
+      // Only sent once resolvable. Before the post-office migration lands the
+      // column does not exist and PostgREST rejects the ENTIRE row on an
+      // unknown key — which would take down presence writing that works today.
+      ...(agent_id ? { agent_id } : {}),
       summary: p.summary || null,
       cwd: p.cwd || null,
       project_id,
@@ -104,7 +348,10 @@ async function tick(client: DbClient): Promise<void> {
       // are a follow-on (agent-side self-report; not daemon-observable).
       meta: { last_action_at: p.last_seen || nowIso },
     };
-    const { error } = await client.from('agent_sessions').upsert(row, { onConflict: 'org_id,host,session_key' });
+    const { error } = await withRetryResult(
+      () => client.from('agent_sessions').upsert(row, { onConflict: 'org_id,host,session_key' }),
+      `presence.upsert ${p.id}`,
+    );
     if (error) log(`Presence: upsert ${p.id} failed: ${error.message}`);
   }
 
@@ -141,6 +388,51 @@ export interface LocalAgentRegistration {
   cwd?: string | null;
   summary?: string | null;
   meta?: Record<string, unknown>;
+  // Lifecycle: SDK heartbeat keeps a session 'active'; stop() sends 'ended'.
+  // Only 'active' | 'ended' accepted (idle is the daemon stale-sweep's job).
+  status?: 'active' | 'ended';
+}
+
+// ---------------------------------------------------------------------------
+// Write-time presence-field belt (NON-encoding) — co-designed with decibel-hq.
+// ---------------------------------------------------------------------------
+// HQ's /agents board already escapes these at render (React JSX text children),
+// so the daemon MUST NOT HTML-encode here — that would double-escape and corrupt
+// legitimate data (a real summary like "fix <Button> when a < b"). The correct
+// write-time defense-in-depth is non-encoding: cap length + strip control chars /
+// null bytes (preserving \t\n\r) so the stored value stays faithful but bounded.
+// Also closes the review's "no validation on meta/result blobs" finding.
+
+const FIELD_CAPS = { agent: 200, summary: 500, cwd: 1024 } as const;
+const META_VALUE_CAP = 1000;
+const META_MAX_BYTES = 4096;
+// C0 controls (U+0000..U+001F) + DEL (U+007F), EXCEPT tab/newline/carriage-return.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
+/** Strip control chars/null bytes and cap length. Empty-after-clean → null. */
+export function sanitizeText(s: string | null | undefined, maxLen: number): string | null {
+  if (s == null) return null;
+  const cleaned = String(s).replace(CONTROL_CHARS, '').slice(0, maxLen);
+  return cleaned.length ? cleaned : null;
+}
+
+/**
+ * Flatten meta to display-safe primitives: strings cleaned + capped, numbers/
+ * booleans/null kept, nested objects/arrays dropped (HQ typeof-guards numeric
+ * meta and renders strings as text). If the result still exceeds META_MAX_BYTES,
+ * drop it entirely — the caller re-adds the trusted last_action_at.
+ */
+export function sanitizeMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!meta || typeof meta !== 'object') return {};
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(meta)) {
+    if (typeof v === 'string') out[k] = v.replace(CONTROL_CHARS, '').slice(0, META_VALUE_CAP);
+    else if (typeof v === 'number' || typeof v === 'boolean' || v === null) out[k] = v;
+    // nested objects/arrays intentionally dropped
+  }
+  if (Buffer.byteLength(JSON.stringify(out)) > META_MAX_BYTES) return {};
+  return out;
 }
 
 /**
@@ -153,29 +445,45 @@ export async function writeLocalAgentSession(reg: LocalAgentRegistration): Promi
   if (!client) return false;
   if (!reg.session_key || !reg.runtime) return false;
 
-  const host = os.hostname();
+  const host = resolveHost();
   const nowIso = new Date().toISOString();
   const project_id = await resolveProjectId(client, reg.cwd || '');
+  const ended = reg.status === 'ended';
+  // Durable identity. The SDK gives us no git_root, so the cwd basename is the
+  // repo key. Note the address is derived from WHERE the runtime is, never from
+  // reg.agent — see deriveAgentName on why a caller must not name itself.
+  const agent_id = await resolveAgentId(
+    client,
+    deriveAgentName({ cwd: reg.cwd, runtime: reg.runtime, host }),
+    reg.runtime
+  );
   const row = {
     org_id: ORG_ID,
     host,
     session_key: reg.session_key,
     runtime: reg.runtime,
-    agent: reg.agent ?? null,
-    summary: reg.summary ?? null,
-    cwd: reg.cwd ?? null,
+    // See the claude-peers path: omitted, not nulled, until the column exists.
+    ...(agent_id ? { agent_id } : {}),
+    // Non-encoding belt on caller-supplied display fields (store-raw / escape-at-
+    // render is HQ's job; we only cap length + strip control chars/null bytes).
+    agent: sanitizeText(reg.agent, FIELD_CAPS.agent),
+    summary: sanitizeText(reg.summary, FIELD_CAPS.summary),
+    cwd: sanitizeText(reg.cwd, FIELD_CAPS.cwd),
     project_id,
-    status: 'active',
+    status: ended ? 'ended' : 'active',
     started_at: nowIso,
     last_seen_at: nowIso,
-    ended_at: null as string | null,
-    meta: { last_action_at: nowIso, ...(reg.meta ?? {}) },
+    ended_at: ended ? nowIso : null,
+    // Default last_action_at to now; a self-reporting SDK may override it via meta
+    // (intended richer signal — HQ reads last_seen_at, not this, for liveness).
+    meta: { last_action_at: nowIso, ...sanitizeMeta(reg.meta) },
   };
   // started_at only matters on first insert; onConflict updates the rest. We let it
   // re-send started_at — harmless on heartbeat since HQ reads last_seen_at for liveness.
-  const { error } = await client
-    .from('agent_sessions')
-    .upsert(row, { onConflict: 'org_id,host,session_key' });
+  const { error } = await withRetryResult(
+    () => client.from('agent_sessions').upsert(row, { onConflict: 'org_id,host,session_key' }),
+    `presence.local-register ${reg.session_key}`,
+  );
   if (error) {
     log(`Presence: local register ${reg.session_key} (${reg.runtime}) failed: ${error.message}`);
     return false;

@@ -31,9 +31,22 @@ function oneOf<T extends string>(v: unknown, allowed: readonly T[]): T | undefin
   return typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : undefined;
 }
 
-/** Parse a sentinel issue .md into an IssueRecord. source_key = filename stem (no .md). */
+/**
+ * Parse a sentinel issue record into an IssueRecord.
+ *
+ * Handles both on-disk formats. `.md` records are frontmatter fenced with
+ * `---`; `.yml`/`.yaml` records are bare YAML with no fence. Previously this
+ * only stripped `.md` from the source_key and only read fenced frontmatter,
+ * so a bare-YAML record imported as a junk row — title falling back to the
+ * filename stem, status defaulting to `open`, and the entire YAML text landing
+ * in `details` — while reporting success.
+ *
+ * source_key is the filename stem with any record extension removed. Stripping
+ * only `.md` would let a `.yml` record carry its extension into the key and
+ * collide with a later correct import under a different key for the same issue.
+ */
 export function parseIssueMarkdown(filename: string, content: string): IssueRecord {
-  const source_key = filename.replace(/\.md$/i, '');
+  const source_key = filename.replace(/\.(md|ya?ml)$/i, '');
   let fm: Record<string, unknown> = {};
   let body = content;
 
@@ -45,6 +58,24 @@ export function parseIssueMarkdown(filename: string, content: string): IssueReco
       fm = {};
     }
     body = content.slice(m[0].length);
+  } else if (!/^---/.test(content.trimStart())) {
+    // Bare-YAML record: the whole file is frontmatter and there is no body.
+    // If close_issue appended a markdown section (see ISS-0129), parse only
+    // the region above the first column-0 heading — the same salvage boundary
+    // the reader uses, anchored at column 0 so markdown inside a description
+    // block scalar is left intact.
+    const lines = content.split('\n');
+    const headingIdx = lines.findIndex((l) => /^#{1,6}\s/.test(l));
+    const region = headingIdx > 0 ? lines.slice(0, headingIdx).join('\n') : content;
+    try {
+      const parsed = parseYaml(region) as Record<string, unknown> | null;
+      if (parsed && typeof parsed === 'object') {
+        fm = parsed;
+        body = '';
+      }
+    } catch {
+      fm = {};
+    }
   }
 
   const heading = body.match(/^#\s+(.+)$/m);
@@ -56,7 +87,7 @@ export function parseIssueMarkdown(filename: string, content: string): IssueReco
   return {
     source_key,
     title,
-    details: body.trim() || undefined,
+    details: body.trim() || asString(fm.description) || undefined,
     severity: oneOf(fm.severity, SEVERITIES),
     status: oneOf(fm.status, STATUSES) ?? 'open',
     priority: oneOf(fm.priority, PRIORITIES),

@@ -1,0 +1,11 @@
+event_id: PROV-20260711T153553-521
+timestamp: 2026-07-11T15:35:53.521Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - friction:log:2026-07-11T15-35-53Z-want-a-one-click-setup-app-for-cursor-and-claude-c
+reason_code: initial_creation
+summary: "Logged friction: Want a one-click setup app for Cursor and Claude Code (and Claude Desktop) that writes all the needed config files automatically. Today each client requires hand-editing MCP config in a different location — Cursor at ~/.cursor/mcp.json or per-project .cursor/mcp.json, Claude Code at .mcp.json / ~/.claude/settings.json, Claude Desktop at ~/Library/Application Support/Claude/claude_desktop_config.json — plus optionally ~/.decibel/config.yaml for a license key. A new user has to know which file per client and paste JSON by hand. Envisioned: a single installer/app that detects installed clients and writes the correct MCP server entry (and license config where needed) in one step. Related to the license/config onboarding friction logged earlier."
+fingerprint_before: null
+fingerprint_after: sha256:86869a06cc2ea960

@@ -38,6 +38,13 @@ export interface TransportConfig {
  */
 export interface TransportAdapter {
   readonly name: string;
-  start(kernel: ToolKernel, config: TransportConfig): Promise<void>;
+  /**
+   * `kernel` is null for adapters that own no runtime and proxy to a shared
+   * one (ThinStdioAdapter). That is the whole point of Phase 4: the caller
+   * must be able to skip building a kernel entirely, which it cannot do if
+   * every adapter signature demands one. Adapters that DO need a kernel
+   * reject null explicitly rather than assuming it is present.
+   */
+  start(kernel: ToolKernel | null, config: TransportConfig): Promise<void>;
   stop(): Promise<void>;
 }

@@ -1,0 +1,11 @@
+event_id: PROV-20260814T192418-120
+timestamp: 2026-08-14T19:24:18.120Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:epic:EPIC-0036
+reason_code: initial_creation
+summary: "Created epic: Zoom meeting-summary ingestion with multi-client routing"
+fingerprint_before: null
+fingerprint_after: sha256:ef1a55d88ffc6046

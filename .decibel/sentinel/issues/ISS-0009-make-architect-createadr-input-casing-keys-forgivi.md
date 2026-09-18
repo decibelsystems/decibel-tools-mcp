@@ -1,0 +1,39 @@
+---
+uid: 019b1fbe-cfd9-7ece-86c3-76faffd314f3
+id: ISS-0009
+projectId: decibel-tools-mcp
+status: closed
+priority: high
+tags:
+  - architect
+  - adr
+  - mcp
+  - validation
+  - ux
+  - bug
+created_at: 2025-12-15T02:02:37.401Z
+updated_at: 2026-09-01T21:49:11.342Z
+closed_at: 2026-09-01T21:49:11.279Z
+resolution: Fixed. src/tools/architect/index.ts:44 maps project_id to projectId through an alias table, so both casings are accepted rather than returning an empty 424.
+---
+# Make architect_createAdr input casing/keys forgiving and return actionable errors
+
+**Status:** closed
+
+## Details
+
+Observed: calling `architect_createAdr` returned HTTP 424 with an empty message. Root cause identified as a casing/key mismatch (strict schema / parameter naming).
+
+Fix:
+- Normalize input keys in the MCP wrapper (accept both camelCase and snake_case variants, e.g. projectId/project_id, relatedIssues/related_issues, relatedEpics/related_epics).
+- Add preflight validation that produces a clear error (which key is missing/unknown) before invoking downstream.
+- Include downstream stderr/stdout in the error payload when available (avoid empty 424s).
+
+Acceptance:
+- The same ADR create call succeeds regardless of key casing.
+- If required fields are missing, user sees a precise message listing missing/unknown keys.
+- Errors include context (tool name, args summary, exit code/trace).
+
+## Resolution
+
+Fixed. src/tools/architect/index.ts:44 maps project_id to projectId through an alias table, so both casings are accepted rather than returning an empty 424.

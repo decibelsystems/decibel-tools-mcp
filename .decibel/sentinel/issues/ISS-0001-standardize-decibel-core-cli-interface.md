@@ -1,0 +1,38 @@
+---
+uid: 019b0592-e3b0-7ac0-8190-b1af9770d982
+id: ISS-0001
+projectId: decibel-tools-mcp
+status: closed
+priority: high
+epic_id: EPIC-0008
+tags:
+  - cli
+  - architecture
+  - phase-1
+created_at: 2025-12-10T00:04:31.280Z
+updated_at: 2026-08-29T16:18:24.737Z
+closed_at: 2026-08-29T16:18:24.736Z
+resolution: "Architecture changed: MCP server is now native TypeScript, not a shim over Python CLI. The CLI standardization approach was superseded."
+---
+# Standardize Decibel Core CLI interface
+
+**Status:** closed
+**Epic:** EPIC-0008
+
+## Details
+
+Define and standardize the CLI interface for all Decibel tools so the Node MCP shim has a consistent contract to call.
+
+Requirements:
+- Each tool category (sentinel, oracle, architect, designer, friction, learnings) has a top-level CLI entry point
+- Consistent argument patterns: `decibel <category> <command> [--project <id>] [--json]`
+- All commands support `--json` flag for structured output (Node shim will parse this)
+- Exit codes follow convention: 0=success, 1=error, 2=validation failure
+- Errors written to stderr, results to stdout
+- Document the full CLI surface in a single reference
+
+This is the foundation that makes the Node shim thin and maintainable.
+
+## Resolution
+
+Architecture changed: MCP server is now native TypeScript, not a shim over Python CLI. The CLI standardization approach was superseded.

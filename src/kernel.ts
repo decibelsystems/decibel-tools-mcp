@@ -16,9 +16,12 @@ import { logToolEvent } from './tools/shared/runTracker.js';
 import { log } from './config.js';
 import type { ToolSpec, ToolResult } from './tools/types.js';
 import type { FacadeSpec, DetailTier, McpToolDefinition } from './facades/types.js';
-import { coreFacades, proFacades, appFacades } from './facades/definitions.js';
+import { coreFacades, proFacades } from './facades/definitions.js';
+import { loadExtensions, type ExtensionLoadResult } from './runtime/extensions.js';
 import { buildMcpDefinitions, validateFacades } from './facades/index.js';
 import { getEnabledFacades } from './toolConfig.js';
+import { CircuitBreakerRegistry, type CircuitSnapshot } from './runtime/circuitBreaker.js';
+import { withResolutionTracking, currentResolution } from './runtime/projectResolution.js';
 
 // ============================================================================
 // Dispatch Context — agent-readiness plumbing
@@ -44,6 +47,15 @@ export interface DispatchContext {
   allowedFacades?: string[];
   /** License tier — when set, pro facades are rejected for 'core' tier */
   tier?: 'core' | 'pro' | 'apps';
+  /**
+   * Which transport carried this call. Set by the adapter, never by the caller.
+   * 'http' rejects facades marked localOnly — see FacadeSpec.localOnly.
+   *
+   * Unset means stdio: a context arriving without a transport came from an
+   * in-process caller, and defaulting the ABSENT case to 'http' would break
+   * every existing direct kernel consumer. The HTTP adapters set it explicitly.
+   */
+  transport?: 'stdio' | 'http';
   /** Engagement mode: 'suggest' | 'curate' | 'compose' */
   engagementMode?: string;
   /** Identity of the calling user (Supabase access token / JWT, via X-User-Key) */
@@ -54,14 +66,43 @@ export interface DispatchContext {
   requestId?: string;
 }
 
-// Tier gating (same logic as tools/index.ts). Fail CLOSED: explicit opt-in only.
-// NODE_ENV is unset in a default `npx @decibelsystems/tools` install, so the old
-// `NODE_ENV !== 'production'` branch exposed every pro/apps facade to every user.
+// Tier gating (same logic as tools/index.ts).
+//
+// Fails CLOSED: opt in explicitly. The previous form OR'd in
+// `NODE_ENV !== 'production'`, which is true whenever NODE_ENV is simply unset —
+// the default for a plain `npx @decibelsystems/tools` install and for any client
+// that spawns the server without a curated env (Claude Desktop, Cursor). That
+// silently exposed every pro and apps facade, including `terminal` (reads
+// DX_WALLET_PRIVATE_KEY) and the Postgres trading facades, to ordinary users.
 const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
-const APPS_ENABLED = process.env.DECIBEL_APPS === '1';
 
 // Heartbeat/poll reads: 18k of 18.3k run-log events were coord_status polls.
 const POLLING_TOOLS = new Set(['coord_status', 'coord_heartbeat', 'coord_inbox']);
+
+// Apps-tier facades are no longer env-gated. They arrive as extensions from the
+// allowlist in ~/.decibel/config.yaml — see runtime/extensions.ts. DECIBEL_APPS
+// was machine-dependent in the worst way: it lived in a launchd plist, so
+// regenerating the plist dropped four facades with no error on any surface.
+let lastExtensionLoad: ExtensionLoadResult | null = null;
+
+/**
+ * What the last createKernel() call loaded, and what it refused. Surfaced on
+ * /health so a rejected extension is visible without reading the daemon log.
+ */
+export function getExtensionDiagnostics(): {
+  loaded: Array<{ name: string; version: string; tier: string; facades: string[] }>;
+  rejected: Array<{ entry: string; reason: string }>;
+} {
+  return {
+    loaded: (lastExtensionLoad?.extensions ?? []).map(e => ({
+      name: e.manifest.name,
+      version: e.manifest.version,
+      tier: e.manifest.tier,
+      facades: e.facades.map(f => f.name),
+    })),
+    rejected: lastExtensionLoad?.rejected ?? [],
+  };
+}
 
 // ============================================================================
 // Tool Kernel
@@ -98,6 +139,15 @@ export interface BatchResult {
   action: string;
   result?: ToolResult;
   error?: string;
+  /**
+   * Machine-readable failure kind. Present only for STRUCTURAL failures — the
+   * call never ran because nothing by that name is registered. A call that ran
+   * and failed carries its failure in `result.isError` instead, which is a
+   * different thing and must stay distinguishable: "this facade does not exist
+   * here" and "this action returned an error" need different reactions from a
+   * caller, and only the first is a configuration problem.
+   */
+  code?: 'UNKNOWN_FACADE';
   duration_ms: number;
 }
 
@@ -129,13 +179,26 @@ export interface ToolKernel {
    * Get MCP tool definitions for the tools/list response.
    * Returns facade definitions filtered by detail tier.
    */
-  getMcpToolDefinitions(tier?: DetailTier): McpToolDefinition[];
+  getMcpToolDefinitions(
+    tier?: DetailTier,
+    opts?: { transport?: 'stdio' | 'http' }
+  ): McpToolDefinition[];
 
   /** Subscribe to dispatch events (dispatch, result, error) */
   on(event: string, listener: (evt: DispatchEvent) => void): void;
 
   /** Unsubscribe from dispatch events (for SSE cleanup) */
   off(event: string, listener: (evt: DispatchEvent) => void): void;
+
+  /**
+   * Circuits that are open or accumulating faults, keyed by facade.
+   * Empty object means every facade is healthy. Surfaced on /health so a
+   * degraded dependency is visible without reading the dispatch log.
+   */
+  circuitSnapshot(): Record<string, CircuitSnapshot>;
+
+  /** Force a circuit closed (operator escape hatch, and test hygiene). */
+  resetCircuit(key?: string): void;
 
   /** Total internal tool count */
   toolCount: number;
@@ -144,46 +207,161 @@ export interface ToolKernel {
 }
 
 /**
- * Create the tool kernel. Call once at startup — both transports share it.
+ * Coerce params that arrived as JSON strings but whose target tool's schema
+ * declares them as object or array. Facade MCP definitions expose only
+ * `{action}` with additionalProperties, so callers get no type info for
+ * nested params and often serialize them (ISS-0112, ISS-0116). A parse
+ * failure or type mismatch leaves the value untouched — the tool's own
+ * validation stays the source of truth for errors.
  */
-/**
- * Facade MCP schemas only declare `action` (+ additionalProperties), so clients
- * have no type to coerce against and array/object params can arrive as
- * JSON-encoded strings ("[\"a\",\"b\"]"). Handlers then crash (`tags.join is
- * not a function`) or persist the blob verbatim. Parse those strings back
- * using the internal tool's real inputSchema. Unparseable strings are left
- * alone so the handler's own validation reports them.
- */
-export function coerceParams(
+export function coerceStringifiedParams(
   params: Record<string, unknown>,
-  schema: { properties?: Record<string, unknown> } | undefined,
+  schema: ToolSpec['definition']['inputSchema']
 ): Record<string, unknown> {
   const props = schema?.properties;
   if (!props) return params;
-  for (const [key, spec] of Object.entries(props)) {
-    const v = params[key];
-    if (typeof v !== 'string') continue;
-    const type = (spec as { type?: unknown })?.type;
-    const wantsArray = type === 'array' || (Array.isArray(type) && type.includes('array'));
-    const wantsObject = type === 'object' || (Array.isArray(type) && type.includes('object'));
-    if (!wantsArray && !wantsObject) continue;
-    const t = v.trim();
-    if (!(wantsArray && t.startsWith('[')) && !(wantsObject && t.startsWith('{'))) continue;
-    try { params[key] = JSON.parse(t); } catch { /* leave as-is */ }
+
+  let out: Record<string, unknown> | undefined;
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value !== 'string') continue;
+
+    const prop = props[key] as { type?: string | string[] } | undefined;
+    if (!prop) continue;
+    const types = Array.isArray(prop.type) ? prop.type : [prop.type];
+    const wantsObject = types.includes('object');
+    const wantsArray = types.includes('array');
+    if (!wantsObject && !wantsArray) continue;
+    // String is also acceptable per the schema — don't second-guess the caller
+    if (types.includes('string')) continue;
+
+    const trimmed = value.trim();
+    const looksObject = trimmed.startsWith('{') && trimmed.endsWith('}');
+    const looksArray = trimmed.startsWith('[') && trimmed.endsWith(']');
+    if (!(wantsObject && looksObject) && !(wantsArray && looksArray)) continue;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    const isPlainObject = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
+    if ((wantsObject && isPlainObject) || (wantsArray && Array.isArray(parsed))) {
+      out ??= { ...params };
+      out[key] = parsed;
+    }
   }
-  return params;
+  return out ?? params;
 }
 
+/**
+ * Tell the caller when the project it was served is not the project it asked
+ * for. Only fires when the resolver SUBSTITUTED one — a normal call is byte
+ * for byte unchanged, so this adds no noise to the ninety-nine percent case.
+ *
+ * The substitution is silent today by construction: strategy 7 returns a
+ * different id, and strategy 6 returns the requested id attached to a
+ * different path, so a caller comparing what it asked for against what it got
+ * cannot even detect the second one. HQ fans out across 34 projects; without
+ * this, a mistyped or unregistered id renders another project's issues under
+ * the requested project's name and nothing anywhere looks wrong.
+ *
+ * This does not change resolution — whether the forgiving strategies should
+ * apply to programmatic callers at all is a separate decision. It makes the
+ * outcome legible either way.
+ */
+function annotateResolution(result: ToolResult): ToolResult {
+  const record = currentResolution();
+  if (!record || record.matched) return result;
+
+  const text = result.content?.find((c) => c.type === 'text')?.text;
+  if (!text) return result;
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    return result; // Not JSON — leave it alone rather than mangling it.
+  }
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    return result;
+  }
+
+  const annotated = {
+    ...(payload as Record<string, unknown>),
+    project_resolution: {
+      requested: record.requested,
+      resolved: record.resolvedId,
+      strategy: record.strategy,
+      matched: false,
+      warning:
+        `This result is for project "${record.resolvedId}", not "${record.requested}". ` +
+        'The requested project could not be resolved, so the runtime substituted one ' +
+        'discovered from its own environment. Treat this data as belonging to the ' +
+        'resolved project.',
+    },
+  };
+
+  return {
+    ...result,
+    content: [{ type: 'text', text: JSON.stringify(annotated, null, 2) }],
+  };
+}
+
+/**
+ * Invoke a handler with project-resolution tracking, and annotate its result
+ * before the tracking scope closes. Annotating outside the scope reads an
+ * empty store — AsyncLocalStorage ends `run` when the callback settles, so the
+ * record is gone by the time the caller has the value in hand.
+ */
+function runTracked(tool: ToolSpec, params: Record<string, unknown>): Promise<ToolResult> {
+  return withResolutionTracking(async () => annotateResolution(await tool.handler(params)));
+}
+
+/** Best-effort one-line reason from an `isError` result, for circuit reporting. */
+function resultErrorText(result: ToolResult): string | undefined {
+  const text = result.content?.find((c) => c.type === 'text')?.text;
+  if (!text) return undefined;
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown };
+    if (typeof parsed.error === 'string') return parsed.error;
+  } catch {
+    // Not JSON — fall through to the raw text.
+  }
+  return text.slice(0, 200);
+}
+
+/**
+ * Create the tool kernel. Call once at startup — both transports share it.
+ */
 export async function createKernel(): Promise<ToolKernel> {
   const tools = await getAllTools();
   const toolMap = new Map(tools.map(t => [t.definition.name, t]));
 
-  // Build facade registry (core + pro if enabled + apps if enabled)
-  let facades = [
+  // Build facade registry: core, plus pro when licensed, plus whatever the
+  // extension allowlist yields.
+  const baseFacades = [
     ...coreFacades,
     ...(PRO_ENABLED ? proFacades : []),
-    ...(APPS_ENABLED ? appFacades : []),
   ];
+
+  // Extensions register into this same toolMap and facade list, so dispatching
+  // to an extension facade takes exactly the path a core call takes — no second
+  // lookup, no parallel registry, nothing that can disagree with core.
+  //
+  // Fail closed by absence: a facade that was not allowlisted is never
+  // registered, so dispatch answers "unknown facade" rather than returning an
+  // empty result. That distinction matters more than it looks — an unregistered
+  // facade returning something zero-shaped is indistinguishable from a real
+  // empty answer, which is exactly how a broken voice inbox read as "0 messages"
+  // for five hours on 2026-09-01.
+  const loaded = await loadExtensions(new Set(baseFacades.map(f => f.name)));
+  lastExtensionLoad = loaded;
+  for (const tool of loaded.tools) {
+    toolMap.set(tool.definition.name, tool);
+  }
+
+  let facades = [...baseFacades, ...loaded.facades];
 
   // DECIBEL_FACADES env var or config: restrict to only these facades
   // Always include 'registry' so config tools remain accessible
@@ -230,19 +408,70 @@ export async function createKernel(): Promise<ToolKernel> {
   const emitter = new EventEmitter();
   emitter.on('error', () => {});
 
-  // Pre-build MCP definitions for each tier (cached)
-  const mcpDefCache = new Map<DetailTier, McpToolDefinition[]>();
+  // Per-facade circuit breaker. See src/runtime/circuitBreaker.ts for what
+  // counts as a fault and why `isError` alone is neither necessary nor
+  // sufficient.
+  const circuits = new CircuitBreakerRegistry();
 
-  function getMcpToolDefinitions(tier: DetailTier = 'full'): McpToolDefinition[] {
-    let cached = mcpDefCache.get(tier);
+  /**
+   * Emit without letting a subscriber take the call down with it. Listeners
+   * run synchronously on the dispatch path — an SSE writer whose socket died
+   * mid-write, or a logging hook with a bad assumption, would otherwise throw
+   * straight out of a tool call that had already succeeded.
+   */
+  function safeEmit(event: string, payload: DispatchEvent): void {
+    try {
+      emitter.emit(event, payload);
+    } catch (err) {
+      log(`Kernel: dispatch listener for "${event}" threw — ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /** The circuit a call belongs to: its facade, or the facade that owns the tool. */
+  function circuitKey(name: string): string {
+    if (facadeMap.has(name)) return name;
+    return toolToFacade.get(name)?.name ?? name;
+  }
+
+  function circuitOpenResult(
+    key: string,
+    decision: { retryAfterMs: number; lastError?: string; openedAt?: string }
+  ): ToolResult {
+    return {
+      content: [{ type: 'text', text: JSON.stringify({
+        error: `Facade "${key}" is temporarily unavailable — circuit open after repeated failures`,
+        circuit_open: true,
+        facade: key,
+        retry_after_ms: decision.retryAfterMs,
+        opened_at: decision.openedAt,
+        last_error: decision.lastError,
+        hint: 'The facade\'s dependency (database, network service, or mount) is failing. Other facades are unaffected.',
+      }) }],
+      isError: true,
+    };
+  }
+
+  // Pre-build MCP definitions for each tier (cached). Keyed on transport too:
+  // an HTTP listing must not advertise a local-only facade it would then refuse
+  // to dispatch. Offering a tool and rejecting every call to it is a worse
+  // failure than not offering it — the caller reads the rejection as a bug.
+  const mcpDefCache = new Map<string, McpToolDefinition[]>();
+
+  function getMcpToolDefinitions(
+    tier: DetailTier = 'full',
+    opts: { transport?: 'stdio' | 'http' } = {}
+  ): McpToolDefinition[] {
+    const key = `${tier}:${opts.transport ?? 'stdio'}`;
+    let cached = mcpDefCache.get(key);
     if (!cached) {
-      cached = buildMcpDefinitions(facades, tier, toolMap);
-      mcpDefCache.set(tier, cached);
+      const visible = opts.transport === 'http' ? facades.filter(f => !f.localOnly) : facades;
+      cached = buildMcpDefinitions(visible, tier, toolMap);
+      mcpDefCache.set(key, cached);
     }
     return cached;
   }
 
-  async function dispatch(
+  async function dispatchInner(
     name: string,
     args: Record<string, unknown>,
     context?: DispatchContext
@@ -262,6 +491,29 @@ export async function createKernel(): Promise<ToolKernel> {
           content: [{ type: 'text', text: JSON.stringify({
             error: `Facade "${facadeKey}" not in allowed scope`,
             allowed_facades: allowed,
+          }) }],
+          isError: true,
+        };
+      }
+    }
+
+    // Local-only enforcement: a facade whose blast radius exceeds the caller's
+    // own project never leaves the local machine, whatever the tier says.
+    // Checked BEFORE tier, because a licensed pro caller over HTTP is exactly
+    // the case tier gating would wave through.
+    if (context?.transport === 'http') {
+      const localFacade = facadeMap.get(name) ?? (() => {
+        const owner = toolToFacade.get(name);
+        return owner ? facadeMap.get(owner.name) : undefined;
+      })();
+
+      if (localFacade?.localOnly) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({
+            error: `Facade "${localFacade.name}" is local-only and is not served over HTTP`,
+            facade: localFacade.name,
+            transport: 'http',
+            hint: 'Call it from a local stdio client. This facade reaches credentials whose scope is wider than one project, so it is not exposed on a network bind.',
           }) }],
           isError: true,
         };
@@ -341,25 +593,38 @@ export async function createKernel(): Promise<ToolKernel> {
 
       // Flat params: action-specific fields are at root level.
       // Backward compat: also merge args.params if present (batch API, legacy callers).
-      // Normalize project_id → projectId (snake_case callers like hooks/agents).
-      const { action: _action, params: legacyParams, project_id, ...flatParams } = args;
+      // Alias project_id → projectId (snake_case callers like hooks/agents).
+      // Both keys are kept: many internal tools read input.project_id directly,
+      // and dropping it silently strips project scope over MCP dispatch.
+      const { action: _action, params: legacyParams, ...flatParams } = args;
       const merged = { ...(legacyParams as Record<string, unknown> || {}), ...flatParams };
-      if (project_id !== undefined && merged.projectId === undefined) {
-        merged.projectId = project_id;
+      if (merged.project_id !== undefined && merged.projectId === undefined) {
+        merged.projectId = merged.project_id;
       }
-      const params = coerceParams(merged, tool.definition.inputSchema);
+      const params = coerceStringifiedParams(merged, tool.definition.inputSchema);
 
       log(`Kernel: facade ${name}.${action} → ${internalName} (agent=${agentId}${runId ? ` run=${runId}` : ''})`);
       trackToolUse(internalName);
 
+      const breaker = circuits.beforeCall(name);
+      if (!breaker.allowed) {
+        safeEmit('error', {
+          type: 'error', facade: name, action, tool: internalName,
+          agentId, runId, requestId, timestamp: new Date().toISOString(),
+          duration_ms: 0,
+          error: `circuit open for facade "${name}"`,
+        } satisfies DispatchEvent);
+        return circuitOpenResult(name, breaker);
+      }
+
       const startTime = Date.now();
-      emitter.emit('dispatch', {
+      safeEmit('dispatch', {
         type: 'dispatch', facade: name, action, tool: internalName,
         agentId, runId, requestId, timestamp: new Date().toISOString(),
       } satisfies DispatchEvent);
 
       try {
-        const result = await tool.handler(params);
+        const result = await runTracked(tool, params);
         // Read telemetry: write tools wrap themselves with withRunTracking; reads
         // (readOnlyHint) were invisible, so the run log could not show that an
         // agent consulted the project memory. Polling tools stay excluded.
@@ -367,18 +632,27 @@ export async function createKernel(): Promise<ToolKernel> {
           const pid = params.projectId as string | undefined;
           if (pid) logToolEvent(pid, internalName, 'success', `${internalName} read`).catch(() => {});
         }
-        emitter.emit('result', {
+        const duration = Date.now() - startTime;
+        circuits.afterCall(name, {
+          threw: false,
+          isError: !!result.isError,
+          durationMs: duration,
+          error: result.isError ? resultErrorText(result) : undefined,
+        });
+        safeEmit('result', {
           type: 'result', facade: name, action, tool: internalName,
           agentId, runId, requestId, timestamp: new Date().toISOString(),
-          duration_ms: Date.now() - startTime, success: !result.isError,
+          duration_ms: duration, success: !result.isError,
         } satisfies DispatchEvent);
         return result;
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        emitter.emit('error', {
+        const duration = Date.now() - startTime;
+        circuits.afterCall(name, { threw: true, isError: true, durationMs: duration, error: errMsg });
+        safeEmit('error', {
           type: 'error', facade: name, action, tool: internalName,
           agentId, runId, requestId, timestamp: new Date().toISOString(),
-          duration_ms: Date.now() - startTime,
+          duration_ms: duration,
           error: errMsg,
         } satisfies DispatchEvent);
         return {
@@ -405,26 +679,51 @@ export async function createKernel(): Promise<ToolKernel> {
     log(`Kernel: dispatch ${name} (agent=${agentId}${runId ? ` run=${runId}` : ''})`);
     trackToolUse(name);
 
+    const directParams = coerceStringifiedParams(args, tool.definition.inputSchema);
+
+    // Direct tool calls share the circuit of the facade that owns the tool —
+    // `senken_trade_summary` and `senken.trade_summary` reach the same pool.
+    const key = circuitKey(name);
+    const breaker = circuits.beforeCall(key);
+    if (!breaker.allowed) {
+      safeEmit('error', {
+        type: 'error', tool: name,
+        agentId, runId, requestId, timestamp: new Date().toISOString(),
+        duration_ms: 0,
+        error: `circuit open for facade "${key}"`,
+      } satisfies DispatchEvent);
+      return circuitOpenResult(key, breaker);
+    }
+
     const startTime = Date.now();
-    emitter.emit('dispatch', {
+    safeEmit('dispatch', {
       type: 'dispatch', tool: name,
       agentId, runId, requestId, timestamp: new Date().toISOString(),
     } satisfies DispatchEvent);
 
     try {
-      const result = await tool.handler(args);
-      emitter.emit('result', {
+      const result = await runTracked(tool, directParams);
+      const duration = Date.now() - startTime;
+      circuits.afterCall(key, {
+        threw: false,
+        isError: !!result.isError,
+        durationMs: duration,
+        error: result.isError ? resultErrorText(result) : undefined,
+      });
+      safeEmit('result', {
         type: 'result', tool: name,
         agentId, runId, requestId, timestamp: new Date().toISOString(),
-        duration_ms: Date.now() - startTime, success: !result.isError,
+        duration_ms: duration, success: !result.isError,
       } satisfies DispatchEvent);
       return result;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      emitter.emit('error', {
+      const duration = Date.now() - startTime;
+      circuits.afterCall(key, { threw: true, isError: true, durationMs: duration, error: errMsg });
+      safeEmit('error', {
         type: 'error', tool: name,
         agentId, runId, requestId, timestamp: new Date().toISOString(),
-        duration_ms: Date.now() - startTime,
+        duration_ms: duration,
         error: errMsg,
       } satisfies DispatchEvent);
       return {
@@ -437,11 +736,71 @@ export async function createKernel(): Promise<ToolKernel> {
     }
   }
 
+  /**
+   * The isolation boundary. Every failure a facade can produce becomes a
+   * `ToolResult`, never a rejected promise: the inner dispatch already handles
+   * a throwing *handler*, but the code around it can fail too — a malformed
+   * schema in `coerceStringifiedParams`, an unexpected shape in facade
+   * resolution, an out-of-memory string build. Whatever escapes, one facade's
+   * fault must not take down a runtime that six clients share.
+   *
+   * The transports depend on this: `server.ts` and `httpServer.ts` turn a
+   * rejected dispatch into a transport-level error, which for stdio means the
+   * MCP client sees a protocol fault rather than a tool that failed.
+   */
+  async function dispatch(
+    name: string,
+    args: Record<string, unknown>,
+    context?: DispatchContext
+  ): Promise<ToolResult> {
+    try {
+      return await dispatchInner(name, args, context);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      log(`Kernel: dispatch of "${name}" failed outside the handler — ${errMsg}`);
+      circuits.recordFault(circuitKey(name), errMsg);
+      safeEmit('error', {
+        type: 'error', tool: name,
+        agentId: context?.agentId || 'anonymous',
+        runId: context?.runId,
+        requestId: context?.requestId,
+        timestamp: new Date().toISOString(),
+        error: errMsg,
+      } satisfies DispatchEvent);
+      return {
+        content: [{ type: 'text', text: JSON.stringify({
+          error: errMsg,
+          tool: name,
+          dispatch_fault: true,
+        }) }],
+        isError: true,
+      };
+    }
+  }
+
   async function batch(calls: BatchCall[], context?: DispatchContext): Promise<BatchResult[]> {
     log(`Kernel: batch dispatch — ${calls.length} calls (agent=${context?.agentId || 'anonymous'})`);
 
     const promises = calls.map(async (call): Promise<BatchResult> => {
       const start = Date.now();
+
+      // Structural check before dispatch. Without it an unknown facade came
+      // back as a text node saying "Unknown tool: x" inside an otherwise
+      // successful-looking result, so a caller reading the envelope saw
+      // success for a facade that does not exist on this machine. That matters
+      // more since Phase 7 made the registered set machine-dependent: a missing
+      // extension MUST NOT be indistinguishable from an empty answer.
+      // Raw tool names are accepted here too, because dispatch accepts them.
+      if (!facadeMap.has(call.facade) && !toolMap.has(call.facade)) {
+        return {
+          facade: call.facade,
+          action: call.action,
+          error: `Unknown facade: ${call.facade}`,
+          code: 'UNKNOWN_FACADE',
+          duration_ms: Date.now() - start,
+        };
+      }
+
       try {
         const result = await dispatch(
           call.facade,
@@ -477,7 +836,13 @@ export async function createKernel(): Promise<ToolKernel> {
     on: (event: string, listener: (evt: DispatchEvent) => void) => emitter.on(event, listener),
     off: (event: string, listener: (evt: DispatchEvent) => void) => emitter.off(event, listener),
     getMcpToolDefinitions,
-    toolCount: tools.length,
+    circuitSnapshot: () => circuits.snapshot(),
+    resetCircuit: (key?: string) => circuits.reset(key),
+    // toolMap, not `tools` — extension tools are merged into the map after
+    // getAllTools() returns, so counting the array would under-report by
+    // exactly the private tools and make /health disagree with what dispatch
+    // can actually reach.
+    toolCount: toolMap.size,
     facadeCount: facades.length,
   };
 }

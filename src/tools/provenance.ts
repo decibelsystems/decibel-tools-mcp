@@ -56,6 +56,13 @@ export interface ListProvenanceInput {
 export interface ListProvenanceOutput {
   events: ProvenanceEvent[];
   total_count: number;
+  /**
+   * Records that could not be read or parsed and are therefore absent from
+   * `events`. Zero on a healthy store. Present so that a short list is
+   * detectable — an empty result with unreadable_count > 0 means "could not
+   * read", which is a different fact from "no activity".
+   */
+  unreadable_count: number;
 }
 
 export interface ProjectResolutionError {
@@ -257,27 +264,53 @@ export async function listProvenance(
   const limit = input.limit || 50;
   let events: ProvenanceEvent[] = [];
 
+  // A missing directory means "no events yet" and is the only failure that may
+  // be reported as emptiness. Anything else — EMFILE under a fan-out, EACCES, a
+  // bad mount — must reach the caller: this used to be a bare catch around both
+  // the readdir AND the read loop, so any of those returned `{events: [],
+  // total_count: 0}` through a SUCCESS envelope, indistinguishable from a
+  // project with no activity. HQ measured ten of thirty-four projects reporting
+  // empty that demonstrably had events (2026-08-30).
+  let yamlFiles: string[];
   try {
     const files = await fs.readdir(eventsDir);
-    const yamlFiles = files.filter(f => f.endsWith('.yml') && f.startsWith('PROV-'));
-
-    for (const file of yamlFiles) {
-      const filePath = path.join(eventsDir, file);
-      const event = await parseProvenanceFile(filePath);
-      if (!event) continue;
-
-      // Apply filters
-      if (input.artifact_ref && !event.artifact_refs.includes(input.artifact_ref)) {
-        continue;
-      }
-      if (input.actor_id && event.actor_id !== input.actor_id) {
-        continue;
-      }
-
-      events.push(event);
+    yamlFiles = files.filter(f => f.endsWith('.yml') && f.startsWith('PROV-'));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { events: [], total_count: 0, unreadable_count: 0 };
     }
-  } catch {
-    // Directory doesn't exist yet
+    throw err;
+  }
+
+  // Per-file failures do not abort the listing — one corrupt record should not
+  // hide the other ninety-nine — but they are counted, because a silently short
+  // list is a lie a caller cannot detect. `parseProvenanceFile` also returns
+  // null for a record missing required fields; that is the same loss.
+  let unreadable = 0;
+
+  for (const file of yamlFiles) {
+    const filePath = path.join(eventsDir, file);
+    let event: ProvenanceEvent | null;
+    try {
+      event = await parseProvenanceFile(filePath);
+    } catch {
+      unreadable++;
+      continue;
+    }
+    if (!event) {
+      unreadable++;
+      continue;
+    }
+
+    // Apply filters
+    if (input.artifact_ref && !event.artifact_refs.includes(input.artifact_ref)) {
+      continue;
+    }
+    if (input.actor_id && event.actor_id !== input.actor_id) {
+      continue;
+    }
+
+    events.push(event);
   }
 
   const totalCount = events.length;
@@ -291,6 +324,7 @@ export async function listProvenance(
   return {
     events,
     total_count: totalCount,
+    unreadable_count: unreadable,
   };
 }
 

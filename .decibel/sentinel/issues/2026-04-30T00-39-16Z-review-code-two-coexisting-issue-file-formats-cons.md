@@ -1,4 +1,6 @@
 ---
+uid: 019ddbd3-627a-7441-a6bd-8fccf47732a2
+id: 2026-04-30T00-39-16Z-review-code-two-coexisting-issue-file-formats-cons
 projectId: decibel-tools-mcp
 severity: med
 status: open

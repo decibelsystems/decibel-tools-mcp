@@ -1,0 +1,11 @@
+event_id: PROV-20260814T192500-577
+timestamp: 2026-08-14T19:25:00.577Z
+actor_id: human:mediareason <brottler@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0123-keep-the-zoom-facade-local-stdio-only-until-hosted.md
+reason_code: initial_creation
+summary: "Created issue: Keep the zoom facade local/stdio-only until hosted MCP auth is fixed"
+fingerprint_before: null
+fingerprint_after: sha256:7c1702482dd4a691

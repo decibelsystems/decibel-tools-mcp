@@ -1,0 +1,22 @@
+---
+uid: 019b47a7-0fc3-7886-8ef6-ab4494c95a98
+id: ISS-0024
+projectId: decibel-tools-mcp
+status: open
+priority: high
+epic_id: EPIC-0020
+tags:
+  - agentic
+  - render
+  - registry
+created_at: 2025-12-22T20:01:29.539Z
+updated_at: 2025-12-22T20:01:29.539Z
+---
+# Implement dialect registry and render function
+
+**Status:** open
+**Epic:** EPIC-0020
+
+## Details
+
+Create src/agentic/dialects/index.ts (dialect registry with registerDialect, getDialect, listDialects, resolveDialect) and src/agentic/render.ts (render and renderAndLint functions). render() is a pure function: validates payload, resolves dialect, returns formatted output. renderAndLint() adds lint validation. See AGENTIC_PACK_V1_DIRECTIVE.md section 1.8.

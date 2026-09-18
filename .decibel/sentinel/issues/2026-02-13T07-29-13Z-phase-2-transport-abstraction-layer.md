@@ -1,19 +1,20 @@
 ---
+uid: 019c55e7-61d0-74e5-82d0-f6ecf263f9f9
 id: ISS-0083
 projectId: decibel-tools-mcp
 severity: high
 status: closed
-closed_at: 2026-05-20T00:53:15.000Z
-closed_reason: "verified done by code inspection 2026-05-19"
-closure_note: "src/transports/{stdio,http,bridge,mcp,index,types}.ts all present"
-created_at: 2026-02-13T07:29:13.168Z
 epic_id: EPIC-0026
+created_at: 2026-02-13T07:29:13.168Z
+closed_at: 2026-05-20T00:53:15.000Z
+closed_reason: verified done by code inspection 2026-05-19
+closure_note: src/transports/{stdio,http,bridge,mcp,index,types}.ts all present
 ---
 
 # Phase 2: Transport abstraction layer
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 **Epic:** EPIC-0026
 
 ## Details
