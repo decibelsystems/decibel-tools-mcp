@@ -12,6 +12,21 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "if": "Bash(git push:*)",
+            "prompt": "A Bash command is about to run. Read the command from tool_input.command in $ARGUMENTS. GATE: if the command does NOT contain `git push`, output exactly {} and stop immediately — do nothing else, do not call any tools. If it IS a git push: run the Decibel guardian security scan with action report for the current project (omit project_id so it resolves from the working directory). Try the tool named mcp__plugin_tools_decibel-tools__guardian first; if it is unavailable, try mcp__decibel-tools__guardian. FAIL-OPEN: if the guardian tool is unavailable, denied, or errors for any reason, output exactly {} (do NOT block the push). Only if the scan completes successfully AND its overall grade is D or F, output JSON: {\"continue\": false, \"stopReason\": \"Guardian grade D/F. Fix these before pushing: [list the findings]\"}. In every other case output exactly {}.",
+            "model": "claude-sonnet-4-6",
+            "timeout": 30,
+            "statusMessage": "Guardian: scanning before push..."
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Bash",

@@ -3,14 +3,25 @@ uid: 019e950c-9fcc-7f54-9d1b-b9d72e295ebc
 id: 2026-06-04T23-51-33Z-hosted-mcp-runs-unauthenticated-queueforagent-serv
 projectId: decibel-tools-mcp
 severity: critical
-status: open
+status: closed
 created_at: 2026-06-04T23:51:33.068Z
+closed_at: 2026-09-17T00:42:09.827Z
+linked_commits:
+  - sha: fdd2822518525f79a5024c3022dbe90342a9f815
+    shortSha: fdd2822
+    message: "fix(security): hosted-mode fail-closed + queue-write authz decoupling
+      (A+B)"
+    relationship: fixes
+    linked_at: 2026-09-17T00:42:54.325Z
+    linked_by: ai:claude
+updated_at: 2026-09-17T00:42:54.325Z
+
 ---
 
 # Hosted MCP runs unauthenticated + queueForAgent service-role write with spoofable caller ids (crucible sec review)
 
 **Severity:** critical
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -21,3 +32,7 @@ Found by crucible adversarial sec review (2026-06-04), VERIFIED against source. 
 2. queueForAgent SERVICE-ROLE WRITE WITH SPOOFABLE IDS (httpServer.ts:404-438, VERIFIED): uses getSupabaseServiceClient() (bypasses RLS) and inserts agent_queue rows with project_id + created_by=agentId taken DIRECTLY from caller-supplied request headers/body (X-Agent-Id). No check that agentId/projectId belong to the caller's org. Combined with #1 (anyone can reach /call) → cross-tenant queue poisoning: an attacker queues a tool call against another org's agent_id, and that agent's next queue_sync pulls + executes it. This is the exact "no service_role for tenant writes" invariant, violated.
 
 FIX: (a) hosted mode should fail closed — require DECIBEL_AUTH_TOKEN (or a license/JWT) before serving /call, not run open; (b) queueForAgent must validate agentId/projectId against the authenticated caller's org and must not use service_role for a caller-driven write (forward the user JWT so RLS applies, mirroring SupabaseStore). Report: .crucible/runs/20260604T235029Z-attack/attack_report.md
+
+## Resolution
+
+Fixed across 19415c7 (queueForAgent only for known agents) and fdd2822 (hosted --http fails closed with 401 AUTH_NOT_CONFIGURED when no DECIBEL_AUTH_TOKEN; queue-write authz decoupled from service role). Verified AUTH_NOT_CONFIGURED gate in httpServer.ts 2026-09-16. Senken-side Flask proxy auth tracked in senken-trading.

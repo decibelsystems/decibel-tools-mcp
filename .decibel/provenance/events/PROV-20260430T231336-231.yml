@@ -1,0 +1,11 @@
+event_id: PROV-20260430T231336-231
+timestamp: 2026-04-30T23:13:36.231Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-04-30T23-13-36Z-review-security-no-file-tree-validation-on-bulk-se.md
+reason_code: initial_creation
+summary: "Created issue: [review/security] no file-tree validation on bulk sentinel operations — risk of leaking .decibel/runs/ runtime data into commits"
+fingerprint_before: null
+fingerprint_after: sha256:7572fb852f03476e

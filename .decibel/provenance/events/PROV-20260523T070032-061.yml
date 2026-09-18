@@ -1,0 +1,11 @@
+event_id: PROV-20260523T070032-061
+timestamp: 2026-05-23T07:00:32.061Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:epic:EPIC-0035
+reason_code: initial_creation
+summary: "Created epic: Phase 7: HQ rollout — Fix #42 + integrate w/ PR #99"
+fingerprint_before: null
+fingerprint_after: sha256:fc3dfbe7ab8e1b22

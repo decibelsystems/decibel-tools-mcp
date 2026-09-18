@@ -23,8 +23,12 @@ echo "$CMD" | grep -qE 'git[[:space:]]+commit' || { printf '{}'; exit 0; }
 
 CWD=$(echo "$HOOK_INPUT" | jq -r '.cwd // "."')
 PROJECT=$(basename "$CWD")
-PORT="${DECIBEL_DAEMON_PORT:-$(jq -r '.port // 4888' "$HOME/.decibel/daemon.meta" 2>/dev/null || echo 4888)}"
+PORT="${DECIBEL_DAEMON_PORT:-$(jq -r '.port // empty' "$HOME/.decibel/daemon.meta" 2>/dev/null)}"
+PORT="${PORT:-$(sed -n 's/^[[:space:]]*port:[[:space:]]*//p' "$HOME/.decibel/config.yaml" 2>/dev/null | head -1)}"
+PORT="${PORT:-4888}"
 BATCH="http://localhost:${PORT}/batch"
+TOKEN="${DECIBEL_AUTH_TOKEN:-$(sed -n 's/^[[:space:]]*auth_token:[[:space:]]*//p' "$HOME/.decibel/config.yaml" 2>/dev/null | head -1 | tr -d '"'"'"'')}"
+AUTH=(); [ -n "$TOKEN" ] && AUTH=(-H "Authorization: Bearer ${TOKEN}")
 
 SHA=$(git -C "$CWD" rev-parse --short HEAD 2>/dev/null || echo "")
 SUBJECT=$(git -C "$CWD" log -1 --pretty=%s 2>/dev/null || echo "")
@@ -36,13 +40,13 @@ IDS=$(echo "$BODY" | grep -ioE '(closes|fixes|resolves):[[:space:]]*[A-Za-z0-9._
 
 CLOSED=""
 for ID in $IDS; do
-  RESP=$(curl -s -m 5 -X POST "$BATCH" -H 'Content-Type: application/json' \
+  RESP=$(curl -s -m 5 -X POST "$BATCH" -H 'Content-Type: application/json' "${AUTH[@]}" \
     -d "{\"calls\":[{\"facade\":\"sentinel\",\"action\":\"close_issue\",\"params\":{\"project_id\":\"${PROJECT}\",\"issue_id\":\"${ID}\",\"resolution\":\"Resolved by commit ${SHA}: ${SUBJECT}\",\"status\":\"closed\"}}]}" 2>/dev/null)
-  echo "$RESP" | grep -q '"status"' && CLOSED="${CLOSED} ${ID}"
+  echo "$RESP" | grep -q '"results"' && CLOSED="${CLOSED} ${ID}"
 done
 
 # Link the commit to artifacts (best effort, non-fatal)
-[ -n "$SHA" ] && curl -s -m 4 -X POST "$BATCH" -H 'Content-Type: application/json' \
+[ -n "$SHA" ] && curl -s -m 4 -X POST "$BATCH" -H 'Content-Type: application/json' "${AUTH[@]}" \
   -d "{\"calls\":[{\"facade\":\"sentinel\",\"action\":\"auto_link\",\"params\":{\"project_id\":\"${PROJECT}\",\"commitSha\":\"${SHA}\"}}]}" >/dev/null 2>&1 || true
 
 # --- Emit context SPARINGLY (token-lean) ---

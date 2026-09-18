@@ -1,0 +1,11 @@
+event_id: PROV-20260430T231321-222
+timestamp: 2026-04-30T23:13:21.222Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-04-30T23-13-21Z-review-security-sentinel-id-format-inconsistency-l.md
+reason_code: initial_creation
+summary: "Created issue: [review/security] sentinel ID-format inconsistency: list_issues returns filename-with-.md, close_issue/read_issue accept different forms"
+fingerprint_before: null
+fingerprint_after: sha256:03c72dab749982b9

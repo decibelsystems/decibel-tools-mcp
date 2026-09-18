@@ -46,3 +46,7 @@ projects.json
 .crucible/runs/
 /.decibel/runs
 /.decibel/provenance
+
+# Obsidian vault mirror of docs/ (local symlink target)
+docs-tools/
+.obsidian/

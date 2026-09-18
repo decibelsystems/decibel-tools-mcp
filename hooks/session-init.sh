@@ -5,15 +5,20 @@
 PROJECT_ID=$(basename "$PWD")
 # Discover the daemon port from ~/.decibel/daemon.meta (written by the daemon),
 # matching HQ's vite.config discovery. Env var wins; fallback 4888 (the daemon default).
-PORT="${DECIBEL_DAEMON_PORT:-$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.decibel/daemon.meta')))['port'])" 2>/dev/null || echo 4888)}"
+PORT="${DECIBEL_DAEMON_PORT:-$(jq -r '.port // empty' "$HOME/.decibel/daemon.meta" 2>/dev/null)}"
+PORT="${PORT:-$(sed -n 's/^[[:space:]]*port:[[:space:]]*//p' "$HOME/.decibel/config.yaml" 2>/dev/null | head -1)}"
+PORT="${PORT:-4888}"
 URL="http://localhost:${PORT}/batch"
+# Daemon auth token: env var wins, else daemon.auth_token from ~/.decibel/config.yaml.
+TOKEN="${DECIBEL_AUTH_TOKEN:-$(sed -n 's/^[[:space:]]*auth_token:[[:space:]]*//p' "$HOME/.decibel/config.yaml" 2>/dev/null | head -1 | tr -d '"'"'"'')}"
 
 PAYLOAD="{
     \"calls\": [
       {\"facade\": \"oracle\", \"action\": \"next_actions\", \"params\": {\"project_id\": \"${PROJECT_ID}\"}},
       {\"facade\": \"voice\", \"action\": \"inbox_sync\", \"params\": {\"project_id\": \"${PROJECT_ID}\"}},
       {\"facade\": \"agentic\", \"action\": \"queue_sync\", \"params\": {\"project_id\": \"${PROJECT_ID}\"}},
-      {\"facade\": \"sentinel\", \"action\": \"list_issues\", \"params\": {\"project_id\": \"${PROJECT_ID}\", \"status\": \"open\"}}
+      {\"facade\": \"sentinel\", \"action\": \"list_issues\", \"params\": {\"project_id\": \"${PROJECT_ID}\", \"status\": \"open\"}},
+      {\"facade\": \"roadmap\", \"action\": \"read\", \"params\": {\"project_id\": \"${PROJECT_ID}\"}}
     ]
   }"
 
@@ -22,10 +27,12 @@ PAYLOAD="{
 # race often enough that the "not reachable" nudge fires while the daemon is fine
 # — which then sends the session down the MCP fallback, where voice and agentic
 # do not exist as tools at all. Retry before believing the daemon is down.
+# An auth/error envelope also carries "status", so require the results array.
 OK=0
 for attempt in 1 2 3; do
-  RESULT=$(curl -s -m 5 -X POST "$URL" -H "Content-Type: application/json" -d "$PAYLOAD" 2>/dev/null)
-  if [ $? -eq 0 ] && printf '%s' "$RESULT" | grep -q '"status"'; then OK=1; break; fi
+  RESULT=$(curl -s -m 5 -X POST "$URL" -H "Content-Type: application/json" \
+    ${TOKEN:+-H "Authorization: Bearer ${TOKEN}"} -d "$PAYLOAD" 2>/dev/null)
+  if [ $? -eq 0 ] && printf '%s' "$RESULT" | grep -q '"results"'; then OK=1; break; fi
   [ "$attempt" -lt 3 ] && sleep 2
 done
 
@@ -89,12 +96,22 @@ if [ "$OK" -eq 1 ]; then
     ok "$a" || DOWN="${DOWN}${DOWN:+,}${a}"
   done
 
+  # Roadmap position: the next milestone by target date (or the last one if all are past).
+  # Empty when no roadmap exists, and the line is then omitted.
+  ROAD=$(pick read | jq -r --arg today "$(date +%F)" '
+    ([.milestones[]? | select(.target_date >= $today)] | sort_by(.target_date) | .[0]) as $next
+    | ($next // ([.milestones[]?] | sort_by(.target_date) | last)) as $m
+    | if $m == null then empty
+      else "  \u25b8 roadmap: \($m.label) (due \($m.target_date), \($m.epics|length) epics) \u00b7 \(.objectives|length) objectives \u00b7 \(.summary.unhealthy_epics_count // 0) unhealthy epics"
+      end' 2>/dev/null)
+
   CTX="DECIBEL ${PROJECT_ID}: ${NISS} open issues (${BLOCK} blocking) · voice ${NVOICE} · queue ${NQ} · ${NACT} next actions:
-${TOP}"
+${TOP}${ROAD:+
+$ROAD}"
   [ -n "$DOWN" ] && CTX="${CTX}
   ⚠ INIT INCOMPLETE — these did not run: ${DOWN}. Run them via MCP or say so; do NOT report a 4-of-4 init."
   jq -cn --arg ctx "$CTX" '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$ctx}}'
 else
   # Daemon not running — fall back to nudge
-  printf '%s' "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"DECIBEL SESSION INIT: Daemon not reachable. Run these tools now before doing anything else: 1. oracle next_actions (project_id: ${PROJECT_ID}) 2. voice inbox_sync (project_id: ${PROJECT_ID}) 3. agentic queue_sync (project_id: ${PROJECT_ID}) 4. sentinel list_issues (project_id: ${PROJECT_ID}, status: open). Do NOT skip these.\"}}"
+  printf '%s' "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"DECIBEL SESSION INIT: Daemon not reachable. Run these tools now before doing anything else: 1. oracle next_actions (project_id: ${PROJECT_ID}) 2. voice inbox_sync (project_id: ${PROJECT_ID}) 3. agentic queue_sync (project_id: ${PROJECT_ID}) 4. sentinel list_issues (project_id: ${PROJECT_ID}, status: open) 5. roadmap read (project_id: ${PROJECT_ID}) to see where the project is. Decibel is the project memory; your session memory is a cache. Do NOT skip these.\"}}"
 fi

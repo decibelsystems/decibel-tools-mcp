@@ -12,6 +12,7 @@
 import { EventEmitter } from 'events';
 import { getAllTools } from './tools/index.js';
 import { trackToolUse } from './tools/shared/index.js';
+import { logToolEvent } from './tools/shared/runTracker.js';
 import { log } from './config.js';
 import type { ToolSpec, ToolResult } from './tools/types.js';
 import type { FacadeSpec, DetailTier, McpToolDefinition } from './facades/types.js';
@@ -74,6 +75,9 @@ export interface DispatchContext {
 // silently exposed every pro and apps facade, including `terminal` (reads
 // DX_WALLET_PRIVATE_KEY) and the Postgres trading facades, to ordinary users.
 const PRO_ENABLED = process.env.DECIBEL_PRO === '1';
+
+// Heartbeat/poll reads: 18k of 18.3k run-log events were coord_status polls.
+const POLLING_TOOLS = new Set(['coord_status', 'coord_heartbeat', 'coord_inbox']);
 
 // Apps-tier facades are no longer env-gated. They arrive as extensions from the
 // allowlist in ~/.decibel/config.yaml — see runtime/extensions.ts. DECIBEL_APPS
@@ -621,6 +625,13 @@ export async function createKernel(): Promise<ToolKernel> {
 
       try {
         const result = await runTracked(tool, params);
+        // Read telemetry: write tools wrap themselves with withRunTracking; reads
+        // (readOnlyHint) were invisible, so the run log could not show that an
+        // agent consulted the project memory. Polling tools stay excluded.
+        if (!result.isError && tool.definition.annotations?.readOnlyHint && !POLLING_TOOLS.has(internalName)) {
+          const pid = params.projectId as string | undefined;
+          if (pid) logToolEvent(pid, internalName, 'success', `${internalName} read`).catch(() => {});
+        }
         const duration = Date.now() - startTime;
         circuits.afterCall(name, {
           threw: false,

@@ -1,0 +1,11 @@
+event_id: PROV-20260430T231359-307
+timestamp: 2026-04-30T23:13:59.307Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:2026-04-30T23-13-59Z-review-code-bulk-sentinel-operations-should-accept.md
+reason_code: initial_creation
+summary: "Created issue: [review/code] Bulk sentinel operations should accept structured per-item resolutions"
+fingerprint_before: null
+fingerprint_after: sha256:8a9d33ff39ba8a5d
