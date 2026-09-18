@@ -13,6 +13,15 @@ tags:
   - registry
   - tests
 created_at: 2026-09-18T22:14:28.404Z
+linked_commits:
+  - sha: f7360ff74b773293582e0e0767b02666aad9276f
+    shortSha: f7360ff
+    message: "sentinel: PR #75 review findings — ISS-0171, ISS-0172, ISS-0173"
+    relationship: related
+    linked_at: 2026-09-18T22:14:49.539Z
+    linked_by: ai:claude
+updated_at: 2026-09-18T22:14:49.539Z
+
 ---
 # PR #75 review — six further findings across hooks, kernel telemetry, registry init and a test
 

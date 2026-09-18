@@ -12,6 +12,15 @@ tags:
   - pr-75
   - silent-failure
 created_at: 2026-09-18T22:14:07.637Z
+linked_commits:
+  - sha: f7360ff74b773293582e0e0767b02666aad9276f
+    shortSha: f7360ff
+    message: "sentinel: PR #75 review findings — ISS-0171, ISS-0172, ISS-0173"
+    relationship: related
+    linked_at: 2026-09-18T22:14:49.508Z
+    linked_by: ai:claude
+updated_at: 2026-09-18T22:14:49.508Z
+
 ---
 # Checked-in .claude/settings.json points both hooks at an absolute path on one developer's machine
 
