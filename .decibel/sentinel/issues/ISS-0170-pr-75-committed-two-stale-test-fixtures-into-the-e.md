@@ -20,7 +20,13 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-18T22:09:20.731Z
     linked_by: ai:claude
-updated_at: 2026-09-18T22:09:20.731Z
+  - sha: 3b03008c718d644229d9349da6cde172fdc5c6df
+    shortSha: 3b03008
+    message: "sentinel: auto-linked commit metadata for ISS-0169 and ISS-0170"
+    relationship: related
+    linked_at: 2026-09-18T22:09:49.701Z
+    linked_by: ai:claude
+updated_at: 2026-09-18T22:09:49.701Z
 
 ---
 # PR #75 committed two stale test fixtures into the epic store, and one now shadows a real epic
