@@ -559,6 +559,121 @@ export const DECLARED_DIFFERENCES = {
 
 export type DeclaredDifference = keyof typeof DECLARED_DIFFERENCES;
 
+// ============================================================================
+// Transient backend failures — inconclusive, not equivalent, not a finding
+// ============================================================================
+// S4 compares four passes made at four different times. For a read backed by
+// the project's own files that is a distinction without a difference: the
+// bytes do not move between passes. For a read backed by a LIVE REMOTE service
+// it is not — the backend can be healthy for one pass and unwell for the next,
+// and the two answers then differ for a reason that has nothing to do with the
+// transport under test.
+//
+// This was not hypothetical. `deck.search` reads a live Supabase and returned
+// "canceling statement due to statement timeout" on one pass of the 3.0 release
+// gate, reddening it; the same commit passed clean on re-run. A release gate
+// that goes red because a database was busy teaches everyone to re-run it until
+// it is green, which is how a gate stops being one.
+//
+// THE FIX IS NOT A WAIVER. Waiving the live-backend actions by name would buy
+// stability by deleting the coverage: deck would stop being compared across
+// transports at all, including on the days its backend is fine, and the sweep's
+// headline catch — a tool that works in Claude Code and is missing in ChatGPT —
+// would stop applying to a whole facade. It would also go stale, covering the
+// actions that are remote today and none added later.
+//
+// So the discrimination is made on the ANSWER rather than on the action. An
+// answer carrying one of the signatures below says the backend failed, and a
+// row containing one is INCONCLUSIVE: excluded from the equivalence assertions,
+// counted, and printed by name. Everything else about the row still holds — it
+// must still parse as JSON on every transport, and it is still subject to the
+// tool-listing and local-only gates, which no backend can affect.
+//
+// This cannot hide the bug the sweep exists to find. A transport that mangles a
+// payload produces a difference with NO transient signature, and still fails.
+// What it hides is a tool that responds to a backend failure differently
+// depending on transport — a real but much narrower shape, and one worth
+// trading for a gate that means something on a bad network day.
+//
+// The list is closed and asserted, exactly like DECLARED_DIFFERENCES: a pattern
+// here is a decision someone made, not a shape that drifted in. Keep every
+// entry specific to an infrastructure failure. A pattern broad enough to match
+// an ordinary error payload ("failed", "error", "not found") would silently
+// excuse real divergence, which is the one way this mechanism turns dangerous.
+
+export const TRANSIENT_BACKEND_SIGNATURES = {
+  'backend:statement-timeout': {
+    match: /canceling statement due to statement timeout/i,
+    note: 'Postgres aborted the query at the server-side statement_timeout. Observed on deck.search against a live Supabase during the 3.0 gate.',
+  },
+  'backend:connection-reset': {
+    match: /\b(ECONNRESET|EPIPE|ECONNABORTED)\b/,
+    note: 'The connection to the remote service was dropped mid-request.',
+  },
+  'backend:connect-failed': {
+    match: /\b(ECONNREFUSED|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH)\b/,
+    note: 'The remote service could not be reached at all — DNS or a refused socket.',
+  },
+  'backend:timeout': {
+    match: /\b(ETIMEDOUT|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT)\b/,
+    note: "The request to the remote service timed out below the tool's own deadline.",
+  },
+  'backend:fetch-failed': {
+    match: /\bfetch failed\b/i,
+    note: "undici's opaque wrapper for a transport-level failure; the cause is usually one of the codes above.",
+  },
+  'backend:unavailable': {
+    match: /\b(502 Bad Gateway|503 Service Unavailable|504 Gateway Time-?out)\b/i,
+    note: 'The remote service or something in front of it declined to serve the request.',
+  },
+  'backend:rate-limited': {
+    match: /\b429 Too Many Requests\b/i,
+    note: 'The remote service throttled this pass. Four passes make four times the requests one does.',
+  },
+} as const;
+
+export type TransientSignature = keyof typeof TRANSIENT_BACKEND_SIGNATURES;
+
+/**
+ * Which transient-backend signature this answer carries, if any.
+ *
+ * Matched against the RAW payload rather than the digest, because normalise()
+ * replaces any string over 60 characters with `<text>` — and a backend error
+ * message is always over 60 characters. Matching the digest would find nothing,
+ * forever, and the calibration test below is what would have caught that.
+ */
+export function transientSignature(answer: TransportAnswer): TransientSignature | undefined {
+  const haystack = `${answer.raw ?? ''}\n${answer.failure ?? ''}`;
+  if (!haystack.trim()) return undefined;
+  for (const [name, { match }] of Object.entries(TRANSIENT_BACKEND_SIGNATURES)) {
+    if (match.test(haystack)) return name as TransientSignature;
+  }
+  return undefined;
+}
+
+/**
+ * Every transient signature present anywhere in a row, keyed by transport.
+ * A row with any entry is inconclusive for the equivalence assertions.
+ */
+export function transientAnswers(row: EquivalenceRow): Array<{ transport: TransportName; signature: TransientSignature }> {
+  const found: Array<{ transport: TransportName; signature: TransientSignature }> = [];
+  for (const t of TRANSPORTS) {
+    const sig = transientSignature(row.answers[t]);
+    if (sig) found.push({ transport: t, signature: sig });
+  }
+  return found;
+}
+
+/**
+ * A ceiling, because "inconclusive" must not be able to become "untested".
+ *
+ * One flaky read is a busy database. A tenth of the surface answering with
+ * infrastructure errors is a broken environment, and a sweep run in one is not
+ * evidence about the build — it should fail rather than report a green with a
+ * long footnote nobody reads.
+ */
+export const MAX_INCONCLUSIVE_FRACTION = 0.02;
+
 /**
  * What /batch answered for the two contract probes.
  *

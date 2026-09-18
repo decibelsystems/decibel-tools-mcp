@@ -326,6 +326,17 @@ const deckSummary: ToolSpec = {
         db.from('price_movers').select('period').limit(1000),
       ]);
 
+      const readFailure = describeReadFailures([
+        ['card count', cardCount.error],
+        ['price sources', sources.error],
+        ['latest price update', latestUpdate.error],
+        ['mover periods', periods.error],
+      ]);
+
+      if (readFailure) {
+        return jsonResult({ success: false, error: readFailure }, true);
+      }
+
       const distinctSources = [
         ...new Set(
           (sources.data || []).map(
@@ -359,6 +370,36 @@ const deckSummary: ToolSpec = {
     }
   },
 };
+
+/**
+ * Name the reads that FAILED, so a failure can never be served as an absence.
+ *
+ * A FAILED QUERY IS NOT AN EMPTY ONE. deck.stores used to fall back to a
+ * neutral value for every field — `|| 0`, `|| []`, `|| null` — which made a
+ * query that failed render byte-identically to one that found nothing.
+ * `latest_price_update: null` therefore meant both "no card has ever been
+ * priced" and "that read did not happen", and only the second is worth an
+ * alarm.
+ *
+ * It cost a torture-gate failure to see it. S4 caught deck.stores answering
+ * `null` on the stdio pass and a timestamp on the other three, with the live
+ * value provably unchanged for fifteen hours either side of the sweep — so no
+ * data moved, a read failed. The transient-backend mechanism (ISS-0162) could
+ * not classify it either, because that mechanism reads the error text out of
+ * the payload and this payload had swallowed the error.
+ *
+ * Returns null when every read succeeded — the only case in which the summary
+ * below is entitled to be believed.
+ */
+export function describeReadFailures(
+  reads: Array<[string, { message: string } | null | undefined]>
+): string | null {
+  const failed = reads.filter(([, error]) => error);
+  if (failed.length === 0) return null;
+  return `deck.stores could not read: ${failed
+    .map(([label, error]) => `${label} (${error!.message})`)
+    .join('; ')}`;
+}
 
 const deckHistory: ToolSpec = {
   definition: {
