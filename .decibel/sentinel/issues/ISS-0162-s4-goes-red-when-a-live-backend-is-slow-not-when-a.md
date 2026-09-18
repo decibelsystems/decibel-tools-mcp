@@ -11,9 +11,18 @@ tags:
   - release-gate
   - flake
 created_at: 2026-09-07T17:48:24.921Z
-updated_at: 2026-09-07T17:48:59.424Z
+updated_at: 2026-09-18T21:10:14.214Z
 closed_at: 2026-09-07T17:48:59.357Z
 resolution: Fixed in 167c49b. S4 now distinguishes a transient backend failure from a transport defect via TRANSIENT_BACKEND_SIGNATURES (closed, asserted list of 7 patterns), dropping a row only when a signature appears AND the transports diverged. Guarded by a 2% inconclusive ceiling and per-row reporting; calibrated in both directions including the verbatim 3.0 payload and nine ordinary error payloads proven not to match. S4 26/26, suite 894/894.
+linked_commits:
+  - sha: c157b8905c30be738f8f971d9419261b5242d722
+    shortSha: c157b89
+    message: Merge remote-tracking branch 'origin/main' into
+      iss-0162-s4-transient-backend
+    relationship: related
+    linked_at: 2026-09-18T21:10:14.214Z
+    linked_by: ai:claude
+
 ---
 # S4 goes red when a live backend is slow, not when a transport is broken
 
@@ -39,3 +48,4 @@ VERIFIED. S4 26/26, full suite 894/894 across 69 files. 3252 calls compared, zer
 ## Resolution
 
 Fixed in 167c49b. S4 now distinguishes a transient backend failure from a transport defect via TRANSIENT_BACKEND_SIGNATURES (closed, asserted list of 7 patterns), dropping a row only when a signature appears AND the transports diverged. Guarded by a 2% inconclusive ceiling and per-row reporting; calibrated in both directions including the verbatim 3.0 payload and nine ordinary error payloads proven not to match. S4 26/26, suite 894/894.
+

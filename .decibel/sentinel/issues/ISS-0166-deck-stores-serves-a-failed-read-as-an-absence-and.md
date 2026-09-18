@@ -3,7 +3,7 @@ uid: 01a0b667-041c-7cc4-bf99-dda34268b062
 id: ISS-0166
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: closed
 priority: high
 tags:
   - torture
@@ -13,11 +13,14 @@ tags:
   - writer-reader-drift
   - ci
 created_at: 2026-09-18T21:23:19.707Z
+updated_at: 2026-09-18T21:23:28.674Z
+closed_at: 2026-09-18T21:23:28.581Z
+resolution: "Resolved by commit 7ea9381: deck.stores: a failed read is a failure, not an absence"
 ---
 # deck.stores serves a failed read as an absence, and it defeats the S4 transient classifier
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -67,3 +70,7 @@ anything else stays a real finding. Covered by tests/unit/deckReadFailures.test.
 STILL OPEN (not fixed here). The same `|| 0` / `|| []` swallow appears across
 the other deck actions. This issue fixed the one the gate caught; a sweep of
 the rest of the facade is the follow-up.
+
+## Resolution
+
+Resolved by commit 7ea9381: deck.stores: a failed read is a failure, not an absence

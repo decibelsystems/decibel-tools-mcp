@@ -11,6 +11,14 @@ tags:
   - todo
   - epics
 created_at: 2026-09-18T21:24:02.608Z
+linked_commits:
+  - sha: ccad5105aeeebf005bc1105945d103e999fcf650
+    shortSha: ccad510
+    message: "sentinel: ISS-0167 — the two branches the cleanup must not delete"
+    relationship: related
+    linked_at: 2026-09-18T21:24:07.893Z
+    linked_by: ai:claude
+updated_at: 2026-09-18T21:38:12.701Z
 ---
 # Review two orphan branches before deleting them — EPIC-0034/0035 and the tutor tool exist nowhere else
 
@@ -55,3 +63,5 @@ WHEN PICKING THIS UP: read the two epics first. If they still describe work
 worth doing, cherry-pick the three files onto main and delete the branch; the
 tutor question is separate and mostly "is this worth porting to the facade
 layer at all".
+
+[2026-09-18] CORRECTION — the salvage instruction above is wrong as written. Both ids are already taken in main, by different work: EPIC-0034 is "Plan D rollout — HQ multi-tenant SaaS, daemon port fix" AND "Phase 7 HQ rollout (fix 42, integrate w/ PR 99)" (two files in main, both claiming id EPIC-0034 — a duplicate-id collision already present, ISS-0158 family), and EPIC-0035 is "One-click multi-client setup installer". The branch's cost-facade and agent-profiles epics therefore cannot be cherry-picked as-is; they need renumbering to free ids first, or the cross-repo qualification the ADR-id collision note describes. Check this before assuming a clean pick.
