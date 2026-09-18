@@ -12,6 +12,7 @@ tags:
   - silent-overwrite
   - completion-ritual
 created_at: 2026-09-18T21:38:27.738Z
+updated_at: 2026-09-18T21:38:56.887Z
 ---
 # The issue-close hook overwrites an existing resolution with the triggering commit's subject line
 
@@ -67,3 +68,15 @@ the hook has no way to tell that from a fresh close.
 RECOVERED. ISS-0162's original resolution and closed_at were restored by hand in
 the commit that files this issue; the text survived only because it was in git
 history.
+
+[2026-09-18] SECOND INSTANCE, and it is worse than the first. The commit that restored ISS-0162's resolution and filed this issue (df163a2) triggered the clobber AGAIN — its message contained no trailer at all. It contained the sentence: A `Closes: ISS-0162` trailer on 1e2cef2 re-closed an issue... The hook matched the quoted pattern inside backticks in prose and re-closed the issue, replacing the just-restored resolution with df163a2's own subject line.
+
+So there are TWO defects, not one:
+
+D1. The hook scans the whole commit message for `Closes|Fixes|Resolves: <id>` rather than parsing trailers — the last paragraph, in the git-trailer sense. Any commit DISCUSSING an issue reference triggers it. Writing about the mechanism operates the mechanism.
+
+D2. Closing an already-closed issue overwrites its resolution instead of being a no-op (the original report above).
+
+D1 alone is a correctness bug for any commit message that quotes a trailer — documentation, this issue, a fix for this issue. D1 + D2 together mean the act of documenting the problem destroys the evidence of it. The restoration only survived because the third attempt deliberately avoided writing the pattern in prose.
+
+FIX FOR D1: parse trailers properly — only the final contiguous block of `Key: value` lines at the end of the message, per git-interpret-trailers. A line inside a paragraph, inside backticks, or indented as a quote is not a trailer.
