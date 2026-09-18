@@ -1,0 +1,11 @@
+event_id: PROV-20260523T065702-674
+timestamp: 2026-05-23T06:57:02.674Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - sentinel:issue:ISS-0111-fix-bug-from-pr-42-colons-included.md
+reason_code: initial_creation
+summary: "Created issue: Fix bug from PR #42 — colons: included"
+fingerprint_before: null
+fingerprint_after: sha256:9f41d5d3fbf1fffb

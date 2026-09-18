@@ -3,14 +3,25 @@ uid: 019ea36d-fe8c-790c-871b-7a7d5f2f368d
 id: 2026-06-07T18-52-35Z-hosted-http-mode-serves-call-connect-batch-events-
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: closed
 created_at: 2026-06-07T18:52:35.340Z
+closed_at: 2026-09-17T00:42:11.799Z
+linked_commits:
+  - sha: fdd2822518525f79a5024c3022dbe90342a9f815
+    shortSha: fdd2822
+    message: "fix(security): hosted-mode fail-closed + queue-write authz decoupling
+      (A+B)"
+    relationship: fixes
+    linked_at: 2026-09-17T00:42:55.702Z
+    linked_by: ai:claude
+updated_at: 2026-09-17T00:42:55.702Z
+
 ---
 
 # Hosted (--http) mode serves /call,/connect,/batch,/events unauthenticated — make it fail closed (crucible re-run)
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -29,3 +40,7 @@ B) senken side: add a Flask auth guard on the mcp_proxy routes (the public bound
 Recommended: BOTH (defense in depth) — decibel fails closed AND the Flask proxy authenticates its public routes. Either alone closes the current hole.
 
 Separately fixed already (PR #38): NODE_ENV tier bypass, CORS startsWith, /events auth-when-token-set, kernel tier prefix bypass, partial queueForAgent guard. Reports: .crucible/runs/20260604T235029Z-attack + 20260607T174806Z-attack.
+
+## Resolution
+
+Option A landed in commit fdd2822: non-daemon --http mode refuses /call,/connect,/batch,/mcp,/events with 401 AUTH_NOT_CONFIGURED when no auth token. Option B (Flask proxy auth) is a senken-trading change, not tracked here.

@@ -1,0 +1,11 @@
+event_id: PROV-20260917T235910-616
+timestamp: 2026-09-17T23:59:10.616Z
+actor_id: human:Richvoercash <richovercash@gmail.com>
+actor_type: human
+action: create
+artifact_refs:
+  - learnings:entry:decibel-tools-mcp:16
+reason_code: initial_creation
+summary: "Appended learning: Kernel coerces JSON-string array/object params using the internal tool schema"
+fingerprint_before: null
+fingerprint_after: sha256:aa90eb5dcafed52d
