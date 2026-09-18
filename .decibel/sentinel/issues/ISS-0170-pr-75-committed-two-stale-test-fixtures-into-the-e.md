@@ -13,6 +13,15 @@ tags:
   - pr-75
   - silent-wrong-answer
 created_at: 2026-09-18T22:09:14.198Z
+linked_commits:
+  - sha: ce87aeb0851bdec8c49a11062e9c97d66ea46b16
+    shortSha: ce87aeb
+    message: "sentinel: ISS-0170 — two test fixtures landed in the epic store"
+    relationship: related
+    linked_at: 2026-09-18T22:09:20.731Z
+    linked_by: ai:claude
+updated_at: 2026-09-18T22:09:20.731Z
+
 ---
 # PR #75 committed two stale test fixtures into the epic store, and one now shadows a real epic
 

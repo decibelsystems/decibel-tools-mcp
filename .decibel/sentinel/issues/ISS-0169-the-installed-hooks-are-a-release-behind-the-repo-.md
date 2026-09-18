@@ -12,6 +12,15 @@ tags:
   - release-process
   - pr-75
 created_at: 2026-09-18T21:41:06.359Z
+linked_commits:
+  - sha: b72a20dea89a08e96bfc2770b4cc7a8d64a3b1b4
+    shortSha: b72a20d
+    message: "sentinel: ISS-0169 — the installed hooks are a release behind the repo"
+    relationship: related
+    linked_at: 2026-09-18T21:41:22.686Z
+    linked_by: ai:claude
+updated_at: 2026-09-18T21:41:22.686Z
+
 ---
 # The installed hooks are a release behind the repo — Rich's PR #75 hardening is not running on this machine
 
