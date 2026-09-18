@@ -3,7 +3,7 @@ uid: 01a07cfc-4dd9-7e2c-8e61-6f319d405976
 id: ISS-0162
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: closed
 priority: high
 tags:
   - torture
@@ -11,11 +11,14 @@ tags:
   - release-gate
   - flake
 created_at: 2026-09-07T17:48:24.921Z
+updated_at: 2026-09-07T17:48:59.424Z
+closed_at: 2026-09-07T17:48:59.357Z
+resolution: Fixed in 167c49b. S4 now distinguishes a transient backend failure from a transport defect via TRANSIENT_BACKEND_SIGNATURES (closed, asserted list of 7 patterns), dropping a row only when a signature appears AND the transports diverged. Guarded by a 2% inconclusive ceiling and per-row reporting; calibrated in both directions including the verbatim 3.0 payload and nine ordinary error payloads proven not to match. S4 26/26, suite 894/894.
 ---
 # S4 goes red when a live backend is slow, not when a transport is broken
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -32,3 +35,7 @@ WHAT WAS DONE. The discrimination is made on the ANSWER rather than on the actio
 Guards: a 2% ceiling (MAX_INCONCLUSIVE_FRACTION) fails the sweep if too much of the surface goes uncompared, so "inconclusive" cannot drift into "untested"; and calibration in both directions — every declared signature is proven to fire, the verbatim 3.0 payload is pinned, and nine ordinary error payloads (404, 401, ENOENT, validation failures, "Supabase is not configured") are proven NOT to fire, because a predicate broad enough to match those would excuse real transport divergence.
 
 VERIFIED. S4 26/26, full suite 894/894 across 69 files. 3252 calls compared, zero rows dropped on a healthy run.
+
+## Resolution
+
+Fixed in 167c49b. S4 now distinguishes a transient backend failure from a transport defect via TRANSIENT_BACKEND_SIGNATURES (closed, asserted list of 7 patterns), dropping a row only when a signature appears AND the transports diverged. Guarded by a 2% inconclusive ceiling and per-row reporting; calibrated in both directions including the verbatim 3.0 payload and nine ordinary error payloads proven not to match. S4 26/26, suite 894/894.
