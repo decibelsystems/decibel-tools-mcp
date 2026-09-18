@@ -12,7 +12,15 @@ tags:
   - silent-overwrite
   - completion-ritual
 created_at: 2026-09-18T21:38:27.738Z
-updated_at: 2026-09-18T21:38:56.887Z
+updated_at: 2026-09-18T21:39:03.413Z
+linked_commits:
+  - sha: 389263a1ad04a3b4987643a27a35dc7f4864d5fa
+    shortSha: 389263a
+    message: "sentinel: ISS-0168 gains its second instance, self-inflicted"
+    relationship: related
+    linked_at: 2026-09-18T21:39:03.413Z
+    linked_by: ai:claude
+
 ---
 # The issue-close hook overwrites an existing resolution with the triggering commit's subject line
 
