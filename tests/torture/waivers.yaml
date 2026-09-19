@@ -12,7 +12,7 @@
 
 - action: corpus.status
   waived: [S2]
-  reason: "Reads the shared corpus over the network, not the project's .decibel store."
+  reason: "Reads a shared corpus CHECKOUT on this machine (~/Documents/GitHub/decibel-corpus by default), not the project's .decibel store. The four S2 situations are project-store situations, so none of them changes what corpus reads. Earlier wording here said 'over the network', which is false — src/tools/corpus.ts imports only fs, path and os, and a transitive import walk finds no client reachable from it (tests/unit/facadeNetworkReach.test.ts). The waiver stands; its stated reason did not."
   owner: ben
   expires: 2026-12-01
 
