@@ -13,7 +13,7 @@ tags:
   - pr-75
   - silent-wrong-answer
 created_at: 2026-09-18T22:09:14.198Z
-updated_at: 2026-09-19T00:38:28.386Z
+updated_at: 2026-09-19T00:46:24.615Z
 closed_at: 2026-09-19T00:38:11.853Z
 resolution: "Resolved by commit 1c0d9ea: Stop hardcoding one machine's paths,
   and unfreeze the epics that hid behind them"
@@ -35,6 +35,12 @@ linked_commits:
     message: "sentinel: auto-linked commit metadata for ISS-0170 and ISS-0172"
     relationship: related
     linked_at: 2026-09-19T00:38:28.386Z
+    linked_by: ai:claude
+  - sha: c962cd7abb10c602e4ba79ad976712f9ef3590ea
+    shortSha: c962cd7
+    message: "sentinel: auto-linked commit metadata for ISS-0170 and ISS-0172"
+    relationship: related
+    linked_at: 2026-09-19T00:46:24.615Z
     linked_by: ai:claude
 
 ---

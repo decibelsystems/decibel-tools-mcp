@@ -12,7 +12,7 @@ tags:
   - pr-75
   - silent-failure
 created_at: 2026-09-18T22:14:07.637Z
-updated_at: 2026-09-19T00:38:28.410Z
+updated_at: 2026-09-19T00:46:24.641Z
 closed_at: 2026-09-19T00:38:12.045Z
 resolution: "Resolved by commit 1c0d9ea: Stop hardcoding one machine's paths,
   and unfreeze the epics that hid behind them"
@@ -28,6 +28,12 @@ linked_commits:
     message: "sentinel: auto-linked commit metadata for ISS-0170 and ISS-0172"
     relationship: related
     linked_at: 2026-09-19T00:38:28.410Z
+    linked_by: ai:claude
+  - sha: c962cd7abb10c602e4ba79ad976712f9ef3590ea
+    shortSha: c962cd7
+    message: "sentinel: auto-linked commit metadata for ISS-0170 and ISS-0172"
+    relationship: related
+    linked_at: 2026-09-19T00:46:24.641Z
     linked_by: ai:claude
 
 ---
