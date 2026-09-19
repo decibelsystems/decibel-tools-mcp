@@ -60,6 +60,18 @@ export const dojoCreateProposalTool: ToolSpec = {
           type: 'string',
           description: 'Identifier for the calling agent (e.g., "mother", "chatgpt") - used for audit trails',
         },
+        kind: {
+          type: 'string',
+          enum: ['experiment', 'tool', 'strategy'],
+          description:
+            "What this proposal IS, which decides the fields it owes. " +
+            "'experiment' — a belief and a way to test it (requires hypothesis). " +
+            "'tool' — a contract for something already decided; no hypothesis, " +
+            "requires facade, action_name, tier, absence_semantics, backing_store. " +
+            "'strategy' — an argument; no hypothesis, no target_module. " +
+            "Required, with no default: an artifact that does not say what it is " +
+            "cannot say what it owes.",
+        },
         title: {
           type: 'string',
           description: 'Proposal title (e.g., "Exchange Rate Limit Pattern Detector")',
@@ -70,7 +82,7 @@ export const dojoCreateProposalTool: ToolSpec = {
         },
         hypothesis: {
           type: 'string',
-          description: 'Why this solution will work',
+          description: "Why this solution will work. kind:'experiment' only — the other kinds are refused if they carry one.",
         },
         owner: {
           type: 'string',
@@ -113,14 +125,57 @@ export const dojoCreateProposalTool: ToolSpec = {
           type: 'string',
           description: 'Link to existing wish (e.g., "WISH-0001"). Auto-fills problem from wish reason and marks wish as resolved.',
         },
+        facade: {
+          type: 'string',
+          description: "kind:'tool'. Facade this action belongs to, e.g. 'sentinel'.",
+        },
+        action_name: {
+          type: 'string',
+          description:
+            "kind:'tool'. Action name, snake_case, e.g. 'close_issue'. Called action_name " +
+            'because the facade call already spends `action` selecting the operation.',
+        },
+        tier: {
+          type: 'string',
+          enum: ['core', 'pro', 'apps'],
+          description: "kind:'tool'. Which tier serves it, and it is worth saying why not a looser one.",
+        },
+        absence_semantics: {
+          type: 'string',
+          description:
+            "kind:'tool'. How the payload distinguishes \"nothing there\" from \"could not look\". " +
+            'Stated as a value the caller can branch on, not as a promise.',
+        },
+        backing_store: {
+          type: 'string',
+          description:
+            "kind:'tool'. What backs the read — project .decibel files, a remote service, a database — " +
+            'and what the tool answers when that is unreachable or merely slow.',
+        },
+        transports: {
+          type: 'string',
+          description:
+            "kind:'tool', optional. Does it answer identically on stdio, thin, /call and /batch; " +
+            'if not, why the difference is legitimate.',
+        },
+        write_path: {
+          type: 'string',
+          description:
+            "kind:'tool', optional. What it mutates, whether it is idempotent, " +
+            'and whether what it writes can be read back.',
+        },
+        torture_coverage: {
+          type: 'string',
+          description: "kind:'tool', optional. Which sweeps (S0-S7) apply, and any waiver with its reason and expiry.",
+        },
       },
-      required: ['title', 'problem', 'hypothesis'],
+      required: ['kind', 'title', 'problem'],
     },
   },
   handler: withRunTracking(
     async (args) => {
       try {
-        requireFields(args, 'title', 'problem', 'hypothesis');
+        requireFields(args, 'kind', 'title', 'problem');
         const result = await createProposal(args as CreateProposalInput);
         if (isDojoError(result)) {
           return toolError(JSON.stringify(result));

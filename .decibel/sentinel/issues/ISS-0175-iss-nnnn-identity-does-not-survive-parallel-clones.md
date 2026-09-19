@@ -13,6 +13,15 @@ tags:
   - record-identity
   - peer-reported
 created_at: 2026-09-19T01:14:39.186Z
+linked_commits:
+  - sha: 824aaf62ff4342a4b6058b8c8ad227b17d3615f0
+    shortSha: 824aaf6
+    message: "sentinel: ISS-0175 — record identity does not survive parallel clones"
+    relationship: related
+    linked_at: 2026-09-19T01:14:56.384Z
+    linked_by: ai:claude
+updated_at: 2026-09-19T01:14:56.384Z
+
 ---
 # ISS-NNNN identity does not survive parallel clones — the lock is per-filesystem and git merges the collision cleanly
 

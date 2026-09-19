@@ -46,10 +46,42 @@ export interface DojoBaseInput {
   agent_id?: string;
 }
 
+/**
+ * What a proposal IS — and therefore which fields it owes.
+ *
+ * "Proposal" was one word doing three jobs. The shape here has always been
+ * experiment-shaped by construction (problem -> hypothesis -> scaffold ->
+ * run -> graduate), which is the right question for a technique and the wrong
+ * one for a surface other software calls, or for a positioning argument that
+ * has no module at all. Both of those turned up in the same hour (WISH-0023),
+ * which is what made the split real rather than theoretical.
+ *
+ * The discriminating question is simply: does this artifact feed an experiment?
+ *
+ *   experiment — the original. A belief, and a way to test it.
+ *   tool       — a contract for something already decided. No hypothesis.
+ *   strategy   — an argument. No target_module, no code scope.
+ */
+export type ProposalKind = 'experiment' | 'tool' | 'strategy';
+
 export interface CreateProposalInput extends DojoBaseInput {
+  /**
+   * Required, deliberately — no default.
+   *
+   * An optional kind defaulting to 'experiment' would let every existing caller
+   * silently keep meaning "experiment", and we would learn nothing about
+   * whether the split is real. Absent kind is treated as 'experiment' when
+   * READING legacy records, which is what the eleven on disk actually are.
+   */
+  kind: ProposalKind;
+
   title: string;
   problem: string;
-  hypothesis: string;
+
+  /** Required for kind:'experiment'. An artifact full of empty hypothesis
+   *  fields is worse than a document, so the other kinds must not carry it. */
+  hypothesis?: string;
+
   owner?: 'ai' | 'human';
   target_module?: string;
   scope_in?: string[];
@@ -59,6 +91,80 @@ export interface CreateProposalInput extends DojoBaseInput {
   follows?: string; // proposal_id this follows
   insight?: string; // insight from previous experiment
   wish_id?: string; // link to existing wish (auto-fills problem, marks wish resolved)
+
+  // --- kind:'tool' -----------------------------------------------------------
+  // Five required fields, and each one is here because its absence has already
+  // cost us a filed bug. This is the whole point of the kind: the fields are
+  // the questions this codebase keeps getting wrong when a tool ships.
+  /** Facade this action belongs to, e.g. 'sentinel'. */
+  facade?: string;
+  /**
+   * Action name, snake_case, e.g. 'close_issue'.
+   *
+   * Named action_name, not action, because every facade call already spends
+   * `action` on selecting the operation — a flat `action` here is swallowed by
+   * the dispatcher and never reaches this tool. Found by the runtime on the
+   * first real call, which is the cheapest place to find it.
+   */
+  action_name?: string;
+  /** core | pro | apps — and the tier check that bypassed four billed
+   *  endpoints was ISS-0171. */
+  tier?: 'core' | 'pro' | 'apps';
+  /** How the payload distinguishes "nothing there" from "could not look".
+   *  The silent-zero question: ISS-0166 (deck.stores), ISS-0153 (40 reads). */
+  absence_semantics?: string;
+  /** What backs the read, and what it answers when that is unreachable.
+   *  A slow backend is not a broken one: ISS-0162. */
+  backing_store?: string;
+  /** Optional, but the cheap ones to answer while you are here. */
+  transports?: string;
+  /** What it mutates, whether it is idempotent, and whether what it writes
+   *  can be read back — ISS-0174, six epics that could not. */
+  write_path?: string;
+  /** Which torture sweeps apply, and any waiver with its reason. */
+  torture_coverage?: string;
+}
+
+/** Fields each kind owes, beyond title and problem which all kinds share. */
+const REQUIRED_BY_KIND: Record<ProposalKind, Array<keyof CreateProposalInput>> = {
+  experiment: ['hypothesis'],
+  tool: ['facade', 'action_name', 'tier', 'absence_semantics', 'backing_store'],
+  strategy: [],
+};
+
+/** Fields a kind must NOT carry, because an empty one is a lie about the shape. */
+const FORBIDDEN_BY_KIND: Record<ProposalKind, Array<keyof CreateProposalInput>> = {
+  experiment: [],
+  tool: ['hypothesis'],
+  strategy: ['hypothesis', 'target_module'],
+};
+
+/**
+ * Say what is missing, all of it, in one answer.
+ *
+ * Returns null when the input is well-formed for its kind.
+ */
+export function validateProposalKind(input: CreateProposalInput): string | null {
+  const kind = input.kind;
+  if (!kind || !(kind in REQUIRED_BY_KIND)) {
+    return `kind must be one of: ${Object.keys(REQUIRED_BY_KIND).join(', ')}. ` +
+      `It has no default — an artifact that does not say what it is cannot say what it owes.`;
+  }
+
+  const missing = REQUIRED_BY_KIND[kind].filter(f => {
+    const v = input[f];
+    return v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+  });
+  const present = FORBIDDEN_BY_KIND[kind].filter(f => input[f] !== undefined);
+
+  const problems: string[] = [];
+  if (missing.length > 0) {
+    problems.push(`kind:'${kind}' requires ${missing.join(', ')}`);
+  }
+  if (present.length > 0) {
+    problems.push(`kind:'${kind}' must not carry ${present.join(', ')} — that field belongs to another shape`);
+  }
+  return problems.length > 0 ? problems.join('; ') : null;
 }
 
 export interface CreateProposalOutput {
@@ -359,6 +465,15 @@ export async function createProposal(
   );
 
   try {
+    const invalid = validateProposalKind(input);
+    if (invalid) {
+      return {
+        error: `Invalid proposal: ${invalid}`,
+        exitCode: 1,
+        stderr: invalid,
+      };
+    }
+
     const timestamp = new Date().toISOString();
     const proposalDir = path.join(ctx.dojoRoot, 'proposals');
     ensureDir(proposalDir);
@@ -370,14 +485,31 @@ export async function createProposal(
     // Build proposal data structure
     const proposalData: Record<string, unknown> = {
       id: proposalId,
+      kind: input.kind,
       title: input.title,
       problem: input.problem,
-      hypothesis: input.hypothesis,
       owner: input.owner || 'ai',
       state: 'draft',
       created_at: timestamp,
       project_id: ctx.projectId,
     };
+
+    // Only the kind that owes a hypothesis carries one. validateProposalKind
+    // has already refused the combinations that would make this a lie.
+    if (input.hypothesis) {
+      proposalData.hypothesis = input.hypothesis;
+    }
+
+    // The tool contract. Written flat rather than nested so a reviewer reading
+    // the YAML sees the five answers without unfolding anything.
+    for (const field of [
+      'facade', 'action_name', 'tier', 'absence_semantics', 'backing_store',
+      'transports', 'write_path', 'torture_coverage',
+    ] as const) {
+      if (input[field] !== undefined) {
+        proposalData[field] = input[field];
+      }
+    }
 
     // Optional fields
     if (input.target_module) {
@@ -473,6 +605,22 @@ export async function scaffoldExperiment(
         error: `Proposal not found: ${input.proposal_id}`,
         exitCode: 1,
         stderr: `Could not read proposal file: ${proposalPath}`,
+      };
+    }
+
+    // Absent kind means a record written before the split, and every one of
+    // those is an experiment — so legacy proposals still scaffold. A proposal
+    // that says it is something else does not: a tool contract has no
+    // hypothesis to test, and scaffolding one would produce an experiment
+    // asking nothing.
+    const proposalKind = (proposalData.kind as string | undefined) ?? 'experiment';
+    if (proposalKind !== 'experiment') {
+      return {
+        error: `Cannot scaffold an experiment from a kind:'${proposalKind}' proposal`,
+        exitCode: 1,
+        stderr:
+          `${input.proposal_id} is a '${proposalKind}' proposal. Experiments are scaffolded ` +
+          `from kind:'experiment' proposals, which are the ones carrying a hypothesis to test.`,
       };
     }
 
