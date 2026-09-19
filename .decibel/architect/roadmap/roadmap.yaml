@@ -20,7 +20,7 @@ objectives:
         current: "3"
       - metric: VS Code extension on marketplace
         target: live + post-launch polish complete
-        current: v0.4.1 live
+        current: v0.4.2 live
   - id: OBJ-0003
     title: Remote Agent Operations
     timeframe: 2026-H2
@@ -31,7 +31,25 @@ objectives:
         current: MVP dispatch shipped
       - metric: cloud-backed persistence
         target: Supabase-backed roadmap + sentinel stores
-        current: in progress
+        current: NOT started - src/store/ is unreachable from live code, so
+          DECIBEL_STORE selects nothing and X-Org-Key is dropped after reaching
+          the kernel (ISS-0163, ISS-0130). Previously read "in progress", which
+          overstated it.
+  - id: OBJ-0005
+    title: One Runtime, Many Adapters
+    timeframe: 2026-H2
+    owner: core
+    key_results:
+      - metric: runtimes per machine
+        target: 1 shared runtime behind N transport adapters
+        current: shipped 3.0 (was 7 stdio runtimes + 1 daemon, each with its own store
+          and writer)
+      - metric: release gate before publish
+        target: torture sweep S0-S7 green, no sweep waived without a dated reason
+        current: shipped 3.0 (894/894, 8 sweeps, waivers carry owner + expiry)
+      - metric: private facades out of the public package
+        target: senken, deck, mother, terminal excluded from the published build
+        current: shipped 3.0 (enforced by tsconfig.build.json + S7)
   - id: OBJ-0004
     title: Domain Tooling & Demos
     timeframe: 2026 ongoing
@@ -75,6 +93,14 @@ milestones:
       - EPIC-0022
       - EPIC-0030
       - EPIC-0035
+      - EPIC-0033
+      - EPIC-0034
+  - id: M-0005
+    label: 3.0 - Runtime Consolidation
+    target_date: 2026-09-06
+    epics:
+      - EPIC-0038
+      - EPIC-0037
   - id: M-0004
     label: Domain Tooling
     target_date: 2026-10-31
@@ -83,6 +109,7 @@ milestones:
       - EPIC-0027
       - EPIC-0029
       - EPIC-0031
+      - EPIC-0036
 epic_context:
   EPIC-0025:
     epic_id: EPIC-0025
@@ -188,3 +215,49 @@ epic_context:
     milestone: M-0003
     work_type: feature
     adrs: []
+  EPIC-0038:
+    epic_id: EPIC-0038
+    theme: platform
+    objectives:
+      - OBJ-0005
+    milestone: M-0005
+    work_type: refactor
+    adrs:
+      - ADR-0009
+      - ADR-0010
+  EPIC-0037:
+    epic_id: EPIC-0037
+    theme: agents
+    objectives:
+      - OBJ-0003
+    milestone: M-0005
+    work_type: feature
+    adrs:
+      - ADR-0008
+  EPIC-0036:
+    epic_id: EPIC-0036
+    theme: tooling
+    objectives:
+      - OBJ-0004
+    milestone: M-0004
+    work_type: feature
+    adrs: []
+  EPIC-0033:
+    epic_id: EPIC-0033
+    theme: agents
+    objectives:
+      - OBJ-0003
+    milestone: M-0003
+    work_type: infra
+    adrs:
+      - ADR-0007
+  EPIC-0034:
+    epic_id: EPIC-0034
+    theme: agents
+    objectives:
+      - OBJ-0003
+    milestone: M-0003
+    work_type: infra
+    adrs:
+      - ADR-0006
+      - ADR-0007
