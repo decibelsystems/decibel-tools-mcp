@@ -13,6 +13,14 @@ tags:
   - linux
   - installer
 created_at: 2026-09-19T14:13:08.829Z
+linked_commits:
+  - sha: 3448fd96b87a9299df0a97f4597f139cd0098842
+    shortSha: 3448fd9
+    message: "sentinel: ISS-0176 — three platforms in use, one in CI"
+    relationship: related
+    linked_at: 2026-09-19T14:13:29.809Z
+    linked_by: ai:claude
+updated_at: 2026-09-19T14:17:15.552Z
 ---
 # Tri-platform in practice, single-platform in CI — and the daemon installer is macOS-only with no guard
 
@@ -70,3 +78,25 @@ SUGGESTED, cheapest first:
 
 RELATED: the Windows install lessons already recorded — the Store/MSIX build virtualizes
 %APPDATA% and breaks ${__dirname}, and Claude Desktop does not bundle node.
+
+[2026-09-19] CI MATRIX ADDED, and a prediction recorded BEFORE the first run so that red can be read.
+
+New `test-platforms` job: macos-latest and windows-latest, node 20, fail-fast disabled so one platform failing cannot cancel the other. It runs the PORTABLE CORE only — lint, build, unit suite — and deliberately not the torture or e2e sweeps, which build fixtures with chmod and hardcoded /tmp and would report "the harness is POSIX-bound", a fact already known, while burying the signal actually wanted. It is not a dependency of `build`, so a platform failure is visible without blocking the pipeline.
+
+macOS LEG: verified locally before pushing, on this machine, running exactly what CI runs — lint PASS, build PASS, unit 792/792. Expect green.
+
+WINDOWS LEG: expect RED, and expect it for harness reasons rather than product reasons. Predicted failures, 8 of 59 unit files:
+
+  agentIdentitySeam.test.ts   hardcoded /tmp
+  config.test.ts              hardcoded /tmp
+  extensionLoader.test.ts     hardcoded /tmp
+  projectResolution.test.ts   hardcoded /tmp
+  zoom.test.ts                hardcoded /tmp
+  atomicWrite.test.ts         chmod — Windows has no equivalent permission semantics,
+                              so a directory made unreadable to force EACCES stays readable
+  readPathFailures.test.ts    chmod, same reason
+  recordIdAllocator.test.ts   spawns a POSIX shell
+
+The remaining 51 use os.tmpdir() and path.join and should port unchanged.
+
+HOW TO READ THE RESULT. A failure on that list is a test-portability defect and belongs to a separate clean-up (swap `/tmp` for os.tmpdir(), and gate or rewrite the chmod-based absence fixtures). A failure OUTSIDE that list is a genuine cross-platform product finding and is the reason this job exists. Recording the prediction in advance is what makes that distinction checkable rather than a judgement call after the fact — if something outside the list fails, the prediction was wrong and that is itself worth knowing.

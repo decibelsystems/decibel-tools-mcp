@@ -59,6 +59,60 @@ jobs:
           path: coverage/
           retention-days: 7
 
+  # ==========================================================================
+  # Cross-platform check — the team is tri-platform, CI was not (ISS-0176)
+  # ==========================================================================
+  # Every job above runs on ubuntu-latest, and the matrix above varies NODE
+  # VERSION, not OS. That left the platform with exactly one user (Linux) as the
+  # only one continuously verified, while the primary development platform
+  # (macOS) and the installer's target (Windows) were checked by hand.
+  #
+  # SCOPE, deliberately narrower than `npm test`. This runs the portable core —
+  # type check, build, unit suite — and NOT the torture or e2e sweeps. Those
+  # sweeps build their fixtures with chmod (an unreadable directory to force
+  # EACCES) and hardcoded /tmp paths, neither of which behaves on Windows. Red
+  # there would mean "the harness is POSIX-bound", which we already know, and it
+  # would drown out the signal we actually want: does the product type-check,
+  # build, and behave on these platforms.
+  #
+  # Widening this to the full suite is worthwhile, but it is a test-portability
+  # project, not a flag change. Until then do NOT read a green here as full
+  # platform coverage.
+  #
+  # Not a dependency of `build` on purpose: a platform failure should be visible
+  # without blocking the pipeline while we learn what is actually broken.
+  test-platforms:
+    name: ${{ matrix.os }} (node 20, portable core)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Without this, the first platform to fail cancels the others and we lose
+      # the comparison that is the entire point of the job.
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Run unit tests
+        run: npm run test:unit
+
   build:
     runs-on: ubuntu-latest
     needs: test
