@@ -20,7 +20,14 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-19T01:14:56.384Z
     linked_by: ai:claude
-updated_at: 2026-09-19T13:42:26.053Z
+  - sha: c5cb9adb32bf1c5d17343afc72c85641bdde3050
+    shortSha: c5cb9ad
+    message: "sentinel: ISS-0175 — my corrections were the thing that needed correcting"
+    relationship: related
+    linked_at: 2026-09-19T13:42:47.029Z
+    linked_by: ai:claude
+updated_at: 2026-09-19T13:42:47.029Z
+
 ---
 # ISS-NNNN identity does not survive parallel clones — the lock is per-filesystem and git merges the collision cleanly
 
