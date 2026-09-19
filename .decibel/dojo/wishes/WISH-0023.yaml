@@ -1,0 +1,83 @@
+id: WISH-0023
+capability: A tool-spec proposal format — a third dojo artifact between a wish
+  and an implemented tool, whose required fields are the questions this codebase
+  keeps getting wrong when a tool ships
+reason: >-
+  Ben, 2026-09-18: "expanded proposal format for tools (beyond wish I think we
+  need a proper format)."
+
+
+  Neither existing format describes a TOOL. A wish
+  (capability/reason/inputs/outputs) is an idea sketch. A proposal
+  (problem/hypothesis/scope/acceptance) is shaped for an EXPERIMENT — it asks
+  what you believe and how you would test it, which is the right question for a
+  technique and the wrong one for a surface other software calls. Between "I
+  wish it did X" and a merged facade action there is no artifact at all, so
+  every tool's real contract gets decided during implementation and discovered
+  afterwards, in production, as an issue.
+
+
+  The evidence is the issue list. Nearly every defect filed this month is a
+  question no one was required to answer before writing the tool: does a failed
+  read render as an absence (ISS-0166 deck.stores, ISS-0153 forty store reads),
+  what tier serves this and on which transports (ISS-0171 four billed endpoints
+  outside the guard, ISS-0101), what does the payload do when the backend is
+  slow rather than broken (ISS-0162), can what this writes be read back
+  (ISS-0174 six write-locked epics), does it answer the same on stdio and HTTP
+  (the whole S4 sweep). A format that refuses to be saved without those answers
+  converts a class of post-merge bug into a filled-in field.
+inputs:
+  - the originating wish_id, when the tool grew from one
+  - facade and action name, snake_case, plus the internal tool name if they
+    differ
+  - "tier: core | pro | apps, and the reason that tier and not a looser one"
+  - typed input schema with which fields are required
+  - typed success payload, and the payload for every failure the tool can produce
+  - "absence semantics: what distinguishes 'nothing there' from 'could not look'
+    in the response — the silent-zero question, stated as a value not a promise"
+  - "backing store: project .decibel files | remote service | database — and
+    what the tool answers when it is unreachable"
+  - "transports: does it behave identically on stdio, thin, /call and /batch,
+    and if not, why the difference is legitimate"
+  - "write path, if any: what it mutates, whether it is idempotent, and what a
+    concurrent caller sees"
+  - "torture coverage: which sweeps apply (S0-S7), and any waiver with its
+    reason, owner and expiry"
+  - "test plan: the round-trip assertion, not only the happy path"
+outputs: "A DOJO-TOOL-NNNN artifact that can be reviewed before code exists and
+  checked against after it lands. Three things fall out of it: a reviewer can
+  object to a contract rather than to an implementation; the torture harness
+  gets its waiver entries and expected shapes declared up front instead of
+  reverse-engineered; and the acceptance criteria for the issue that tracks the
+  build are already written. Graduation gate: a tool cannot be marked shipped
+  while any required field is still empty."
+created_at: 2026-09-19T00:45:34.724Z
+status: open
+project_id: decibel-tools-mcp
+integration_point: src/tools/dojo.ts — a create_tool_spec action beside
+  create_proposal, writing .decibel/dojo/tool-specs/. Reuses the proposal id
+  allocator and the wish_id linking that create_proposal already has.
+  can_graduate gains a completeness check over the required fields.
+success_metric: Apply it retroactively to three tools that later produced issues
+  — deck.stores, the studio REST shortcuts, and one sentinel write path. If
+  filling the format honestly would have forced ISS-0166, ISS-0171 and ISS-0174
+  to be answered before merge, the format earns its place; if the fields can all
+  be filled in while still shipping those bugs, it is ceremony and should be
+  cut.
+risks:
+  - Ceremony. Eleven proposals and twenty-two wishes exist; if a tool spec is
+    heavier than writing the tool, it gets skipped and becomes a lie about
+    process rather than a record of one. Required fields must be few and each
+    must have cost us a real bug.
+  - Overlap with ADRs. A tool spec records a contract, an ADR records a
+    decision; the line needs stating or both drift.
+  - Retrofit pressure. 195 internal tools and 30 facades exist with no spec. The
+    format has to be worth writing for NEW tools without implying a backfill
+    nobody will do.
+  - Wrong altitude. Too prescriptive and it duplicates the TypeScript types that
+    already exist; the fields worth having are the ones the type system cannot
+    state — absence semantics, tier rationale, transport equivalence.
+mvp: One new action and one template, with exactly the fields above marked
+  required. No graduation gate, no retrofit, no schema validation beyond
+  presence. Write specs for the next two tools built and see whether the reviews
+  catch anything the code review would have missed.
