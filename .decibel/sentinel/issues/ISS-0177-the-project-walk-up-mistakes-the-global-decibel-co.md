@@ -12,6 +12,15 @@ tags:
   - windows
   - ci-found
 created_at: 2026-09-19T14:32:07.348Z
+linked_commits:
+  - sha: bcc5422bad2b1aac0beaf02406003c878d0c9dea
+    shortSha: bcc5422
+    message: "sentinel: the Windows leg found a real one on its first run — ISS-0177"
+    relationship: related
+    linked_at: 2026-09-19T14:32:48.348Z
+    linked_by: ai:claude
+updated_at: 2026-09-19T14:32:48.348Z
+
 ---
 # The project walk-up mistakes the global ~/.decibel config directory for a project, so HOME resolves as a project root
 

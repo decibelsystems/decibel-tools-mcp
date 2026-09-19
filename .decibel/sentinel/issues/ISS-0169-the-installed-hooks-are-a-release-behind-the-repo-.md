@@ -25,8 +25,7 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-18T22:09:49.676Z
     linked_by: ai:claude
-updated_at: 2026-09-18T22:09:49.676Z
-
+updated_at: 2026-09-19T14:52:43.622Z
 ---
 # The installed hooks are a release behind the repo — Rich's PR #75 hardening is not running on this machine
 
@@ -82,3 +81,58 @@ WHAT WOULD FIX IT (cheapest first):
 Note the old .bak files beside them (session-init.sh.bak,
 session-init.sh.bak-20260907) — evidence that the current install procedure is
 someone copying a file by hand.
+
+[2026-09-19] ROOT CAUSE FOUND — the hooks were installed by COPY when the design calls for SYMLINKS.
+
+hooks/install.sh states the intent in its own header:
+
+  "Single source of truth = this repo's hooks/. ~/.decibel/hooks/ symlinks back here,
+   so editing the vendored files (or `git pull`) updates the live hooks."
+
+That property is exactly what would make drift impossible. It is not in force here:
+
+  ~/.decibel/hooks/session-init.sh          REAL FILE (not a symlink)
+  ~/.decibel/hooks/issue-close-reminder.sh  REAL FILE (not a symlink)
+
+So the live hooks are frozen copies, and every repo fix — including all of PR #75's
+hardening — stops at the repo boundary. The stray session-init.sh.bak and
+session-init.sh.bak-20260907 sitting beside them are the fingerprints of hand-copying.
+install.sh has never been run on this machine (it is repo-only, not present in
+~/.decibel/hooks/).
+
+FULL HOOK HEALTH, measured 2026-09-19:
+
+REGISTERED AND RUNNING (all three from the global ~/.claude/settings.json, i.e. all three
+are the drifted copies — the decibel-tools plugin is NOT installed here, so hooks/hooks.json
+never fires and its portable ${CLAUDE_PLUGIN_ROOT} registration is inert):
+
+  SessionStart  session-init.sh          runs, exit 0, valid JSON, ~3.3s
+  PostToolUse   vector-event.sh          runs, exit 0, ~89ms per tool call
+  PostToolUse   issue-close-reminder.sh  runs
+
+DEFECTS PRESENT IN THE RUNNING COPIES:
+  session-init.sh          no Authorization header      (PR #75 fix not installed)
+  session-init.sh          checks "status", not "results" (PR #75 fix not installed)
+  session-init.sh          no roadmap line              (PR #75 fix not installed)
+  issue-close-reminder.sh  D1 unanchored trailer grep   (ISS-0168, also in the repo copy)
+  issue-close-reminder.sh  D2 resolution overwrite      (ISS-0168, also in the repo copy)
+
+The first two are LATENT rather than active: config.yaml has no auth_token set and the
+daemon answered an unauthenticated /batch, so nothing is being mis-read today. They become
+live the moment a token is configured — and the "status" check is what makes that failure
+silent, since an auth/error envelope carries that field too.
+
+UNVERSIONED RUNNING CODE, which is the finding I did not expect. Four installed hooks exist
+in no repository at all — vector-event.sh, vector-sync.sh, log-event.sh, sync-events.ts.
+vector-event.sh is REGISTERED and fires after every tool call at ~89ms. If this machine is
+lost, so is it, and no other machine has it.
+
+SEQUENCE THAT FIXES THIS PROPERLY, and note the order matters:
+1. Fix ISS-0168 in the repo first. Running install.sh today would ship a close hook that
+   still clobbers resolutions — better than the current one in every other respect, but it
+   would propagate that defect rather than retire it.
+2. Then run hooks/install.sh so ~/.decibel/hooks/ becomes symlinks. That fixes drift
+   permanently instead of once.
+3. Decide what to do about the four unversioned hooks: vendor them into hooks/ or
+   deliberately drop them. Leaving registered, unversioned code running on one machine is
+   the weakest link in the chain.
