@@ -4,9 +4,22 @@
  * The defect this closes: `create_issue` picked the next id by scanning the
  * issues directory for the current maximum, then wrote the file many awaits
  * later. Two processes could read the same maximum and both write ISS-0141.
- * Four duplicate-id groups exist on disk from exactly this (ISS-0015, ISS-0028,
- * ISS-0054, ISS-0112), reported independently by the `machina` peer and
- * reproduced locally.
+ * Four duplicate-id groups were produced by exactly this and were found on disk
+ * (ISS-0015, ISS-0028, ISS-0054, ISS-0112), reported independently by the
+ * `machina` peer and reproduced locally. THIS repo's four were cleared: as of
+ * 2026-09-19 it holds 200 issues and 38 epics with ZERO duplicate frontmatter
+ * ids. ISS-0136 remains OPEN, because it is portfolio-wide and 61 groups still
+ * sit in five other projects (frontend_v0.2, senken-trading-agent, machina,
+ * decibel-studio, decibel-tools-mobile). Do not read "clean" here as "clean
+ * everywhere". The history is kept because it is the evidence
+ * this lock exists, not because the state persists — stated in the past tense
+ * deliberately, since the present-tense version outlived the fact and was read
+ * as current by an outside reader, who repeated it in a document.
+ *
+ * Verify by parsing frontmatter, not by grepping. `grep "^id: ISS-"` over this
+ * store counts documents that QUOTE an id — a report about malformed
+ * frontmatter contains the line it is reporting — and that false positive has
+ * already cost one confidently wrong correction.
  *
  * Two independent defences, because a lock only protects callers that take it:
  *
