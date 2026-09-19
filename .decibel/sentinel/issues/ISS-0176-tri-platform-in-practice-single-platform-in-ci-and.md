@@ -20,7 +20,7 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-19T14:13:29.809Z
     linked_by: ai:claude
-updated_at: 2026-09-19T14:17:15.552Z
+updated_at: 2026-09-19T14:32:24.363Z
 ---
 # Tri-platform in practice, single-platform in CI — and the daemon installer is macOS-only with no guard
 
@@ -100,3 +100,45 @@ WINDOWS LEG: expect RED, and expect it for harness reasons rather than product r
 The remaining 51 use os.tmpdir() and path.join and should port unchanged.
 
 HOW TO READ THE RESULT. A failure on that list is a test-portability defect and belongs to a separate clean-up (swap `/tmp` for os.tmpdir(), and gate or rewrite the chmod-based absence fixtures). A failure OUTSIDE that list is a genuine cross-platform product finding and is the reason this job exists. Recording the prediction in advance is what makes that distinction checkable rather than a judgement call after the fact — if something outside the list fails, the prediction was wrong and that is itself worth knowing.
+
+[2026-09-19] FIRST RUN RESULT, scored against the prediction. macOS green as predicted. Windows red as predicted — but my prediction of WHICH files would fail was materially wrong, and the way it was wrong is the useful part.
+
+Actual: 11 failed, 48 passed, of 59 unit files.
+
+  predicted to fail AND failed (4/8): atomicWrite, extensionLoader, readPathFailures,
+                                      recordIdAllocator
+  predicted to fail but PASSED (4):   agentIdentitySeam, config, projectResolution, zoom
+  FAILED, NOT PREDICTED (7):          architect, daemonLaunchd, designer, guardian,
+                                      issueUpdateRoundtrip, projectPaths, sentinel
+
+So I called half of my own list and missed seven. The hardcoded-/tmp heuristic was the weak
+part: four files containing a literal /tmp passed anyway, because they only used it in
+strings that were never opened.
+
+TRIAGE OF THE SEVEN. Six are one shared test-portability defect I did not anticipate:
+assertions of the form `expect(p).toContain('sentinel/issues')`, comparing a FORWARD-SLASH
+fragment against a real path that Windows builds with backslashes. The product builds those
+paths correctly with path.join; only the assertions hardcode the separator. That pattern
+accounts for architect, designer, sentinel, guardian, issueUpdateRoundtrip and part of
+daemonLaunchd (whose plist test also asserts a POSIX path inside generated XML, and which
+should be skipped off darwin anyway — launchd is macOS-only, which is item 2 of this issue).
+
+THE SEVENTH IS A REAL PRODUCT BUG, filed as ISS-0177. projectPaths asserted that resolving
+an unknown project id OUTSIDE a project throws; on Windows it resolved to
+`{ projectId: 'RUNNER~1' }`. findDecibelDir() walks up looking for any `.decibel` and does
+not exclude the home directory — but ~/.decibel is the GLOBAL CONFIG directory, so HOME gets
+returned as a project root with id = basename(home). Windows only surfaced it because %TEMP%
+lives inside %USERPROFILE%; it reproduces on macOS from ~/Documents, resolving to id
+'Ashitaka'. Silent wrong answer, and what it writes into is the directory every project
+shares.
+
+VERDICT ON THE EXERCISE. The job paid for itself on its first run: one genuine
+cross-platform defect, latent for as long as CI ran on a single platform, found within an
+hour of adding the second and third. The prediction being wrong is not a failure of the
+method — writing it down in advance is precisely what made "six share one cause and the
+seventh is real" a checkable statement rather than a post-hoc story.
+
+NEXT, and deliberately not done here: the separator assertions are a mechanical fix (assert
+with path.join, or normalise before comparing) across six files; daemonLaunchd wants a
+darwin guard; ISS-0177 wants a real fix. None of that blocks anything, since test-platforms
+is not a dependency of build.
