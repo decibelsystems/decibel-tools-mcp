@@ -1,8 +1,8 @@
 ---
 id: EPIC-0033
 projectId: decibel-tools-mcp
-title: Daemon data layer: multi-tenant Supabase project-intelligence store
-summary: Make the daemon/MCP serve org-scoped, tenant-isolated project intelligence (oracle/sentinel/architect/friction) from a shared Supabase store instead of box-local .decibel files — the daemon-side half of HQ's multi-tenant SaaS (Ben's decision D). Web reads Supabase directly under RLS; the daemon is the write/agent surface with user-JWT write identity. See ADR-0007 for full architecture. Cross-repo: HQ owns schema/RLS + web; this epic is the decibel-tools-mcp side.
+title: "Daemon data layer: multi-tenant Supabase project-intelligence store"
+summary: "Make the daemon/MCP serve org-scoped, tenant-isolated project intelligence (oracle/sentinel/architect/friction) from a shared Supabase store instead of box-local .decibel files \u2014 the daemon-side half of HQ's multi-tenant SaaS (Ben's decision D). Web reads Supabase directly under RLS; the daemon is the write/agent surface with user-JWT write identity. See ADR-0007 for full architecture. Cross-repo: HQ owns schema/RLS + web; this epic is the decibel-tools-mcp side."
 status: planned
 priority: high
 tags: []

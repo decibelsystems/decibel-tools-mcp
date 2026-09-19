@@ -10,8 +10,20 @@
 
 set -euo pipefail
 
-DAEMON_DIR="/Volumes/Ashitaka/Documents/GitHub/decibel-tools-mcp"
-AGENT_DIR="/Volumes/Ashitaka/Documents/GitHub/decibel-agent"
+# Locate the repos rather than naming one machine's mount point. This script
+# lived with two absolute /Volumes paths in it, which meant it ran on exactly
+# one checkout and failed on every other with a path nobody else has.
+#
+# DAEMON_DIR is this repo, derived from the script's own location.
+# AGENT_DIR defaults to a sibling checkout; override either with the env var.
+DAEMON_DIR="${DECIBEL_DAEMON_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+AGENT_DIR="${DECIBEL_AGENT_DIR:-$(cd "$DAEMON_DIR/.." && pwd)/decibel-agent}"
+
+if [ ! -d "$AGENT_DIR" ]; then
+  echo "decibel-agent not found at: $AGENT_DIR" >&2
+  echo "Set DECIBEL_AGENT_DIR to its checkout, or clone it beside this repo." >&2
+  exit 1
+fi
 # Discover the live daemon port from ~/.decibel/daemon.meta (written by the daemon),
 # falling back to the canonical default 4888 for a fresh launch.
 DAEMON_META="$HOME/.decibel/daemon.meta"

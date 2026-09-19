@@ -1,6 +1,6 @@
 ---
 id: EPIC-0010
-title: Epic: Special Characters! @#$%
+title: "Epic: Special Characters! @#$%"
 summary: Summary
 status: cancelled
 cancelled_at: 2026-05-20T17:55:46.000Z

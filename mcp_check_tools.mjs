@@ -1,13 +1,25 @@
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 const NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
-// EDIT THESE to match your Claude MCP server entry
-const command = "/usr/local/bin/node";
-const args = [
-  "/Users/ben/decibel-designer/node_modules/.bin/tsx",
-  "/Users/ben/decibel-designer/src/server.ts",
-];
+// Audit the tool names this repo's own server advertises (ADR-0001).
+//
+// This used to name one developer's absolute paths — a /usr/local/bin/node and
+// two files under a DIFFERENT project's checkout — so it ran nowhere but that
+// machine, and pointed at the wrong server even there. Defaults now resolve to
+// this repo; pass another entry point to audit something else.
+//
+//   node mcp_check_tools.mjs                      # this repo's dist/server.js
+//   node mcp_check_tools.mjs path/to/server.js    # some other build
+//   node mcp_check_tools.mjs npx tsx src/x.ts     # an arbitrary command
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)));
+const argv = process.argv.slice(2);
+
+const [command, args] = argv.length > 1
+  ? [argv[0], argv.slice(1)]
+  : [process.execPath, [argv[0] ?? join(repoRoot, "dist", "server.js")]];
 
 const child = spawn(command, args, { stdio: ["pipe", "pipe", "pipe"] });
 

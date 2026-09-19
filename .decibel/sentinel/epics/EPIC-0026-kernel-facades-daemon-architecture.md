@@ -2,7 +2,7 @@
 id: EPIC-0026
 projectId: decibel-tools-mcp
 title: Kernel Facades & Daemon Architecture
-summary: Complete architectural overhaul of decibel-tools-mcp: unified tool kernel, 26 facades replacing 170 raw tools, three-tier gating (core/pro/apps), transport abstraction (stdio + HTTP), daemon mode with launchd, agent scaffolding, bridge mode, and package rename to @decibel/tools v2.0.0. Nine commits across Phases 1-6a on feature/kernel-facades.
+summary: "Complete architectural overhaul of decibel-tools-mcp: unified tool kernel, 26 facades replacing 170 raw tools, three-tier gating (core/pro/apps), transport abstraction (stdio + HTTP), daemon mode with launchd, agent scaffolding, bridge mode, and package rename to @decibel/tools v2.0.0. Nine commits across Phases 1-6a on feature/kernel-facades."
 status: shipped
 status_updated_at: 2026-05-20T18:08:33.000Z
 status_evidence: "10/11 linked issues closed incl. all Phase 1-6; kernel+facades+daemon live"

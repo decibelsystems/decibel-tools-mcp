@@ -1,14 +1,28 @@
 ---
 id: EPIC-0034
 projectId: decibel-tools-mcp
-title: Plan D rollout: HQ multi-tenant SaaS + daemon port fix (2026-05-24/25 session)
-summary: Session arc: a deck-web "daemon unreachable" report uncovered a daemon port-binding bug, which expanded into building Decibel HQ as a real multi-tenant SaaS (Ben's "Plan D"). Cross-repo effort with decibel-hq (HQ owns Supabase schema/RLS + web readers; this repo owns the daemon data layer + importer). Shipped to prod within the session.
+title: "Plan D rollout: HQ multi-tenant SaaS + daemon port fix (2026-05-24/25
+  session)"
+summary: "Session arc: a deck-web \"daemon unreachable\" report uncovered a
+  daemon port-binding bug, which expanded into building Decibel HQ as a real
+  multi-tenant SaaS (Ben's \"Plan D\"). Cross-repo effort with decibel-hq (HQ
+  owns Supabase schema/RLS + web readers; this repo owns the daemon data layer +
+  importer). Shipped to prod within the session."
 status: planned
 priority: high
 tags: []
-owner:
-squad:
+owner: null
+squad: null
 created_at: 2026-05-25T06:47:25.701Z
+linked_commits:
+  - sha: f1bb42838c47a89b9a56459ed7a3591a3f9ed042
+    shortSha: f1bb428
+    message: "sentinel: add EPIC-0034 and provenance event for daemon.meta issue"
+    relationship: related
+    linked_at: 2026-09-19T00:37:26.209Z
+    linked_by: ai:claude
+updated_at: 2026-09-19T00:37:26.209Z
+
 ---
 
 # Plan D rollout: HQ multi-tenant SaaS + daemon port fix (2026-05-24/25 session)

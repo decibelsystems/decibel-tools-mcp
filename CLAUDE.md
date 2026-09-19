@@ -287,11 +287,24 @@ Claude Code hooks in `.claude/settings.json` automatically trigger Decibel tools
 
 ### Active Hooks (committed, always on)
 
-| Hook | Event | What It Does |
-|------|-------|-------------|
-| **Session Init** | `SessionStart` | Injects context reminding you to run `oracle next_actions`, `voice_inbox_sync`, `agentic queue_sync`, and `sentinel list_issues` (open) before starting work |
-| **Guardian Pre-Push** | `PreToolUse` on `git push` | Agent runs `guardian report` — **blocks the push** if any D/F grade findings exist |
-| **Architecture Nudge** | `PostToolUse` on `Edit\|Write` | Prompt checks if the edited file is architecture-sensitive — suggests recording an ADR if so |
+| Hook | Event | Registered in | What It Does |
+|------|-------|---------------|--------------|
+| **Guardian Pre-Push** | `PreToolUse` on `git push` | `.claude/settings.json` | Agent runs `guardian report` — **blocks the push** if any D/F grade findings exist |
+| **Architecture Nudge** | `PostToolUse` on `Edit\|Write` | `.claude/settings.json` | Prompt checks if the edited file is architecture-sensitive — suggests recording an ADR if so |
+| **Session Init** | `SessionStart` | `hooks/hooks.json` (plugin) or your own settings | Runs the four init facades via the daemon and injects a digest — see below |
+| **Issue Close** | `PostToolUse` on `git commit` | `hooks/hooks.json` (plugin) or your own settings | Closes issues named in a `Closes:` trailer and reminds about open ones |
+
+**Why the last two are not in `.claude/settings.json`.** They are scripts, so
+registering them needs a path, and a path in a committed file is a path on one
+person's machine — that file previously carried an absolute `/media/...` mount
+point and therefore ran nowhere but the box it was written on, failing silently
+everywhere else (ISS-0172). `hooks/hooks.json` registers both portably through
+`${CLAUDE_PLUGIN_ROOT}` for anyone using the plugin. If you register them
+yourself instead, point at ONE copy: with both a global and a project
+registration live, every commit closes issues twice.
+
+Only the first two hooks are path-free — an agent and a prompt — which is why
+they are the only ones this repo commits.
 
 Architecture-sensitive paths: `src/kernel.ts`, `src/transports/`, `src/server.ts`, `src/httpServer.ts`, `src/facades/definitions.ts`, `src/facades/index.ts`, `src/license.ts`, `src/daemonConfig.ts`
 
