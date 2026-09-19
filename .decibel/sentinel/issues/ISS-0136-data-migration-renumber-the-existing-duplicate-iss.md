@@ -5,7 +5,7 @@ projectId: decibel-tools-mcp
 severity: med
 status: open
 created_at: 2026-08-25T20:05:25.277Z
-updated_at: 2026-09-19T13:48:21.912Z
+updated_at: 2026-09-19T13:49:59.122Z
 closed_at: 2026-08-30T22:00:15.046Z
 resolution: >-
   Verified resolved 2026-08-30, two independent checks.
@@ -48,6 +48,12 @@ linked_commits:
       seen to fire"
     relationship: related
     linked_at: 2026-09-19T13:48:21.912Z
+    linked_by: ai:claude
+  - sha: bc1c71224f318ec5f5d89107bbb85c09b2c2c4af
+    shortSha: bc1c712
+    message: "sentinel: auto-link metadata for ISS-0136"
+    relationship: related
+    linked_at: 2026-09-19T13:49:59.122Z
     linked_by: ai:claude
 
 ---
