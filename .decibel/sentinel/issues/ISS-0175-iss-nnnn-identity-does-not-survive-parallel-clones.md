@@ -26,7 +26,13 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-19T13:42:47.029Z
     linked_by: ai:claude
-updated_at: 2026-09-19T13:42:47.029Z
+  - sha: 8295b3aa168a506d80f7cdad339e1b0783cc3111
+    shortSha: 8295b3a
+    message: "sentinel: auto-link metadata for ISS-0175"
+    relationship: related
+    linked_at: 2026-09-19T13:45:17.020Z
+    linked_by: ai:claude
+updated_at: 2026-09-19T13:45:17.020Z
 
 ---
 # ISS-NNNN identity does not survive parallel clones — the lock is per-filesystem and git merges the collision cleanly

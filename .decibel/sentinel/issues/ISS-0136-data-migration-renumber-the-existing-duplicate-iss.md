@@ -5,7 +5,7 @@ projectId: decibel-tools-mcp
 severity: med
 status: open
 created_at: 2026-08-25T20:05:25.277Z
-updated_at: 2026-08-31T00:23:21.549Z
+updated_at: 2026-09-19T13:48:01.956Z
 closed_at: 2026-08-30T22:00:15.046Z
 resolution: |-
   Verified resolved 2026-08-30, two independent checks.
@@ -97,3 +97,25 @@ So this is a precondition of the re-import, not a follow-up. Repairing it is gat
 Short version: HQ keys hq.sentinel_issues on source_key (the filename stem), which IS unique across all 61 groups, and its issues surface never renders the ISS label. So the import is unaffected. ISS-NNNN is a non-unique LABEL upstream, not the identity.
 
 Still worth repairing, and sooner rather than later: every new cross-reference to an ambiguous id adds another provenance edge, so the renumber gets more expensive the longer it waits. Gated on grepping .decibel/provenance in EACH affected project first — renumbering an id an immutable audit record references either dangles it or falsifies it (the ADR-0010 constraint, applied per-project).
+
+[2026-09-19] RE-MEASURED 2026-09-19. The 2026-08-30 census still holds exactly — 61 duplicate groups, same five projects, same per-project split:
+
+    frontend_v0.2         34
+    senken-trading-agent  16
+    machina                8
+    decibel-studio         2
+    decibel-tools-mobile   1
+    decibel-tools-mcp      0
+    -------------------------
+    total                 61
+
+Counted by the rule this issue specifies — resolved id = filename ISS- prefix, else frontmatter id. That rule is load-bearing and this re-measure proves it twice over. A frontmatter-ONLY parse reports frontend_v0.2 as 0 and senken-trading-agent as 0, because most of their records carry the id in the FILENAME and have no `id:` line at all. I ran that wrong method first and got a portfolio total of 8. Had I stopped there I would have reported this issue as nearly fixed. decibel-tools-mcp reads 0 under both methods, so the "clean here" claim survives either way.
+
+THE duplicate_ids EMITTER IS NOW DEMONSTRATED, not merely read. It had never been seen to fire, because this repo has nothing to trigger it. Through the daemon (/batch, the real dispatch path):
+
+    machina            issues=208  duplicate_ids=8
+    decibel-tools-mcp  issues=202  duplicate_ids=(absent)
+
+Three independent methods agree on machina's 8: the frontmatter parse, this issue's census, and the emitter itself. The graceful-degradation argument for the sentinel store is therefore evidence-backed rather than design-backed, and no fixture needs writing.
+
+ONE METHOD WARNING for whoever does the portfolio pass. Calling the list function directly out of dist/ returns THIS repo's store regardless of project_id — 202 issues for `project_id: 'machina'`, when machina holds 208 files. That is not a defect in list_issues: the direct call bypasses the facade's project resolution, which is what actually honours project_id. Through the daemon the same call returns machina's real 208. Verify cross-project counts through /batch or the MCP tool, never by importing the module — I nearly filed a false bug against list_issues on the strength of the direct call.
