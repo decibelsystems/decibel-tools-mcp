@@ -20,7 +20,15 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-18T22:14:49.477Z
     linked_by: ai:claude
-updated_at: 2026-09-19T03:07:45.909Z
+  - sha: 232372f804a178573cbca0a556d5690381007ae2
+    shortSha: 232372f
+    message: "sentinel+dojo: ISS-0171 was overstated — an entitlement bypass, not a
+      billing hole"
+    relationship: related
+    linked_at: 2026-09-19T03:08:17.041Z
+    linked_by: ai:claude
+updated_at: 2026-09-19T03:08:17.041Z
+
 ---
 # The studio REST tier guard covers only /api/generate-*, leaving four billed 3D endpoints open to core tier
 
