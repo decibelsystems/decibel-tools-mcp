@@ -3,7 +3,7 @@ uid: 01a0b695-8615-7f41-9223-80347c107a34
 id: ISS-0172
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: closed
 priority: high
 tags:
   - hooks
@@ -12,6 +12,9 @@ tags:
   - pr-75
   - silent-failure
 created_at: 2026-09-18T22:14:07.637Z
+updated_at: 2026-09-19T00:38:12.555Z
+closed_at: 2026-09-19T00:38:12.045Z
+resolution: "Resolved by commit 1c0d9ea: Stop hardcoding one machine's paths, and unfreeze the epics that hid behind them"
 linked_commits:
   - sha: f7360ff74b773293582e0e0767b02666aad9276f
     shortSha: f7360ff
@@ -19,13 +22,11 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-18T22:14:49.508Z
     linked_by: ai:claude
-updated_at: 2026-09-18T22:14:49.508Z
-
 ---
 # Checked-in .claude/settings.json points both hooks at an absolute path on one developer's machine
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -64,3 +65,7 @@ them), or rewrite them with $CLAUDE_PROJECT_DIR. Then check that no other
 checked-in config carries a machine-specific path.
 
 FOUND BY. Post-merge review of PR #75, 2026-09-18. Verified on this checkout.
+
+## Resolution
+
+Resolved by commit 1c0d9ea: Stop hardcoding one machine's paths, and unfreeze the epics that hid behind them

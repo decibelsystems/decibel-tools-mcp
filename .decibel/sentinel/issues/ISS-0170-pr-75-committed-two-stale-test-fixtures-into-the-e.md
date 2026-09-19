@@ -3,7 +3,7 @@ uid: 01a0b691-0bd6-7da0-80f7-9fbc6b57f90e
 id: ISS-0170
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: closed
 priority: high
 tags:
   - sentinel
@@ -13,6 +13,9 @@ tags:
   - pr-75
   - silent-wrong-answer
 created_at: 2026-09-18T22:09:14.198Z
+updated_at: 2026-09-19T00:38:11.932Z
+closed_at: 2026-09-19T00:38:11.853Z
+resolution: "Resolved by commit 1c0d9ea: Stop hardcoding one machine's paths, and unfreeze the epics that hid behind them"
 linked_commits:
   - sha: ce87aeb0851bdec8c49a11062e9c97d66ea46b16
     shortSha: ce87aeb
@@ -26,13 +29,11 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-18T22:09:49.701Z
     linked_by: ai:claude
-updated_at: 2026-09-18T22:09:49.701Z
-
 ---
 # PR #75 committed two stale test fixtures into the epic store, and one now shadows a real epic
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -87,3 +88,7 @@ FIX:
    give a unique answer must not pretend it did.
 4. Consider a scan check for duplicate ids across the epic and issue stores;
    sentinel scan already walks these directories.
+
+## Resolution
+
+Resolved by commit 1c0d9ea: Stop hardcoding one machine's paths, and unfreeze the epics that hid behind them
