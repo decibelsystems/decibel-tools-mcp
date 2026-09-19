@@ -4,7 +4,7 @@ id: ISS-0171
 projectId: decibel-tools-mcp
 severity: high
 status: open
-priority: high
+priority: medium
 tags:
   - security
   - tier-gating
@@ -20,8 +20,7 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-18T22:14:49.477Z
     linked_by: ai:claude
-updated_at: 2026-09-18T22:14:49.477Z
-
+updated_at: 2026-09-19T03:07:45.909Z
 ---
 # The studio REST tier guard covers only /api/generate-*, leaving four billed 3D endpoints open to core tier
 
@@ -75,3 +74,21 @@ modular map").
 
 FOUND BY. Post-merge review of PR #75, 2026-09-18. Independently verified
 against the source before filing.
+
+[2026-09-19] CORRECTION to this issue's own framing, and to how it was reported verbally. It was described as "a core-tier caller can spend money on third-party 3D generation". That is NOT true today, and the correction matters because it changes both the urgency and the reason to fix it.
+
+Three gates stand between an unlicensed caller and a billed 3D generation. Only one is open.
+
+1. REACHING THE SERVER — closed. In hosted (--http) mode, httpServer.ts:727 refuses every route outside PUBLIC_HOSTED_ROUTES with 401 AUTH_NOT_CONFIGURED when no DECIBEL_AUTH_TOKEN is set, and requires the token when one is. In daemon mode the bind is 127.0.0.1, so only local processes reach it. An anonymous internet caller cannot touch these routes at all. (CORS is irrelevant here — it is a browser control and curl ignores it.)
+
+2. THE TIER CHECK — OPEN. This is the actual defect, unchanged: the guard matches path.startsWith('/api/generate-'), so /api/meshy/generate, /api/meshy/download, /api/tripo/generate and /api/tripo/download/:id never consult resolveTier, and no handler body checks tier inline.
+
+3. ACTUALLY SPENDING MONEY — closed, for now. process3DTask in src/tools/studio/index.ts is a STUB. It advances a progress counter with setTimeout and returns https://placeholder.studio/model.glb. It calls no provider. There is no Meshy or Tripo key anywhere in src/ — the only provider keys that exist are OPENAI_API_KEY and TOGETHER_API_KEY, which serve the /api/generate-* routes, and those ARE guarded.
+
+WHAT IS TRUE. An already-authenticated caller holding a core licence bypasses entitlement on four routes. That is a licensing hole, not an exposed door, and its current cost is zero.
+
+WHY IT IS STILL WORTH FIXING, and arguably more interesting than the version that overstated it: the unguarded routes are unguarded BECAUSE nobody finished them. The guard was written around the routes that work. The day the real Meshy API is wired in behind that stub, this becomes a billing hole with nothing to announce it — no test fails, no route changes, no review is triggered, because the guard's shape was decided when the endpoint did nothing. The fix (a route table the S6 sweep enumerates FROM) is what makes finishing the feature safe rather than dangerous.
+
+SEVERITY. Dropped from high priority to medium on the strength of gates 1 and 3. It should be raised again the moment process3DTask stops being a stub — that transition is the trigger, and it belongs in the acceptance criteria of whatever finishes it.
+
+DOJO-PROP-0012 carries the same overstatement in its problem statement and needs the same correction.

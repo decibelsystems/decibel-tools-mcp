@@ -1,58 +1,65 @@
 id: DOJO-PROP-0012
 kind: tool
 title: studio REST tier guard — enforce by route table, not by path prefix
-problem: The studio REST shortcuts exist precisely because they bypass kernel
-  dispatch, which is where tier gating lives. The guard matches
-  path.startsWith('/api/generate-'), covering flux and three kling routes and
-  missing /api/meshy/generate, /api/meshy/download, /api/tripo/generate and
-  /api/tripo/download/:id — all POST, all calling pro-tier studio tools
-  directly, none with an inline tier check. A core-tier caller can spend money
-  on third-party 3D generation. A prefix match reads like a category and is not
-  one. (ISS-0171)
+problem: 'The studio REST shortcuts exist precisely because they bypass kernel dispatch, which
+  is where tier gating lives. The guard matches path.startsWith(''/api/generate-''), covering
+  flux and three kling routes and missing /api/meshy/generate, /api/meshy/download, /api/tripo/generate
+  and /api/tripo/download/:id — all POST, all reaching pro-tier studio tools directly, none
+  with an inline tier check. A prefix match reads like a category and is not one. (ISS-0171)
+
+
+  SCOPE, CORRECTED. An earlier draft of this said a core-tier caller can spend money on 3D
+  generation. Not today: hosted mode 401s every non-public route without DECIBEL_AUTH_TOKEN,
+  the daemon binds 127.0.0.1, and process3DTask is a stub that returns a placeholder URL without
+  calling any provider. What is real is an entitlement bypass for an already-authenticated
+  core-tier caller, at zero current cost. The reason to fix it is that the routes are unguarded
+  BECAUSE they are unfinished — the guard was shaped around the routes that work — so wiring
+  the real Meshy API behind that stub turns this into a billing hole with nothing to announce
+  it.'
 owner: ai
 state: draft
-created_at: 2026-09-19T02:05:23.188Z
+created_at: 2026-09-19 02:05:23.188000+00:00
 project_id: decibel-tools-mcp
 facade: studio
 action_name: rest_tier_guard
 tier: pro
-absence_semantics: "Not a read, so absence does not arise. The analogous
-  question is refusal: a core-tier caller must receive 403 TIER_REQUIRED in the
-  wrapError envelope, never a 200 carrying a partial generation result, and
-  never a provider error revealing whether the call was attempted. The refusal
-  must be byte-identical across all eight routes, or its shape tells an
-  unlicensed caller which routes are real."
-backing_store: Together, Kling, Meshy and Tripo — four paid third-party APIs.
-  When a provider is unreachable the route must surface the failure as an
-  isError payload carrying the provider's own message, so the transient-backend
-  classifier can tell a busy provider from a broken route. ISS-0162 established
-  the distinction; ISS-0166 showed that swallowing the message destroys it.
-transports: "HTTP only, by construction — REST shortcuts with no kernel path, so
-  stdio cannot reach them and S4 equivalence does not apply. That asymmetry is
-  the defect origin and belongs in the spec rather than being rediscovered: any
-  surface that skips the kernel skips tier gating with it."
-write_path: "No project state. It spends money, which is the stronger reason for
-  the guard: a repeated call bills again."
-torture_coverage: S6 asserts refusal for every route in the table under a
-  core-tier context, enumerated FROM that table rather than restating it, so
-  adding a route without a guard fails the sweep. No waiver.
+absence_semantics: 'Not a read, so absence does not arise. The analogous question is refusal:
+  a core-tier caller must receive 403 TIER_REQUIRED in the wrapError envelope, never a 200
+  carrying a partial generation result, and never a provider error revealing whether the call
+  was attempted. The refusal must be byte-identical across all eight routes, or its shape
+  tells an unlicensed caller which routes are real.'
+backing_store: Together, Kling, Meshy and Tripo — four paid third-party APIs. When a provider
+  is unreachable the route must surface the failure as an isError payload carrying the provider's
+  own message, so the transient-backend classifier can tell a busy provider from a broken
+  route. ISS-0162 established the distinction; ISS-0166 showed that swallowing the message
+  destroys it.
+transports: 'HTTP only, by construction — REST shortcuts with no kernel path, so stdio cannot
+  reach them and S4 equivalence does not apply. That asymmetry is the defect origin and belongs
+  in the spec rather than being rediscovered: any surface that skips the kernel skips tier
+  gating with it.'
+write_path: 'No project state. It spends money, which is the stronger reason for the guard:
+  a repeated call bills again.'
+torture_coverage: S6 asserts refusal for every route in the table under a core-tier context,
+  enumerated FROM that table rather than restating it, so adding a route without a guard fails
+  the sweep. No waiver.
 scope_in:
-  - Replace the prefix match with an explicit route table naming every studio
-    REST route
-  - An S6 assertion driven by that same table
-  - Keep the 403 TIER_REQUIRED shape identical across all routes
+- Replace the prefix match with an explicit route table naming every studio REST route
+- An S6 assertion driven by that same table
+- Keep the 403 TIER_REQUIRED shape identical across all routes
 scope_out:
-  - Moving these shortcuts onto kernel dispatch — the durable fix, but a
-    separate decision
-  - Any change to what the studio tools do
-  - Rate limiting or spend caps
+- Moving these shortcuts onto kernel dispatch — the durable fix, but a separate decision
+- Any change to what the studio tools do
+- Rate limiting or spend caps
 acceptance:
-  - A core-tier caller receives 403 on all eight routes, asserted per route
-  - The route table is the single source for both guard and test
-  - No pro-tier behaviour changes
+- A core-tier caller receives 403 on all eight routes, asserted per route
+- The route table is the single source for both guard and test
+- No pro-tier behaviour changes
+- The S6 assertion is in place BEFORE process3DTask stops being a stub — the transition from
+  stub to real provider is the trigger that makes this expensive.
 risks:
-  - A route table goes stale exactly as a prefix did, unless the test enumerates
-    from it
-  - Refusing a previously-open route may break an existing unlicensed caller
-  - The real fix is kernel dispatch; a better guard risks making the bypass
-    permanent by making it comfortable
+- A route table goes stale exactly as a prefix did, unless the test enumerates from it
+- Refusing a previously-open route may break an existing unlicensed caller
+- The real fix is kernel dispatch; a better guard risks making the bypass permanent by making
+  it comfortable
+- Fixing the guard while the generator is a stub can read as busywork, which is exactly how
+  it stays unfixed until the day it costs money.
