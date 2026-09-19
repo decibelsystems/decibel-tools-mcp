@@ -27,7 +27,13 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-19T03:08:17.041Z
     linked_by: ai:claude
-updated_at: 2026-09-19T03:08:17.041Z
+  - sha: eac801d3b6e36cab8fc885c558bbdd48cafef69b
+    shortSha: eac801d
+    message: "sentinel: auto-linked commit metadata for ISS-0171"
+    relationship: related
+    linked_at: 2026-09-19T10:17:17.309Z
+    linked_by: ai:claude
+updated_at: 2026-09-19T10:17:17.309Z
 
 ---
 # The studio REST tier guard covers only /api/generate-*, leaving four billed 3D endpoints open to core tier
