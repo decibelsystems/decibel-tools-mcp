@@ -5,24 +5,51 @@ projectId: decibel-tools-mcp
 severity: med
 status: open
 created_at: 2026-08-25T20:05:25.277Z
-updated_at: 2026-09-19T13:48:01.956Z
+updated_at: 2026-09-19T13:48:21.912Z
 closed_at: 2026-08-30T22:00:15.046Z
-resolution: |-
+resolution: >-
   Verified resolved 2026-08-30, two independent checks.
 
-  MECHANISM: src/lib/issueIdAllocator.ts takes a file lock spanning allocation THROUGH successful write (not just the id scan, which would leave the same race), and writes with O_EXCL so a caller that bypasses the lock fails with EEXIST rather than overwriting a real issue. Reachability confirmed, not assumed: allocateAndWriteIssue() is CALLED from src/sentinelIssues.ts:281 and src/domain/issueRepository.ts:301, and issueRepository is the live path (ISS-0149 was created through it this session and landed as ISS-0149-*.md with a correct unique id).
 
-  DATA: 0 duplicate id groups on disk, down from the 4 recorded in EPIC-0038's Measured state (ISS-0015, ISS-0028, ISS-0054, ISS-0112). Counted directly over .decibel/sentinel/issues by filename prefix AND frontmatter id: 147 records carry an ISS id, 147 distinct. list_issues independently reports no duplicate_ids key, which its contract emits only when the count is non-zero.
+  MECHANISM: src/lib/issueIdAllocator.ts takes a file lock spanning allocation
+  THROUGH successful write (not just the id scan, which would leave the same
+  race), and writes with O_EXCL so a caller that bypasses the lock fails with
+  EEXIST rather than overwriting a real issue. Reachability confirmed, not
+  assumed: allocateAndWriteIssue() is CALLED from src/sentinelIssues.ts:281 and
+  src/domain/issueRepository.ts:301, and issueRepository is the live path
+  (ISS-0149 was created through it this session and landed as ISS-0149-*.md with
+  a correct unique id).
 
-  NOTE for whoever touches this next: src/tools/sentinel.ts:9 imports allocateAndWriteIssue but never calls it, and getNextIssueNumber() at src/tools/sentinel.ts:408 — the original racy scan-then-write allocator — is still defined and also never called. Both are dead but look live. Removing them is Phase 6 backlog hygiene; leaving them invites a future misdiagnosis.
+
+  DATA: 0 duplicate id groups on disk, down from the 4 recorded in EPIC-0038's
+  Measured state (ISS-0015, ISS-0028, ISS-0054, ISS-0112). Counted directly over
+  .decibel/sentinel/issues by filename prefix AND frontmatter id: 147 records
+  carry an ISS id, 147 distinct. list_issues independently reports no
+  duplicate_ids key, which its contract emits only when the count is non-zero.
+
+
+  NOTE for whoever touches this next: src/tools/sentinel.ts:9 imports
+  allocateAndWriteIssue but never calls it, and getNextIssueNumber() at
+  src/tools/sentinel.ts:408 — the original racy scan-then-write allocator — is
+  still defined and also never called. Both are dead but look live. Removing
+  them is Phase 6 backlog hygiene; leaving them invites a future misdiagnosis.
 priority: high
 linked_commits:
   - sha: 50a42b08cde1b9b6497b9c59795ece998b7d9049
     shortSha: 50a42b0
-    message: Reopen ISS-0136 — I closed it on a single-project scan and it says "across projects"
+    message: Reopen ISS-0136 — I closed it on a single-project scan and it says
+      "across projects"
     relationship: related
     linked_at: 2026-08-31T00:19:14.445Z
     linked_by: ai:claude
+  - sha: 4b31f9d461f3b4389bbd3a75872cd3b8fe17261b
+    shortSha: 4b31f9d
+    message: "sentinel: ISS-0136 re-measured, and the duplicate_ids emitter finally
+      seen to fire"
+    relationship: related
+    linked_at: 2026-09-19T13:48:21.912Z
+    linked_by: ai:claude
+
 ---
 
 # Data migration: renumber the existing duplicate ISS-NNNN ids across projects
