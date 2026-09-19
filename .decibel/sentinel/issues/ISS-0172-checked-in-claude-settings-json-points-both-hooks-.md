@@ -12,9 +12,10 @@ tags:
   - pr-75
   - silent-failure
 created_at: 2026-09-18T22:14:07.637Z
-updated_at: 2026-09-19T00:38:12.555Z
+updated_at: 2026-09-19T00:38:28.410Z
 closed_at: 2026-09-19T00:38:12.045Z
-resolution: "Resolved by commit 1c0d9ea: Stop hardcoding one machine's paths, and unfreeze the epics that hid behind them"
+resolution: "Resolved by commit 1c0d9ea: Stop hardcoding one machine's paths,
+  and unfreeze the epics that hid behind them"
 linked_commits:
   - sha: f7360ff74b773293582e0e0767b02666aad9276f
     shortSha: f7360ff
@@ -22,6 +23,13 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-18T22:14:49.508Z
     linked_by: ai:claude
+  - sha: 7fa43da13b19c6f3931df06c225745a2ce989027
+    shortSha: 7fa43da
+    message: "sentinel: auto-linked commit metadata for ISS-0170 and ISS-0172"
+    relationship: related
+    linked_at: 2026-09-19T00:38:28.410Z
+    linked_by: ai:claude
+
 ---
 # Checked-in .claude/settings.json points both hooks at an absolute path on one developer's machine
 

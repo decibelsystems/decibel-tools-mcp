@@ -13,9 +13,10 @@ tags:
   - pr-75
   - silent-wrong-answer
 created_at: 2026-09-18T22:09:14.198Z
-updated_at: 2026-09-19T00:38:11.932Z
+updated_at: 2026-09-19T00:38:28.386Z
 closed_at: 2026-09-19T00:38:11.853Z
-resolution: "Resolved by commit 1c0d9ea: Stop hardcoding one machine's paths, and unfreeze the epics that hid behind them"
+resolution: "Resolved by commit 1c0d9ea: Stop hardcoding one machine's paths,
+  and unfreeze the epics that hid behind them"
 linked_commits:
   - sha: ce87aeb0851bdec8c49a11062e9c97d66ea46b16
     shortSha: ce87aeb
@@ -29,6 +30,13 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-18T22:09:49.701Z
     linked_by: ai:claude
+  - sha: 7fa43da13b19c6f3931df06c225745a2ce989027
+    shortSha: 7fa43da
+    message: "sentinel: auto-linked commit metadata for ISS-0170 and ISS-0172"
+    relationship: related
+    linked_at: 2026-09-19T00:38:28.386Z
+    linked_by: ai:claude
+
 ---
 # PR #75 committed two stale test fixtures into the epic store, and one now shadows a real epic
 
