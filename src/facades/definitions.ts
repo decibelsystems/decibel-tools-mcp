@@ -393,6 +393,24 @@ export const coreFacades: FacadeSpec[] = [
   },
 
   {
+    name: 'killswitch',
+    description:
+      'RUN/STOP for unattended work. stop halts the agentic queue replay and dojo experiment ' +
+      'runs until released; interactive tools keep working so you can still diagnose. resume ' +
+      'releases it and is never blocked — you cannot stop yourself out of resuming. status ' +
+      'reports whether it is engaged, and if so who pressed it, when and why. State is a single ' +
+      'machine-global file (~/.decibel/killswitch.json) so it survives restarts and can be read ' +
+      'by something that is not this process. Actions: stop, resume, status',
+    compactDescription: 'Emergency stop for unattended work',
+    microEligible: true,
+    tier: 'core',
+    actions: {
+      stop: 'killswitch_stop',
+      resume: 'killswitch_resume',
+      status: 'killswitch_status',
+    },
+  },
+  {
     name: 'guardian',
     description: 'Security scanning: dependency audits, secret detection, HTTP surface checks, response header analysis, config review. Use report for a full security grade; use individual scans to drill into specific areas. scan_headers takes a URL and checks for missing CSP/HSTS/etc. Run after deploying or changing infrastructure. Actions: scan_deps, scan_secrets, scan_http, scan_headers, scan_config, report',
     compactDescription: 'Security scanning and vulnerability detection',

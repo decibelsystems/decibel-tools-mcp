@@ -30,6 +30,7 @@ import { forecastTools } from './forecast/index.js';
 import { coordinatorTools } from './coordinator/index.js';
 import { benchTools } from './bench/index.js';
 import { guardianTools } from './guardian/index.js';
+import { killswitchTools } from './killswitch/index.js';
 import { swarmTools } from './swarm.js';
 import { decibelTools } from './decibel/index.js';
 import { codeReviewTools } from './codereview/index.js';
@@ -78,6 +79,7 @@ const coreTools: ToolSpec[] = [
   ...coordinatorTools,
   ...benchTools,
   ...guardianTools,
+  ...killswitchTools,
   ...swarmTools,
   ...decibelTools,
   ...codeReviewTools,

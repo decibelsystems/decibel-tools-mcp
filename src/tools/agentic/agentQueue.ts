@@ -12,6 +12,7 @@ import { createKernel } from '../../kernel.js';
 import type { ToolKernel } from '../../kernel.js';
 import { log } from '../../config.js';
 import { getDefaultProject } from '../../projectRegistry.js';
+import { assertRunnable } from '../../killSwitch.js';
 
 // Lazy kernel singleton — created on first use to avoid boot-time overhead.
 let _kernel: ToolKernel | undefined;
@@ -107,6 +108,10 @@ async function updateQueueRow(
  * the kernel, and records the outcome back in Supabase.
  */
 export async function agentQueueSync(input: AgentQueueSyncInput): Promise<AgentQueueSyncOutput> {
+  // Unattended by definition: this replays writes authored elsewhere into local
+  // files, with nobody watching. First thing the kill switch should stop.
+  assertRunnable('agentic queue replay (agentQueueSync)');
+
   if (!isSupabaseConfigured()) {
     throw new Error('Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_KEY.');
   }

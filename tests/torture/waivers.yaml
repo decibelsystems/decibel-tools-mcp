@@ -16,6 +16,12 @@
   owner: ben
   expires: 2026-12-01
 
+- action: killswitch.status
+  waived: [S2]
+  reason: "Reads ~/.decibel/killswitch.json — a MACHINE-GLOBAL file, deliberately, because a physical RUN/STOP button is machine-global and must work when a project store is broken or absent (ISS-0178). It never consults the project store, so none of S2's four situations can change its answer; answering identically is the correct behaviour, not a failure to distinguish. Verified against the implementation rather than assumed: readKillSwitch resolves its path from os.homedir() and reads that file only."
+  owner: ben
+  expires: 2026-12-01
+
 - action: deck.card_performance
   waived: [S2]
   reason: "Reads a personal Supabase, not the project's .decibel store. The four S2 situations are project-store situations, so they cannot apply — every situation legitimately produces the same answer because none of them changes what deck reads."

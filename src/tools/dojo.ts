@@ -27,6 +27,7 @@ import { CallerRole, enforceToolAccess, getSandboxPolicy, expandSandboxPaths, is
 import { emitCreateProvenance } from './provenance.js';
 import { checkRateLimit, recordRequestStart, recordRequestEnd } from './rateLimiter.js';
 import { listDirOrThrow, countedStoreMeta, type StoreMetaFields } from './shared/storeRead.js';
+import { checkRunnable } from '../killSwitch.js';
 
 // ============================================================================
 // Types
@@ -871,6 +872,15 @@ export async function listDojo(input: ListDojoInput): Promise<ListDojoOutput | D
 export async function runExperiment(
   input: RunExperimentInput
 ): Promise<RunExperimentOutput | DojoError> {
+  // Spawns a script and walks away. Exactly the shape a red button is for.
+  // Returned rather than thrown, because this function's signature promises
+  // `RunExperimentOutput | DojoError` and a throw would behave differently for
+  // a direct caller than for one going through the handler.
+  const blocked = checkRunnable('dojo experiment run (runExperiment)');
+  if (blocked) {
+    return { error: blocked.message, exitCode: 1, stderr: blocked.message };
+  }
+
   const callerRole = input.caller_role || 'human';
 
   // Build context with policy enforcement
