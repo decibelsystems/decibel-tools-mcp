@@ -12,9 +12,27 @@ tags:
   - machine-global
   - found-in-session
 created_at: 2026-09-20T00:46:54.201Z
-updated_at: 2026-09-20T01:19:39.005Z
+updated_at: 2026-09-20T01:19:46.100Z
 closed_at: 2026-09-20T01:19:38.785Z
-resolution: "Fixed in #80 (ae2bb5c). Only --daemon advertises in daemon.meta now; a plain --http run leaves it alone. Readers skip an entry whose pid is dead and fall back to 4888, while an entry with NO pid is still honoured so an older daemon is not orphaned. A daemon refuses to take discovery from a live foreign pid and logs it. Graceful shutdown withdraws our own entry, keeping crash-loop fields, and will not erase a successor's. Both shell hooks check kill -0 first. Discovery logic consolidated into src/runtime/daemonMeta.ts — three modules had each parsed the file for themselves, the same duplication shape as ISS-0177. Verified against real processes: a --http run on 4899 left the live daemon.meta byte-identical; a --daemon under an isolated HOME wrote port+pid; SIGTERM withdrew them. 12 unit tests, green on all three platforms."
+resolution: "Fixed in #80 (ae2bb5c). Only --daemon advertises in daemon.meta
+  now; a plain --http run leaves it alone. Readers skip an entry whose pid is
+  dead and fall back to 4888, while an entry with NO pid is still honoured so an
+  older daemon is not orphaned. A daemon refuses to take discovery from a live
+  foreign pid and logs it. Graceful shutdown withdraws our own entry, keeping
+  crash-loop fields, and will not erase a successor's. Both shell hooks check
+  kill -0 first. Discovery logic consolidated into src/runtime/daemonMeta.ts —
+  three modules had each parsed the file for themselves, the same duplication
+  shape as ISS-0177. Verified against real processes: a --http run on 4899 left
+  the live daemon.meta byte-identical; a --daemon under an isolated HOME wrote
+  port+pid; SIGTERM withdrew them. 12 unit tests, green on all three platforms."
+linked_commits:
+  - sha: d73f7fa128978428e71b53cba6c6195dc8a4da9a
+    shortSha: d73f7fa
+    message: "sentinel: ISS-0179 closed — the fix merged in #80"
+    relationship: related
+    linked_at: 2026-09-20T01:19:46.100Z
+    linked_by: ai:claude
+
 ---
 # Any --http run hijacks machine-global daemon discovery, and a stale entry is never detected
 
