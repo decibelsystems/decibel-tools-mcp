@@ -3,7 +3,7 @@ uid: 01a0bc47-c0f9-7121-9789-356f4124e9ea
 id: ISS-0179
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: closed
 priority: high
 tags:
   - daemon-discovery
@@ -12,11 +12,14 @@ tags:
   - machine-global
   - found-in-session
 created_at: 2026-09-20T00:46:54.201Z
+updated_at: 2026-09-20T01:19:39.005Z
+closed_at: 2026-09-20T01:19:38.785Z
+resolution: "Fixed in #80 (ae2bb5c). Only --daemon advertises in daemon.meta now; a plain --http run leaves it alone. Readers skip an entry whose pid is dead and fall back to 4888, while an entry with NO pid is still honoured so an older daemon is not orphaned. A daemon refuses to take discovery from a live foreign pid and logs it. Graceful shutdown withdraws our own entry, keeping crash-loop fields, and will not erase a successor's. Both shell hooks check kill -0 first. Discovery logic consolidated into src/runtime/daemonMeta.ts — three modules had each parsed the file for themselves, the same duplication shape as ISS-0177. Verified against real processes: a --http run on 4899 left the live daemon.meta byte-identical; a --daemon under an isolated HOME wrote port+pid; SIGTERM withdrew them. 12 unit tests, green on all three platforms."
 ---
 # Any --http run hijacks machine-global daemon discovery, and a stale entry is never detected
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -76,3 +79,7 @@ SUGGESTED FIX.
 FOUND while fixing ISS-0168, by the fix's own verification step — the hook went
 quiet on the very commit that fixed the hook. Repaired by hand for now:
 daemon.meta put back to port 4888 / pid 1002.
+
+## Resolution
+
+Fixed in #80 (ae2bb5c). Only --daemon advertises in daemon.meta now; a plain --http run leaves it alone. Readers skip an entry whose pid is dead and fall back to 4888, while an entry with NO pid is still honoured so an older daemon is not orphaned. A daemon refuses to take discovery from a live foreign pid and logs it. Graceful shutdown withdraws our own entry, keeping crash-loop fields, and will not erase a successor's. Both shell hooks check kill -0 first. Discovery logic consolidated into src/runtime/daemonMeta.ts — three modules had each parsed the file for themselves, the same duplication shape as ISS-0177. Verified against real processes: a --http run on 4899 left the live daemon.meta byte-identical; a --daemon under an isolated HOME wrote port+pid; SIGTERM withdrew them. 12 unit tests, green on all three platforms.
