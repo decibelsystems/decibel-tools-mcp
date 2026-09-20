@@ -12,7 +12,7 @@ tags:
   - machine-global
   - found-in-session
 created_at: 2026-09-20T00:46:54.201Z
-updated_at: 2026-09-20T01:19:46.100Z
+updated_at: 2026-09-20T01:23:24.421Z
 closed_at: 2026-09-20T01:19:38.785Z
 resolution: "Fixed in #80 (ae2bb5c). Only --daemon advertises in daemon.meta
   now; a plain --http run leaves it alone. Readers skip an entry whose pid is
@@ -31,6 +31,12 @@ linked_commits:
     message: "sentinel: ISS-0179 closed — the fix merged in #80"
     relationship: related
     linked_at: 2026-09-20T01:19:46.100Z
+    linked_by: ai:claude
+  - sha: 1ab5326dc0fe8c83c9474c07e91403f6e93e534b
+    shortSha: 1ab5326
+    message: "sentinel: auto-link metadata for ISS-0179"
+    relationship: related
+    linked_at: 2026-09-20T01:23:24.421Z
     linked_by: ai:claude
 
 ---
