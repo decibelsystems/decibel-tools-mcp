@@ -289,13 +289,70 @@ function saveRegistry(registry: ProjectRegistry): void {
 // ============================================================================
 
 /**
- * Walk up directory tree looking for a .decibel folder
+ * The global Decibel config directory, ~/.decibel — home to projects.json,
+ * device.json, daemon.meta, config.yaml and the hooks. It is named exactly like
+ * a project's `.decibel/` but it is NOT a project, and the walk-up below must
+ * never return HOME as a project root (ISS-0177).
+ *
+ * Resolved per call rather than captured at import so it tracks $HOME, the way
+ * daemonConfig does.
  */
-function findDecibelDir(start: string): string | undefined {
+function globalConfigDir(): string {
+  return path.join(os.homedir(), '.decibel');
+}
+
+/**
+ * Do two paths name the same directory as the filesystem sees it?
+ *
+ * A string compare lies on Windows in two ways that both showed up in the CI
+ * run that found ISS-0177: cwd came back as the 8.3 short name
+ * (C:\Users\RUNNER~1) while os.homedir() returned C:\Users\runneradmin, and
+ * case can differ freely. realpath.native resolves the short name to the real
+ * one; the case fold is win32-only, since POSIX paths are case-sensitive.
+ */
+function isSamePath(a: string, b: string): boolean {
+  const canonical = (p: string): string => {
+    let resolved = path.resolve(p);
+    try {
+      resolved = fs.realpathSync.native(resolved);
+    } catch {
+      // Not on disk (yet) — the resolved form is the best we can do.
+    }
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+  return canonical(a) === canonical(b);
+}
+
+/**
+ * Walk up directory tree looking for a .decibel folder.
+ *
+ * The global config directory ENDS the walk rather than merely being skipped.
+ * Skipping it was the first fix and it was not enough: the Windows CI leg then
+ * climbed straight past the fake HOME the test had set up and returned the real
+ * one above it (`C:\Users\runneradmin` -> project "RUNNER~1"). The general
+ * case is the same shape — a stray `.decibel` in an ancestor of every home
+ * directory, `/Users` or `C:\Users`, would be handed to every user on the
+ * machine as their project. Nothing above your home directory is your project,
+ * so reaching it means the answer is "no project", not "keep looking".
+ *
+ * Without this, any cwd under $HOME that is not itself a project resolved to a
+ * "project" rooted at HOME with an id of basename(HOME), and every write then
+ * landed in the directory all projects share (ISS-0177).
+ *
+ * This constrains discovery only. Explicit resolution — a registry entry,
+ * DECIBEL_PROJECT_ROOT, an absolute path — still resolves HOME for anyone who
+ * genuinely means it, and a real checkout under $HOME is still found, because
+ * the walk reaches it long before it reaches home.
+ */
+export function findDecibelDir(start: string): string | undefined {
+  const globalDir = globalConfigDir();
   let current = path.resolve(start);
   while (true) {
     const candidate = path.join(current, '.decibel');
     if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+      if (isSamePath(candidate, globalDir)) {
+        return undefined; // Reached ~/.decibel — the config dir, and the ceiling.
+      }
       return current; // Return the project root, not the .decibel folder
     }
     const parent = path.dirname(current);

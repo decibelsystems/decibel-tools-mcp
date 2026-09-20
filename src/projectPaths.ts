@@ -5,9 +5,8 @@
 // Uses registry-based resolution with fallback to dynamic discovery.
 // ============================================================================
 
-import fs from 'fs';
 import path from 'path';
-import { resolveProject, ProjectEntry, listProjects } from './projectRegistry.js';
+import { resolveProject, ProjectEntry, listProjects, findDecibelDir } from './projectRegistry.js';
 
 // ============================================================================
 // Types
@@ -22,23 +21,6 @@ export interface ProjectConfig {
 // ============================================================================
 // Path Resolution Helpers
 // ============================================================================
-
-/**
- * Walk up directory tree looking for a .decibel folder
- */
-function findDecibelDir(start: string): string | undefined {
-  let current = path.resolve(start);
-  while (true) {
-    const candidate = path.join(current, '.decibel');
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
-      return current; // Return the project root, not the .decibel folder
-    }
-    const parent = path.dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-  return undefined;
-}
 
 /**
  * Get the project name from a project root directory

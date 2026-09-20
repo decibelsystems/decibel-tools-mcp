@@ -3,7 +3,7 @@ uid: 01a0ba14-e7b4-7435-941d-3b97547cf5d6
 id: ISS-0177
 projectId: decibel-tools-mcp
 severity: high
-status: open
+status: closed
 priority: high
 tags:
   - cross-platform
@@ -12,6 +12,9 @@ tags:
   - windows
   - ci-found
 created_at: 2026-09-19T14:32:07.348Z
+updated_at: 2026-09-20T00:07:33.650Z
+closed_at: 2026-09-20T00:07:33.549Z
+resolution: "Resolved by commit 43864d9: registry: the global config directory is not a project"
 linked_commits:
   - sha: bcc5422bad2b1aac0beaf02406003c878d0c9dea
     shortSha: bcc5422
@@ -19,13 +22,11 @@ linked_commits:
     relationship: related
     linked_at: 2026-09-19T14:32:48.348Z
     linked_by: ai:claude
-updated_at: 2026-09-19T14:32:48.348Z
-
 ---
 # The project walk-up mistakes the global ~/.decibel config directory for a project, so HOME resolves as a project root
 
 **Severity:** high
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -88,3 +89,7 @@ SUGGESTED FIX:
 WORTH NOTING for the tri-platform discussion: this bug is platform-independent in cause and
 was invisible for as long as CI ran on one platform. It was caught within an hour of adding
 the second and third. That is the return on ISS-0176.
+
+## Resolution
+
+Resolved by commit 43864d9: registry: the global config directory is not a project
