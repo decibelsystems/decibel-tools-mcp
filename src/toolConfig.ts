@@ -36,6 +36,19 @@ export const CONFIG_SCHEMA: Record<string, ConfigKeyDef[]> = {
     { key: 'auto_link_commits', type: 'boolean', default: false, description: 'Automatically link commits to issues on creation', env: 'DECIBEL_SENTINEL_AUTOLINK' },
     { key: 'default_severity', type: 'string', default: 'med', description: 'Default severity for new issues (low|med|high|critical)' },
   ],
+  vector: [
+    {
+      key: 'track_runs',
+      type: 'boolean',
+      default: false,
+      description:
+        'Record a run directory and prompt-flow events for each tracked tool call. ' +
+        'Default OFF: the capture was an experiment and nothing consumes it — 168 runs on ' +
+        'disk here and none has ever reached a terminal event (ISS-0148), against ~100MB ' +
+        'and 1,000+ directories. Turn it back on when something reads it.',
+      env: 'DECIBEL_VECTOR_TRACK_RUNS',
+    },
+  ],
   guardian: [
     { key: 'scan_on_push', type: 'boolean', default: true, description: 'Run guardian scan before git push', env: 'DECIBEL_GUARDIAN_SCAN_ON_PUSH' },
     { key: 'fail_threshold', type: 'string', default: 'D', description: 'Block pushes at this grade or below (A|B|C|D|F)', env: 'DECIBEL_GUARDIAN_BLOCK' },

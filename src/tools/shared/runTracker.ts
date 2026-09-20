@@ -7,12 +7,46 @@
 
 import { log } from '../../config.js';
 import { createRun, logEvent, AgentInfo } from '../vector.js';
+import { getToolConfig } from '../../toolConfig.js';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
 /** Active run timeout in milliseconds (30 minutes) */
+/**
+ * Is run tracking on? Default OFF (ISS-0148).
+ *
+ * WHY IT IS OFF. The capture was an experiment and nothing consumes what it
+ * produces: 168 run directories in this project alone and not one has ever
+ * reached a terminal event, alongside ~100MB and a thousand-plus directories
+ * on a volume with a known small-file pathology. Paying that on every tracked
+ * call for a dataset no one can draw a conclusion from is the wrong trade. Turn
+ * it back on the day something reads it — the capture code is untouched and
+ * still here.
+ *
+ * WHY IT IS RESOLVED ONCE. getToolConfig reads two YAML files per call and is
+ * not cached, so consulting it per tool call would cost more than the hook this
+ * change retires. A config toggle taking effect on restart is normal; note this
+ * is deliberately the OPPOSITE of the kill switch, which re-reads its state on
+ * every check because a physical button must be seen immediately. Different
+ * jobs, different caching rules — and both say so where a reader will look.
+ */
+let trackRunsCached: boolean | undefined;
+function runTrackingEnabled(): boolean {
+  if (trackRunsCached === undefined) {
+    const cfg = getToolConfig<{ track_runs?: boolean }>(undefined, 'vector');
+    trackRunsCached = cfg.track_runs === true;
+    if (trackRunsCached) log('RunTracker: run tracking ENABLED (vector.track_runs)');
+  }
+  return trackRunsCached;
+}
+
+/** Test seam — config is resolved once per process, so tests must be able to reset it. */
+export function __resetRunTrackingCache(): void {
+  trackRunsCached = undefined;
+}
+
 const ACTIVE_RUN_TIMEOUT_MS = 30 * 60 * 1000;
 
 /** Default agent info for auto-tracked runs */
@@ -147,6 +181,11 @@ export function withRunTracking<T extends Record<string, unknown>>(
 ): (args: T) => Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
   return async (args: T) => {
     const result = await handler(args);
+
+    // Off by default — see runTrackingEnabled(). Checked after the handler so
+    // the wrapper stays a pure pass-through when disabled: no run directory, no
+    // event write, no project resolution.
+    if (!runTrackingEnabled()) return result;
 
     // Only track successful calls
     if (!result.isError) {

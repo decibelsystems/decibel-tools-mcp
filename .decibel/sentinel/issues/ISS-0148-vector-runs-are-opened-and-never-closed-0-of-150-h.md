@@ -6,7 +6,7 @@ severity: med
 status: open
 created_at: 2026-08-30T03:41:35.515Z
 priority: low
-updated_at: 2026-08-30T04:20:53.983Z
+updated_at: 2026-09-19T18:16:00.428Z
 linked_commits:
   - sha: 2fc205a3553d9cc80eba336995449b360c41eb5f
     shortSha: 2fc205a
@@ -16,8 +16,7 @@ linked_commits:
     linked_by: ai:claude
   - sha: 105e7b89eaaaea2dea9457a96d503b3449b518e8
     shortSha: 105e7b8
-    message: "docs(ISS-0148): last_event_at as a fifth option — expose the fact, not
-      the conclusion"
+    message: "docs(ISS-0148): last_event_at as a fifth option — expose the fact, not the conclusion"
     relationship: related
     linked_at: 2026-08-30T03:45:29.247Z
     linked_by: ai:claude
@@ -29,8 +28,7 @@ linked_commits:
     linked_by: ai:claude
   - sha: 1672339e0f3a324a3426bac5e29ac8505044f56b
     shortSha: "1672339"
-    message: "docs(ISS-0148): record the intent behind vector runs, drop to low
-      priority"
+    message: "docs(ISS-0148): record the intent behind vector runs, drop to low priority"
     relationship: related
     linked_at: 2026-08-30T04:17:58.873Z
     linked_by: ai:claude
@@ -40,7 +38,6 @@ linked_commits:
     relationship: related
     linked_at: 2026-08-30T04:20:53.983Z
     linked_by: ai:claude
-
 ---
 # Vector runs are opened and never closed — 0 of 150 have ever completed
 
@@ -122,3 +119,49 @@ A consumer cannot tell which verbs produce runs. Nothing in the API exposes that
 That is the same family as everything else fixed today — a fact the system holds and does not surface — but it is a design property rather than a defect, and it only becomes worth fixing if something depends on runs. Exposing "this verb is tracked" (a flag on the tool definition, or a list on /health) would let consumers reason about their own gaps.
 
 It already caused one shipped bug downstream: HQ's inbox row read "last active 4m ago", which reports a project under continuous human attention as idle whenever nobody changed anything. Corrected to "last change" on their side. Note the direction of the error — the wrong label was the reassuring one, again.
+
+[2026-09-19] DEACTIVATED rather than fixed, by Ben's call 2026-09-19: "it was an experiment honestly, not
+that useful." Recording what was measured, since the numbers are the argument.
+
+WHAT IT WAS COSTING:
+  ~/.decibel/events.jsonl      47 MB, 110,353 lines, +1,172 today
+  ~/.decibel/runs              959 directories, 1,022 files, 51 MB
+  .decibel/runs (this project) 168 directories
+  runs that ever completed     0 of 168 — this issue said 0 of 150, so 18 more
+                               accumulated since and the number is still zero
+  vector-event.sh              ~89ms on EVERY tool call
+  the volume it lands on       94% full, and per the machine notes its catalog
+                               beach-balls the whole Mac under small-file churn
+
+TWO CHANGES, one per layer:
+
+1. The hook. vector-event.sh is unregistered from ~/.claude/settings.json (backed up first).
+   It fired after every tool call. Note it was one of four hooks living in NO repository —
+   it also hardcodes /Volumes/Ashitaka/.decibel/events.jsonl at line 76 — so it was already
+   this-machine-only. The file is left in place, just not registered.
+
+2. Server-side run creation, now behind vector.track_runs, default FALSE. It uses the
+   config registry in src/toolConfig.ts that every other per-facade toggle uses, rather
+   than a bespoke env var nobody could find, so it is discoverable via getAllToolConfig and
+   settable per-project, globally, or by DECIBEL_VECTOR_TRACK_RUNS.
+
+WHAT IS NOT DONE, deliberately: no capture code was deleted and no data was removed. Ben's
+words were "tracking runs could be useful... not really using that interface", so this is a
+switch, not a demolition. Turning it back on is one config key the day something reads the
+output.
+
+THE TEST THAT MATTERS IN A YEAR asserts the wrapper is a PURE pass-through when disabled —
+no run directory, no event write, no project resolution. A disabled feature that still does
+the expensive part of its work is exactly the failure this change exists to remove, and it
+would be invisible: the runs would stop appearing while the cost stayed. Verified
+end-to-end too: 168 run directories before a real tracked call, 168 after.
+
+ONE DESIGN NOTE for whoever revives it. Config is resolved ONCE per process here, so the
+setting takes effect on restart. That is deliberately the opposite of the kill switch
+(ISS-0178), which re-reads its state on every check because a physical button must be seen
+immediately. Different jobs, different caching rules; both say so at the point a reader
+will look.
+
+STILL OPEN UNDER THIS ISSUE: the original defect. Runs are opened and never closed. If
+tracking is ever switched back on, that is the thing to fix first — otherwise it resumes
+producing a dataset with no terminal events, which is what made it unusable.
