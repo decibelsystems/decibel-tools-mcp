@@ -38,6 +38,16 @@ import {
 } from './issueCodec.js';
 
 /** An issue plus where it lives. The path is for diagnostics, not for callers to write through. */
+/**
+ * What a close actually did. `preservedResolution` is the difference between a
+ * first close and a re-close that kept the original reasoning — without it the
+ * caller cannot tell the two apart, which is how ISS-0168 stayed silent.
+ */
+export interface CloseResult {
+  stored: StoredIssue;
+  preservedResolution: boolean;
+}
+
 export interface StoredIssue {
   issue: Issue;
   filename: string;
@@ -86,7 +96,7 @@ export interface IssueRepository {
   get(idOrFilename: string): Promise<StoredIssue | null>;
   create(spec: CreateIssueSpec): Promise<StoredIssue>;
   update(idOrFilename: string, changes: Partial<Issue>): Promise<StoredIssue>;
-  close(idOrFilename: string, resolution: string, status?: 'closed' | 'wontfix'): Promise<StoredIssue>;
+  close(idOrFilename: string, resolution: string, status?: 'closed' | 'wontfix'): Promise<CloseResult>;
 }
 
 export class AmbiguousIssueIdError extends Error {
@@ -328,12 +338,51 @@ export class FsIssueRepository implements IssueRepository {
     return this.requireOne(current.filename);
   }
 
+  /**
+   * Close a record, or report that it was already closed without touching what
+   * the first close recorded.
+   *
+   * A re-close used to overwrite `resolution` and move `closed_at` forward
+   * (ISS-0168). That is data loss, and silent: the resolution field is the only
+   * place the reasoning behind a fix survives outside a commit message, and the
+   * caller was told "closed" either way. The trigger was operator error — a
+   * `Closes:` trailer naming an already-closed issue — but the failure mode is
+   * not: citing the issue a piece of follow-up work came from is normal, and
+   * every such citation destroyed the original reasoning.
+   *
+   * So a record that is already terminal AND already carries a resolution keeps
+   * both. A status move between closed and wontfix is still honoured, since
+   * that is a real decision; a missing `closed_at` is filled in, since that only
+   * adds. When nothing is left to change the file is not rewritten at all, so a
+   * re-close does not even bump `updated_at`.
+   *
+   * Amending a resolution on purpose is `update`, which says what it does.
+   */
   async close(
     idOrFilename: string,
     resolution: string,
     status: 'closed' | 'wontfix' = 'closed'
-  ): Promise<StoredIssue> {
+  ): Promise<CloseResult> {
+    const current = await this.requireOne(idOrFilename);
+    const wasTerminal =
+      current.issue.status === 'closed' || current.issue.status === 'wontfix';
+    const existingResolution = (current.issue.resolution ?? '').trim();
     const now = new Date().toISOString();
-    return this.update(idOrFilename, { status, resolution, closed_at: now });
+
+    if (wasTerminal && existingResolution) {
+      const changes: Partial<Issue> = {};
+      if (current.issue.status !== status) changes.status = status;
+      if (!current.issue.closed_at) changes.closed_at = now;
+      const stored =
+        Object.keys(changes).length > 0
+          ? await this.update(idOrFilename, changes)
+          : current;
+      return { stored, preservedResolution: true };
+    }
+
+    return {
+      stored: await this.update(idOrFilename, { status, resolution, closed_at: now }),
+      preservedResolution: false,
+    };
   }
 }

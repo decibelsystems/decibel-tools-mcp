@@ -171,14 +171,70 @@ describe('FsIssueRepository', () => {
     });
 
     it('close writes status, resolution and closed_at together', async () => {
-      const r = await repo.close('ISS-0050', 'fixed in abc123');
-      expect(r.issue.status).toBe('closed');
-      expect(r.issue.resolution).toBe('fixed in abc123');
-      expect(r.issue.closed_at).toBeTruthy();
+      const { stored, preservedResolution } = await repo.close('ISS-0050', 'fixed in abc123');
+      expect(stored.issue.status).toBe('closed');
+      expect(stored.issue.resolution).toBe('fixed in abc123');
+      expect(stored.issue.closed_at).toBeTruthy();
+      expect(preservedResolution).toBe(false);
     });
 
     it('close can mark wontfix without inventing a different vocabulary', async () => {
-      expect((await repo.close('ISS-0050', 'not doing it', 'wontfix')).issue.status).toBe('wontfix');
+      expect((await repo.close('ISS-0050', 'not doing it', 'wontfix')).stored.issue.status).toBe(
+        'wontfix'
+      );
+    });
+
+    // ISS-0168. A `Closes:` trailer naming an already-closed issue replaced a
+    // detailed resolution with the subject line of a commit that had nothing to
+    // do with the fix, and moved closed_at to the re-close date. Re-citing a
+    // closed issue is normal — follow-up work cites the issue it came from — so
+    // the reasoning has to survive it.
+    describe('re-closing an already-closed record (ISS-0168)', () => {
+      const firstResolution =
+        'Fixed in 167c49b. The specific, checkable claim that must survive.';
+
+      beforeEach(async () => {
+        await repo.close('ISS-0050', firstResolution);
+      });
+
+      it('keeps the original resolution and closed_at', async () => {
+        const first = await repo.get('ISS-0050');
+        const { stored, preservedResolution } = await repo.close(
+          'ISS-0050',
+          'Resolved by commit 1e2cef2: a docs commit that fixed nothing'
+        );
+
+        expect(preservedResolution).toBe(true);
+        expect(stored.issue.resolution).toBe(firstResolution);
+        expect(stored.issue.closed_at).toBe(first!.issue.closed_at);
+      });
+
+      it('leaves the file untouched when there is nothing left to change', async () => {
+        const before = await fs.readFile(path.join(dir, 'ISS-0050-x.md'), 'utf-8');
+        await repo.close('ISS-0050', 'something else entirely');
+        expect(await fs.readFile(path.join(dir, 'ISS-0050-x.md'), 'utf-8')).toBe(before);
+      });
+
+      it('still honours a real status change, without losing the resolution', async () => {
+        const { stored, preservedResolution } = await repo.close(
+          'ISS-0050',
+          'ignored',
+          'wontfix'
+        );
+
+        expect(stored.issue.status).toBe('wontfix');
+        expect(stored.issue.resolution).toBe(firstResolution);
+        expect(preservedResolution).toBe(true);
+      });
+
+      it('fills in a resolution that was never recorded', async () => {
+        await repo.update('ISS-0050', { resolution: '   ' });
+
+        const { stored, preservedResolution } = await repo.close('ISS-0050', 'the real reason');
+
+        expect(stored.issue.resolution).toBe('the real reason');
+        expect(preservedResolution).toBe(false);
+      });
     });
 
     // Identity must not move when a record is edited — that is the property

@@ -141,7 +141,15 @@ export interface CloseIssueOutput {
   path: string;
   status: IssueStatus;
   closed_at: string;
+  /** The resolution the record carries after the call, not the one passed in. */
   resolution?: string;
+  /**
+   * Present and true only when the record was already closed with a resolution,
+   * so this call preserved it instead of overwriting it (ISS-0168). Callers that
+   * report "closed X" should report this case differently — that they cannot is
+   * what made the overwrite silent.
+   */
+  already_closed?: true;
 }
 
 export interface CloseIssueError {
@@ -1056,20 +1064,27 @@ export async function closeIssue(
     // record, so status stayed `open` while the markdown resolution append
     // still fired — corrupting the YAML and reporting success. The codec has
     // one write path for both formats, so that divergence cannot recur.
-    const closed = await repo.close(
+    const { stored: closed, preservedResolution } = await repo.close(
       input.issue_id,
       input.resolution ?? '',
       input.status ?? 'closed'
     );
 
-    log(`Sentinel: Closed issue at ${closed.path}`);
+    log(
+      preservedResolution
+        ? `Sentinel: ${closed.issue.id} was already closed; kept its resolution (${closed.path})`
+        : `Sentinel: Closed issue at ${closed.path}`
+    );
 
     return {
       id: closed.issue.id,
       path: closed.path,
       status: closed.issue.status as IssueStatus,
       closed_at: closed.issue.closed_at ?? new Date().toISOString(),
-      resolution: input.resolution,
+      // The resolution the record NOW carries, which on a re-close is the one
+      // the first close wrote — not the one this call passed and did not apply.
+      resolution: closed.issue.resolution,
+      ...(preservedResolution ? { already_closed: true as const } : {}),
     };
   } catch (err) {
     if (err instanceof RepoAmbiguousIssueIdError) {

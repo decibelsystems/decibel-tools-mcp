@@ -3,7 +3,7 @@ uid: 01a0b674-df1a-7735-8c44-83b3ed05d07b
 id: ISS-0168
 projectId: decibel-tools-mcp
 severity: med
-status: open
+status: closed
 priority: medium
 tags:
   - hooks
@@ -12,7 +12,9 @@ tags:
   - silent-overwrite
   - completion-ritual
 created_at: 2026-09-18T21:38:27.738Z
-updated_at: 2026-09-18T21:40:49.950Z
+updated_at: 2026-09-20T00:46:54.649Z
+closed_at: 2026-09-20T00:46:54.562Z
+resolution: "Resolved by commit 16e0d06: sentinel: a re-close keeps the resolution the first close wrote"
 linked_commits:
   - sha: 389263a1ad04a3b4987643a27a35dc7f4864d5fa
     shortSha: 389263a
@@ -30,7 +32,7 @@ linked_commits:
 # The issue-close hook overwrites an existing resolution with the triggering commit's subject line
 
 **Severity:** med
-**Status:** open
+**Status:** closed
 
 ## Details
 
@@ -105,3 +107,7 @@ The installed copy at ~/.decibel/hooks/issue-close-reminder.sh carries both, ide
 FIX, both in the hook:
 - D1: take only the trailing trailer block, e.g. read the body's last paragraph and match '^[[:space:]]*(Closes|Fixes|Resolves):' with a line anchor, case-sensitive.
 - D2: read_issue first; skip any issue already status=closed, and report "already closed" rather than re-closing it.
+
+## Resolution
+
+Resolved by commit 16e0d06: sentinel: a re-close keeps the resolution the first close wrote

@@ -38,11 +38,26 @@ BODY=$(git -C "$CWD" log -1 --pretty=%B 2>/dev/null || echo "")
 IDS=$(echo "$BODY" | grep -ioE '(closes|fixes|resolves):[[:space:]]*[A-Za-z0-9._-]+' \
   | sed -E 's/^[^:]*:[[:space:]]*//' | sort -u)
 
+# close_issue preserves the resolution of an already-closed record and answers
+# with already_closed (ISS-0168). Report that separately: a re-close and a first
+# close reading the same was what made the old overwrite silent.
 CLOSED=""
+KEPT=""
+FAILED=""
 for ID in $IDS; do
   RESP=$(curl -s -m 5 -X POST "$BATCH" -H 'Content-Type: application/json' "${AUTH[@]}" \
     -d "{\"calls\":[{\"facade\":\"sentinel\",\"action\":\"close_issue\",\"params\":{\"project_id\":\"${PROJECT}\",\"issue_id\":\"${ID}\",\"resolution\":\"Resolved by commit ${SHA}: ${SUBJECT}\",\"status\":\"closed\"}}]}" 2>/dev/null)
-  echo "$RESP" | grep -q '"results"' && CLOSED="${CLOSED} ${ID}"
+  if echo "$RESP" | grep -q 'already_closed'; then
+    KEPT="${KEPT} ${ID}"
+  elif echo "$RESP" | grep -q '\\"success\\": false'; then
+    # The batch envelope answers 200/"results" for a failed call too, so the
+    # old check reported a close for every id it sent — including "trailer",
+    # scraped out of the prose of a commit that was TALKING about trailers.
+    # An id that does not resolve is worth one word, not silence.
+    FAILED="${FAILED} ${ID}"
+  elif echo "$RESP" | grep -q '"results"'; then
+    CLOSED="${CLOSED} ${ID}"
+  fi
 done
 
 # Link the commit to artifacts (best effort, non-fatal)
@@ -56,9 +71,12 @@ SESSION_ID=$(echo "$HOOK_INPUT" | jq -r '.session_id // "nosession"')
 MARKER="$HOME/.decibel/runs/${SESSION_ID}/.close-nudged"
 MSG=""
 
-if [ -n "$CLOSED" ]; then
+if [ -n "$CLOSED" ] || [ -n "$KEPT" ] || [ -n "$FAILED" ]; then
   # Terse confirmation only — one line, no list.
-  MSG="DECIBEL: closed${CLOSED} (commit ${SHA})."
+  MSG="DECIBEL:"
+  [ -n "$CLOSED" ] && MSG="${MSG} closed${CLOSED} (commit ${SHA})."
+  [ -n "$KEPT" ] && MSG="${MSG} already closed:${KEPT} — original resolution kept, this commit did not replace it."
+  [ -n "$FAILED" ] && MSG="${MSG} no such issue:${FAILED} — check the trailer."
 elif [ ! -f "$MARKER" ]; then
   # No trailer this commit. Remind about the convention AT MOST ONCE per session,
   # one line, count only (no titles). Skip silently if daemon is down or 0 open.
