@@ -50,7 +50,7 @@ import { getExtensionDiagnostics } from './kernel.js';
 import { getLicenseValidator } from './license.js';
 import { listProjects } from './projectRegistry.js';
 import type { AgentRegistry } from './daemon.js';
-import { setDaemonPort } from './daemon.js';
+import { setDaemonPort, clearDaemonPort } from './daemon.js';
 import type { DaemonConfig } from './daemonConfig.js';
 import { RUNTIME_PROTOCOL_VERSION } from './runtime/protocol.js';
 import type { DetailTier } from './facades/types.js';
@@ -2454,11 +2454,21 @@ export async function startHttpServer(
 
   httpServer.listen(port, host, () => {
     log(`HTTP Server listening on http://${host}:${port}`);
-    // Advertise port + pid in daemon.meta so clients can discover the daemon.
-    try {
-      setDaemonPort(port);
-    } catch (err) {
-      log(`Daemon: failed to write port to meta: ${err instanceof Error ? err.message : String(err)}`);
+    // Advertise port + pid in daemon.meta so clients can discover the daemon —
+    // but ONLY as the daemon. daemon.meta is machine-global: the session-init
+    // hook, the close hook, the HQ client and ensureRuntime all follow it. A
+    // plain `--http` run is a process someone started for a reason of their own
+    // (a test, a second checkout, CI, the hosted deployment), and when it
+    // advertised, every hook on the machine followed it to a port that died
+    // with it (ISS-0179).
+    if (isDaemon) {
+      try {
+        setDaemonPort(port);
+      } catch (err) {
+        log(`Daemon: failed to write port to meta: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else {
+      log(`HTTP Server: not advertising in daemon.meta (not --daemon); clients keep their existing discovery`);
     }
     console.log(`
 ╔══════════════════════════════════════════════════════════════╗
@@ -2526,6 +2536,10 @@ ${authToken ? '║  Auth:     Bearer token required                             
         // If already closed, resolve immediately
         setTimeout(resolve, 100);
       });
+      // Withdraw discovery if we owned it, so a clean shutdown does not leave
+      // every client on the machine dialling a port nothing is serving
+      // (ISS-0179). clearDaemonPort only clears an entry that is ours.
+      if (isDaemon) clearDaemonPort();
       log('HTTP server stopped');
     },
   };

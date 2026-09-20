@@ -11,6 +11,12 @@ import { homedir } from 'os';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { log } from './config.js';
+import {
+  metaPath,
+  readDaemonMeta,
+  heldByAnotherProcess,
+  type DaemonMeta,
+} from './runtime/daemonMeta.js';
 
 // ============================================================================
 // Paths
@@ -154,39 +160,42 @@ export function rotateLog(
 // Crash Loop Protection
 // ============================================================================
 
-const META_PATH = join(DECIBEL_HOME, 'daemon.meta');
+
 const MAX_CRASH_COUNT = 5;
 const CRASH_WINDOW_MS = 60_000; // 60 seconds
 const HEALTH_RESET_MS = 5 * 60_000; // 5 minutes
 
-interface DaemonMeta {
-  started_at: string;
-  crash_count: number;
-  port?: number;
-  pid?: number;
-}
-
 function readMeta(): DaemonMeta | null {
-  try {
-    return JSON.parse(readFileSync(META_PATH, 'utf-8'));
-  } catch {
-    return null;
-  }
+  return readDaemonMeta();
 }
 
 function writeMeta(meta: DaemonMeta): void {
   ensureDir(DECIBEL_HOME);
   // Merge so crash-loop / reset writes (and a second instance that exits on
   // "already running") don't drop the port/pid setDaemonPort recorded.
-  writeFileSync(META_PATH, JSON.stringify({ ...readMeta(), ...meta }), 'utf-8');
+  writeFileSync(metaPath(), JSON.stringify({ ...readMeta(), ...meta }), 'utf-8');
 }
 
 /**
  * Record the bound port and pid in daemon.meta so clients (HQ, CLI, scripts)
- * can discover the daemon without hardcoding 8787. Called after the HTTP
- * server has actually bound the port.
+ * can discover the daemon without hardcoding a port. Called after the HTTP
+ * server has actually bound, and ONLY by the daemon — see daemonMeta.ts for why
+ * a plain `--http` run advertising here broke every hook on the machine.
+ *
+ * Refuses to take discovery from a live process that is not us. Two daemons
+ * cannot both be "the" daemon, and the loser of that race used to be whichever
+ * one started first, silently. Returns false when it declined.
  */
-export function setDaemonPort(port: number): void {
+export function setDaemonPort(port: number): boolean {
+  const incumbent = heldByAnotherProcess();
+  if (incumbent) {
+    log(
+      `Daemon: NOT advertising port ${port} — pid ${incumbent.pid} is alive and already ` +
+        `advertising port ${incumbent.port}. Clients keep following it. ` +
+        `Stop that process first if this one should own discovery.`
+    );
+    return false;
+  }
   const existing = readMeta();
   writeMeta({
     started_at: existing?.started_at ?? new Date().toISOString(),
@@ -194,6 +203,24 @@ export function setDaemonPort(port: number): void {
     port,
     pid: process.pid,
   });
+  return true;
+}
+
+/**
+ * Withdraw our advertisement on the way out, so a clean shutdown does not leave
+ * clients dialling a port we are no longer serving. Only clears an entry that
+ * is ours — a successor that already took over must not be erased.
+ */
+export function clearDaemonPort(): void {
+  const meta = readMeta();
+  if (!meta || meta.pid !== process.pid) return;
+  try {
+    const { port: _port, pid: _pid, ...rest } = meta;
+    writeFileSync(metaPath(), JSON.stringify(rest), 'utf-8');
+    log('Daemon: withdrew port advertisement from daemon.meta');
+  } catch (err) {
+    log(`Daemon: failed to withdraw advertisement: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /**

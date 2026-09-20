@@ -27,6 +27,7 @@ import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { RUNTIME_PROTOCOL_VERSION, isProtocolCompatible } from './protocol.js';
 import { localJson } from './localHttp.js';
+import { advertisedPort } from './daemonMeta.js';
 
 const DECIBEL_HOME = join(homedir(), '.decibel');
 const META_PATH = join(DECIBEL_HOME, 'daemon.meta');
@@ -139,14 +140,9 @@ export function resolveRuntimePort(explicit?: number): number {
     if (Number.isInteger(parsed) && parsed > 0 && parsed < 65536) return parsed;
   }
 
-  try {
-    const meta = JSON.parse(readFileSync(META_PATH, 'utf-8'));
-    if (Number.isInteger(meta?.port)) return meta.port;
-  } catch {
-    // No meta file, or unreadable — fall through to the default.
-  }
-
-  return DEFAULT_RUNTIME_PORT;
+  // An advertisement whose pid is dead is treated as absent, not followed —
+  // falling back to the default beats dialling a corpse (ISS-0179).
+  return advertisedPort() ?? DEFAULT_RUNTIME_PORT;
 }
 
 // ============================================================================

@@ -5,7 +5,16 @@
 PROJECT_ID=$(basename "$PWD")
 # Discover the daemon port from ~/.decibel/daemon.meta (written by the daemon),
 # matching HQ's vite.config discovery. Env var wins; fallback 4888 (the daemon default).
-PORT="${DECIBEL_DAEMON_PORT:-$(jq -r '.port // empty' "$HOME/.decibel/daemon.meta" 2>/dev/null)}"
+# daemon.meta can outlive the process that wrote it. A dead pid means the port
+# is a corpse, and dialling one fails silently — curl returns nothing and a hook
+# reads that as "nothing to do" (ISS-0179). Ignore an entry whose pid is gone and
+# fall back to the default. `kill -0` also fails for a live process owned by
+# someone else; falling back is the safe direction either way.
+_META="$HOME/.decibel/daemon.meta"
+_META_PORT=$(jq -r '.port // empty' "$_META" 2>/dev/null)
+_META_PID=$(jq -r '.pid // empty' "$_META" 2>/dev/null)
+if [ -n "$_META_PID" ] && ! kill -0 "$_META_PID" 2>/dev/null; then _META_PORT=""; fi
+PORT="${DECIBEL_DAEMON_PORT:-$_META_PORT}"
 PORT="${PORT:-$(sed -n 's/^[[:space:]]*port:[[:space:]]*//p' "$HOME/.decibel/config.yaml" 2>/dev/null | head -1)}"
 PORT="${PORT:-4888}"
 URL="http://localhost:${PORT}/batch"

@@ -8,6 +8,7 @@
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import { advertisedPort, DEFAULT_DAEMON_PORT } from '../runtime/daemonMeta.js';
 import type {
   DefineAgentOptions,
   AgentHandle,
@@ -27,14 +28,14 @@ export function toMs(v: number | string | undefined, fallback: number): number {
   return m[2] === 's' ? n * 1000 : m[2] === 'm' ? n * 60_000 : m[2] === 'ms' ? n : n * 1000;
 }
 
-/** Discover the daemon URL: explicit > ~/.decibel/daemon.meta port > :4888. */
+/**
+ * Discover the daemon URL: explicit > ~/.decibel/daemon.meta port > :4888.
+ * An entry whose pid is no longer running is skipped rather than dialled
+ * (ISS-0179) — see runtime/daemonMeta.ts.
+ */
 function resolveDaemonUrl(explicit?: string): string {
   if (explicit) return explicit.replace(/\/$/, '');
-  try {
-    const meta = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.decibel', 'daemon.meta'), 'utf-8'));
-    if (meta && typeof meta.port === 'number') return `http://127.0.0.1:${meta.port}`;
-  } catch { /* fall through */ }
-  return 'http://127.0.0.1:4888';
+  return `http://127.0.0.1:${advertisedPort() ?? DEFAULT_DAEMON_PORT}`;
 }
 
 async function postJson(url: string, body: unknown, timeoutMs = 4000): Promise<{ ok: boolean; status: number; json: any }> {
